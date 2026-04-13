@@ -1,0 +1,59 @@
+import { useState } from "react";
+import { api } from "../../api";
+import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
+import { colors } from "../../utils/colors";
+
+export default function BMIForm({ childId, entry, onDone, onClose, onDelete }) {
+  const isEdit = !!entry;
+  const today = new Date().toISOString().slice(0, 10);
+  const [bmi, setBmi] = useState(entry?.bmi ? String(entry.bmi) : "");
+  const [date, setDate] = useState(entry?.date?.slice(0, 10) || today);
+  const [notes, setNotes] = useState(entry?.notes || "");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!bmi) return;
+    setSaving(true);
+    try {
+      const data = { bmi: parseFloat(bmi), date };
+      if (notes.trim()) data.notes = notes.trim();
+      let result;
+      if (isEdit) {
+        result = await api.updateBMI(entry.id, data);
+      } else {
+        data.child = childId;
+        result = await api.createBMI(data);
+      }
+      if (photoFile && result?.id) {
+        await api.uploadEntryPhoto("bmi", result.id, photoFile);
+      }
+      onDone();
+    } catch {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={isEdit ? "Edit BMI" : "Log BMI"} onClose={onClose}>
+      <form onSubmit={handleSubmit}>
+        <FormField label="BMI">
+          <FormInput type="number" value={bmi} onChange={(e) => setBmi(e.target.value)} placeholder="e.g. 15.2" min="0" max="50" step="0.1" autoFocus required />
+        </FormField>
+        <FormField label="Date">
+          <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </FormField>
+        <FormField label="Notes">
+          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional - e.g. from doctor visit" />
+        </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
+        <FormButton color={colors.feeding} disabled={saving || !bmi}>
+          {saving ? "Saving..." : isEdit ? "Update BMI" : "Save BMI"}
+        </FormButton>
+      </form>
+      {onDelete && <FormDeleteButton onDelete={onDelete} />}
+    </Modal>
+  );
+}

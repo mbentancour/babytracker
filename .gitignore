@@ -1,0 +1,28 @@
+# Go
+/babytracker
+*.exe
+*.test
+*.out
+vendor/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.pem
+*.key
+*.crt
+
+# Data
+/data/
