@@ -299,7 +299,6 @@ function Dashboard({ demoMode, onLogout }) {
   };
 
   const handleDeleteEntry = async (type, id) => {
-    if (!confirm("Delete this entry?")) return;
     try {
       const deleteFns = {
         feeding: api.deleteFeeding,
@@ -315,6 +314,7 @@ function Dashboard({ demoMode, onLogout }) {
         note: api.deleteNote,
         pumping: api.deletePumping,
         bmi: api.deleteBMI,
+        child: api.deleteChild,
       };
       const fn = deleteFns[type];
       if (fn) {
@@ -780,7 +780,7 @@ function Dashboard({ demoMode, onLogout }) {
           child={modal.child}
           onDone={handleFormDone}
           onClose={closeModal}
-          onDelete={data.children.length > 1 ? () => { handleDeleteEntry("child", modal.child.id); closeModal(); } : undefined}
+          onDelete={isAdmin ? () => { handleDeleteEntry("child", modal.child.id); closeModal(); } : undefined}
         />
       )}
       {modal?.type === "settings" && (

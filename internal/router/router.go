@@ -50,6 +50,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	galleryH := handlers.NewGalleryHandler(db)
 	photosH := handlers.NewPhotosHandler(db, cfg)
 	usersH := handlers.NewUsersHandler(db)
+	backupH := handlers.NewBackupHandler(cfg)
 	displayH := handlers.NewDisplayHandler()
 
 	// Auth routes (public, rate-limited)
@@ -206,6 +207,12 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/display", displayH.GetState)
 		r.Put("/api/display", displayH.SetState)
 
+		// Backups (admin only — handler checks is_admin)
+		r.Get("/api/backups/", backupH.List)
+		r.Post("/api/backups/", backupH.Create)
+		r.Get("/api/backups/download", backupH.Download)
+		r.Delete("/api/backups/", backupH.Delete)
+
 		// User management (admin only — handler checks is_admin)
 		r.Get("/api/users/", usersH.List)
 		r.Post("/api/users/", usersH.Create)
@@ -231,6 +238,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/children/{id}/photo", mediaH.UploadChildPhoto)
 		r.Post("/api/milestones/{id}/photo", mediaH.UploadMilestonePhoto)
 		r.Post("/api/{entityType}/{id}/photo", mediaH.UploadEntryPhoto)
+		r.Post("/api/backups/restore", backupH.Restore)
 	})
 
 	// SPA serving - serve frontend static files

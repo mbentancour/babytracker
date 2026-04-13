@@ -233,24 +233,23 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
               </div>
             )}
 
-            {/* Data Export */}
+            {/* Data */}
             {section === "data" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">Data Export</h3>
+                <h3 className="settings-section-title">Data</h3>
 
+                {/* Export */}
                 <div className="settings-card" style={{ marginBottom: 16 }}>
+                  <h4 className="settings-card-title">Export (CSV)</h4>
                   <button
                     className="settings-export-main"
                     onClick={() => handleExport("all")}
                     disabled={exporting || !childId}
+                    style={{ marginBottom: 12 }}
                   >
                     <Icons.Download />
                     {exporting ? "Exporting..." : "Export All Data (CSV)"}
                   </button>
-                </div>
-
-                <div className="settings-card">
-                  <h4 className="settings-card-title">Export by type</h4>
                   <div className="settings-export-grid">
                     {["feedings", "sleep", "changes", "weight", "height", "head_circumference", "temperature", "medications", "milestones"].map((type) => (
                       <button
@@ -264,6 +263,9 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     ))}
                   </div>
                 </div>
+
+                {/* Backups (admin only) */}
+                {isAdmin && <BackupSection />}
               </div>
             )}
 
@@ -283,6 +285,140 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BackupSection() {
+  const [backups, setBackups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const refresh = () => {
+    api.getBackups()
+      .then((res) => setBackups(res.results || []))
+      .catch(() => setBackups([]))
+      .finally(() => setLoading(false));
+  };
+
+  useState(() => { refresh(); });
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      await api.createBackup();
+      refresh();
+    } catch {
+      alert("Backup failed");
+    }
+    setCreating(false);
+  };
+
+  const handleRestore = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm("Restoring a backup will overwrite current data. Are you sure?")) {
+      e.target.value = "";
+      return;
+    }
+    setRestoring(true);
+    try {
+      await api.restoreBackup(file);
+      alert("Backup restored. The page will reload.");
+      window.location.reload();
+    } catch {
+      alert("Restore failed");
+    }
+    setRestoring(false);
+    e.target.value = "";
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="settings-card">
+      <h4 className="settings-card-title">Backups</h4>
+      <p className="settings-hint" style={{ marginBottom: 12 }}>
+        Automatic daily backups are kept for 7 days. You can also create manual backups or restore from a file.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button
+          className="settings-export-main"
+          onClick={handleCreate}
+          disabled={creating}
+          style={{ flex: 1 }}
+        >
+          {creating ? "Creating..." : "Create Backup Now"}
+        </button>
+        <label
+          className="settings-export-main"
+          style={{ flex: 1, cursor: restoring ? "not-allowed" : "pointer", opacity: restoring ? 0.6 : 1, textAlign: "center" }}
+        >
+          {restoring ? "Restoring..." : "Restore from File"}
+          <input
+            type="file"
+            accept=".gz,.sql.gz"
+            style={{ display: "none" }}
+            onChange={handleRestore}
+            disabled={restoring}
+          />
+        </label>
+      </div>
+
+      {loading ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>Loading...</div>
+      ) : backups.length === 0 ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>No backups yet</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {backups.map((b) => (
+            <div
+              key={b.name}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                fontSize: 13,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 500, color: "var(--text)" }}>{b.date}</div>
+                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{formatSize(b.size)}</div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="settings-export-item"
+                  style={{ padding: "4px 10px" }}
+                  onClick={() => api.downloadBackup(b.name).catch(() => alert("Download failed"))}
+                >
+                  Download
+                </button>
+                <button
+                  className="delete-entry-btn"
+                  onClick={async () => {
+                    if (confirm("Delete this backup?")) {
+                      await api.deleteBackup(b.name);
+                      refresh();
+                    }
+                  }}
+                >
+                  x
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

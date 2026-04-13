@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/router"
@@ -57,6 +58,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Start automatic daily backup scheduler
+	backup.StartScheduler(cfg.DatabaseURL, cfg.BackupsDir())
 
 	r := router.New(db, cfg)
 

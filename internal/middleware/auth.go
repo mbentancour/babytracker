@@ -72,6 +72,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 
 				ctx := context.WithValue(r.Context(), UserIDKey, user.ID)
 				ctx = context.WithValue(ctx, UsernameKey, user.Username)
+				ctx = context.WithValue(ctx, IsAdminKey, user.IsAdmin)
 				next.ServeHTTP(w, r.WithContext(ctx))
 
 			default:

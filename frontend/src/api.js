@@ -319,6 +319,39 @@ export const api = {
   // Gallery
   getGallery: (params) => request(`gallery/${qs(params)}`),
 
+  // Backups (admin)
+  getBackups: () => request("backups/"),
+  createBackup: () => request("backups/", { method: "POST" }),
+  downloadBackup: async (name) => {
+    const resp = await fetch(`${API_BASE}/backups/download?name=${encodeURIComponent(name)}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+    });
+    if (!resp.ok) throw new Error("Download failed");
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  deleteBackup: (name) =>
+    request(`backups/?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+  restoreBackup: (file) => {
+    const formData = new FormData();
+    formData.append("backup", file);
+    return fetch(`${API_BASE}/backups/restore`, {
+      method: "POST",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+      body: formData,
+    }).then((r) => {
+      if (!r.ok) return r.json().then((e) => Promise.reject(e));
+      return r.json();
+    });
+  },
+
   // User management (admin)
   getUsers: () => request("users/"),
   createUser: (data) =>
