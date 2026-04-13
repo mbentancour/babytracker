@@ -130,6 +130,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </p>
                 </div>
 
+                {onLogout && <ChangePasswordSection />}
+
                 {onLogout && (
                   <button onClick={onLogout} className="settings-signout">
                     <Icons.Logout />
@@ -450,6 +452,67 @@ function BackupSection() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ChangePasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setMessage(null);
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: "error", text: "New passwords don't match" });
+      return;
+    }
+    if (newPassword.length < 8) {
+      setMessage({ type: "error", text: "Password must be at least 8 characters" });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      setMessage({ type: "success", text: "Password changed successfully" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setMessage({ type: "error", text: err.error || err.message || "Failed to change password" });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="settings-card" style={{ marginTop: 16 }}>
+      <h4 className="settings-card-title">Change Password</h4>
+      <form onSubmit={handleSubmit}>
+        {message && (
+          <div style={{
+            padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 13,
+            background: message.type === "error" ? "#e74c3c18" : "#00b89418",
+            color: message.type === "error" ? "#e74c3c" : "#00b894",
+          }}>
+            {message.text}
+          </div>
+        )}
+        <FormField label="Current Password">
+          <FormInput type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoComplete="current-password" />
+        </FormField>
+        <FormField label="New Password">
+          <FormInput type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+        </FormField>
+        <FormField label="Confirm New Password">
+          <FormInput type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+        </FormField>
+        <button type="submit" className="settings-export-main" disabled={saving} style={{ marginTop: 4 }}>
+          {saving ? "Changing..." : "Change Password"}
+        </button>
+      </form>
     </div>
   );
 }

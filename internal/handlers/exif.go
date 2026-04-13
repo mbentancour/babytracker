@@ -9,14 +9,21 @@ import (
 // extractExifDate reads the file from the start and attempts to extract
 // DateTimeOriginal or DateTime from JPEG EXIF metadata.
 // Returns zero time if not found.
-func extractExifDate(r io.ReadSeeker) time.Time {
+func extractExifDate(r io.ReadSeeker) (result time.Time) {
+	// Recover from any panics caused by malformed data
+	defer func() {
+		if r := recover(); r != nil {
+			result = time.Time{}
+		}
+	}()
+
 	r.Seek(0, io.SeekStart)
 	defer r.Seek(0, io.SeekStart)
 
 	// Read up to 128KB — EXIF data is always near the start of the file
 	header := make([]byte, 128*1024)
-	n, _ := io.ReadFull(r, header)
-	if n < 20 {
+	n, err := io.ReadFull(r, header)
+	if err != nil && n < 20 {
 		return time.Time{}
 	}
 	header = header[:n]
@@ -41,8 +48,11 @@ func extractExifDate(r io.ReadSeeker) time.Time {
 		}
 
 		segLen := int(binary.BigEndian.Uint16(header[pos+2 : pos+4]))
+		if segLen < 2 || segLen > 65535 {
+			break // Invalid segment length
+		}
 
-		if marker == 0xE1 && pos+4+segLen-2 <= len(header) {
+		if marker == 0xE1 && pos+2+segLen <= len(header) {
 			seg := header[pos+4 : pos+2+segLen]
 			t := parseExifSegment(seg)
 			if !t.IsZero() {
@@ -110,7 +120,11 @@ func readStringTag(tiff []byte, ifdOffset int, bo binary.ByteOrder, targetTag ui
 	}
 
 	count := int(bo.Uint16(tiff[ifdOffset : ifdOffset+2]))
-	if count > 500 {
+	if count > 200 || count < 0 {
+		return ""
+	}
+	// Verify the IFD fits within the buffer
+	if ifdOffset+2+count*12 > len(tiff) {
 		return ""
 	}
 
@@ -128,11 +142,14 @@ func readStringTag(tiff []byte, ifdOffset int, bo binary.ByteOrder, targetTag ui
 		dataType := bo.Uint16(tiff[offset+2 : offset+4])
 		dataCount := int(bo.Uint32(tiff[offset+4 : offset+8]))
 
-		if dataType != 2 { // ASCII
+		if dataType != 2 || dataCount <= 0 || dataCount > 1024 { // ASCII, sane size
 			continue
 		}
 
 		if dataCount <= 4 {
+			if offset+8+dataCount > len(tiff) {
+				continue
+			}
 			s := string(tiff[offset+8 : offset+8+dataCount])
 			return trimNull(s)
 		}
@@ -154,7 +171,7 @@ func readUint32Tag(tiff []byte, ifdOffset int, bo binary.ByteOrder, targetTag ui
 	}
 
 	count := int(bo.Uint16(tiff[ifdOffset : ifdOffset+2]))
-	if count > 500 {
+	if count > 200 || count < 0 || ifdOffset+2+count*12 > len(tiff) {
 		return 0
 	}
 

@@ -125,6 +125,99 @@ func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ChangeOwnPassword lets any user change their own password.
+func (h *UsersHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		pagination.WriteError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+
+	user, err := models.GetUserByID(h.db, userID)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "user not found")
+		return
+	}
+
+	valid, err := crypto.VerifyPassword(req.CurrentPassword, user.PasswordHash)
+	if err != nil || !valid {
+		pagination.WriteError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+
+	hash, err := crypto.HashPassword(req.NewPassword)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	_, err = h.db.Exec(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, hash, userID)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+
+	// Invalidate all refresh tokens so other sessions are logged out
+	models.DeleteUserRefreshTokens(h.db, userID)
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "password changed"})
+}
+
+type resetPasswordRequest struct {
+	NewPassword string `json:"new_password"`
+}
+
+// ResetPassword lets an admin reset any user's password.
+func (h *UsersHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(r) {
+		pagination.WriteError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req resetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.NewPassword) < 8 {
+		pagination.WriteError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		return
+	}
+
+	hash, err := crypto.HashPassword(req.NewPassword)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	_, err = h.db.Exec(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, hash, id)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to reset password")
+		return
+	}
+
+	models.DeleteUserRefreshTokens(h.db, id)
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "password reset"})
+}
+
 type grantAccessRequest struct {
 	ChildID int `json:"child_id"`
 	RoleID  int `json:"role_id"`

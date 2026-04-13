@@ -2,9 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -46,6 +50,12 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.URL == "" || req.Token == "" {
 		pagination.WriteError(w, http.StatusBadRequest, "url and token are required")
+		return
+	}
+
+	// SSRF protection: validate the URL is a safe external HTTP(S) address
+	if err := validateBBURL(req.URL); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -256,4 +266,51 @@ func bbFetchAll(client *http.Client, baseURL, token, endpoint string) []json.Raw
 	}
 
 	return all
+}
+
+// validateBBURL checks that a Baby Buddy URL is a safe external HTTP(S) address.
+// Rejects internal/private IPs to prevent SSRF attacks.
+func validateBBURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL")
+	}
+
+	// Only allow http and https
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("URL must use http or https")
+	}
+
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("URL must include a hostname")
+	}
+
+	// Resolve hostname to check for private IPs
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve hostname")
+	}
+
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("URL must not point to a loopback or link-local address")
+		}
+		// Check cloud metadata addresses
+		if ipStr == "169.254.169.254" {
+			return fmt.Errorf("URL must not point to cloud metadata service")
+		}
+	}
+
+	// Block common internal hostnames
+	lower := strings.ToLower(host)
+	if lower == "localhost" || lower == "metadata.google.internal" {
+		return fmt.Errorf("URL must not point to an internal service")
+	}
+
+	return nil
 }

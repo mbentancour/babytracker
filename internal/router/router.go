@@ -52,7 +52,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	usersH := handlers.NewUsersHandler(db)
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
-	displayH := handlers.NewDisplayHandler()
+	displayH := handlers.NewDisplayHandler(db)
 
 	// Auth routes (public, rate-limited)
 	r.Group(func(r chi.Router) {
@@ -227,6 +227,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/users/{id}/access", usersH.GrantAccess)
 		r.Delete("/api/users/{userId}/access/{childId}", usersH.RevokeAccess)
 		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
+		r.Put("/api/users/me/password", usersH.ChangeOwnPassword)
+		r.Put("/api/users/{id}/password", usersH.ResetPassword)
 
 		// Roles
 		r.Get("/api/roles/", usersH.ListRoles)

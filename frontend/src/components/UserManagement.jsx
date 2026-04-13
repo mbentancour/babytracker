@@ -115,6 +115,8 @@ function UserCard({ user, roles, children, onRefresh }) {
   const [showGrant, setShowGrant] = useState(false);
   const [grantChild, setGrantChild] = useState("");
   const [grantRole, setGrantRole] = useState("");
+  const [showResetPw, setShowResetPw] = useState(false);
+  const [newPw, setNewPw] = useState("");
 
   const handleGrant = async () => {
     if (!grantChild || !grantRole) return;
@@ -199,6 +201,40 @@ function UserCard({ user, roles, children, onRefresh }) {
             <button onClick={() => setShowGrant(true)}
               style={{ fontSize: 11, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
               + Grant child access
+            </button>
+          )}
+
+          {/* Reset password */}
+          {showResetPw ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input
+                type="password"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                placeholder="New password (min 8 chars)"
+                style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontSize: 12, fontFamily: "inherit" }}
+              />
+              <button
+                onClick={async () => {
+                  if (newPw.length < 8) { alert("Password must be at least 8 characters"); return; }
+                  await api.resetUserPassword(user.id, newPw);
+                  setShowResetPw(false);
+                  setNewPw("");
+                  alert("Password reset");
+                }}
+                style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#6C5CE7", color: "white", fontSize: 11, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+              >
+                Reset
+              </button>
+              <button onClick={() => { setShowResetPw(false); setNewPw(""); }}
+                style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setShowResetPw(true)}
+              style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>
+              Reset password
             </button>
           )}
         </>

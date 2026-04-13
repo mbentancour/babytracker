@@ -101,6 +101,13 @@ func (h *WebhooksHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "no valid fields to update")
 		return
 	}
+	// Enforce minimum secret length if secret is being updated
+	if secret, ok := updates["secret"]; ok {
+		if s, isStr := secret.(string); isStr && len(s) < 16 {
+			pagination.WriteError(w, http.StatusBadRequest, "secret must be at least 16 characters")
+			return
+		}
+	}
 
 	result, err := models.UpdateWebhook(h.db, id, userID, updates)
 	if err != nil {

@@ -371,6 +371,10 @@ export const api = {
   revokeAccess: (userId, childId) =>
     request(`users/${userId}/access/${childId}`, { method: "DELETE" }),
   getCurrentUserAccess: () => request("users/me"),
+  changePassword: (currentPassword, newPassword) =>
+    request("users/me/password", { method: "PUT", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
+  resetUserPassword: (userId, newPassword) =>
+    request(`users/${userId}/password`, { method: "PUT", body: JSON.stringify({ new_password: newPassword }) }),
 
   // Roles
   getRoles: () => request("roles/"),

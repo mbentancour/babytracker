@@ -3,12 +3,19 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sync"
 
+	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/crypto"
+	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
+var deviceNameRe = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
+
 type DisplayHandler struct {
+	db     *sqlx.DB
 	subsMu sync.Mutex
 	subs   map[string]chan DisplayCommand // keyed by device name
 }
@@ -18,8 +25,9 @@ type DisplayCommand struct {
 	Device       string `json:"device,omitempty"` // empty = all devices
 }
 
-func NewDisplayHandler() *DisplayHandler {
+func NewDisplayHandler(db *sqlx.DB) *DisplayHandler {
 	return &DisplayHandler{
+		db:   db,
 		subs: make(map[string]chan DisplayCommand),
 	}
 }
@@ -73,6 +81,19 @@ func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
 // Events is the SSE endpoint. Clients connect with ?device=name to register.
 // GET /api/display/events?device=nursery-tablet
 func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
+	// Authenticate via refresh_token cookie (EventSource can't send headers)
+	authenticated := false
+	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
+		tokenHash := crypto.HashRefreshToken(cookie.Value)
+		if _, err := models.GetRefreshTokenByHash(h.db, tokenHash); err == nil {
+			authenticated = true
+		}
+	}
+	if !authenticated {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
@@ -81,6 +102,9 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 
 	device := r.URL.Query().Get("device")
 	if device == "" {
+		device = "default"
+	}
+	if !deviceNameRe.MatchString(device) {
 		device = "default"
 	}
 

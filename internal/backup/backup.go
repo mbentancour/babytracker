@@ -78,7 +78,7 @@ func CreateBackup(databaseURL, dataDir, backupsDir string) (string, error) {
 		}
 	}
 
-	slog.Info("backup created", "path", path)
+	slog.Info("backup created", "name", filepath.Base(path))
 	return path, nil
 }
 
@@ -147,12 +147,26 @@ func RestoreBackup(databaseURL, dataDir, archivePath string) error {
 			}
 			slog.Info("database restored from backup")
 		} else if strings.HasPrefix(header.Name, "photos/") {
-			// Extract photo
-			photoName := strings.TrimPrefix(header.Name, "photos/")
-			if photoName == "" || strings.Contains(photoName, "..") {
+			// Reject symlinks, hardlinks, and other non-regular files
+			if header.Typeflag != tar.TypeReg {
 				continue
 			}
+			// Reject files larger than 20MB
+			if header.Size > 20<<20 {
+				continue
+			}
+			photoName := strings.TrimPrefix(header.Name, "photos/")
+			if photoName == "" || strings.Contains(photoName, "..") || strings.Contains(photoName, "/") {
+				continue
+			}
+			photoName = filepath.Clean(photoName)
 			destPath := filepath.Join(photosDir, photoName)
+			// Final path containment check
+			absPhotos, _ := filepath.Abs(photosDir)
+			absDest, _ := filepath.Abs(destPath)
+			if !strings.HasPrefix(absDest, absPhotos) {
+				continue
+			}
 			dest, err := os.Create(destPath)
 			if err != nil {
 				slog.Warn("failed to restore photo", "file", photoName, "error", err)
@@ -163,7 +177,7 @@ func RestoreBackup(databaseURL, dataDir, archivePath string) error {
 		}
 	}
 
-	slog.Info("backup restored", "path", archivePath)
+	slog.Info("backup restored", "name", filepath.Base(archivePath))
 	return nil
 }
 
@@ -192,7 +206,7 @@ func RotateBackups(backupsDir string) {
 	for i := 0; i < len(backups)-maxBackups; i++ {
 		path := filepath.Join(backupsDir, backups[i].Name())
 		os.Remove(path)
-		slog.Info("rotated old backup", "path", path)
+		slog.Info("rotated old backup", "name", filepath.Base(path))
 	}
 }
 

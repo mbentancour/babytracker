@@ -160,10 +160,10 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // Always clean up, even on crash/panic
 
 	if _, err := io.Copy(tmpFile, file); err != nil {
 		tmpFile.Close()
-		os.Remove(tmpPath)
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to save upload")
 		return
 	}
@@ -171,12 +171,9 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	// Restore database + photos
 	if err := backup.RestoreBackup(h.cfg.DatabaseURL, h.cfg.DataDir, tmpPath); err != nil {
-		os.Remove(tmpPath)
 		pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 		return
 	}
-
-	os.Remove(tmpPath)
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "restored"})
 }
 
