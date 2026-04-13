@@ -264,6 +264,8 @@ export const api = {
       return r.json();
     });
   },
+  setChildPhotoFromFilename: (childId, filename) =>
+    request(`children/${childId}/photo`, { method: "PUT", body: JSON.stringify({ filename }) }),
   deleteEntryPhoto: (entityType, entityId) =>
     request(`${entityType}/${entityId}/photo`, { method: "DELETE" }),
   uploadEntryPhoto: (entityType, entityId, file) => {
@@ -319,6 +321,10 @@ export const api = {
   // Gallery
   getGallery: (params) => request(`gallery/${qs(params)}`),
 
+  // Baby Buddy import (admin)
+  importFromBabyBuddy: (url, token) =>
+    request("import/babybuddy", { method: "POST", body: JSON.stringify({ url, token }) }),
+
   // Backups (admin)
   getBackups: () => request("backups/"),
   createBackup: () => request("backups/", { method: "POST" }),
@@ -338,6 +344,9 @@ export const api = {
   },
   deleteBackup: (name) =>
     request(`backups/?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+  getBackupSettings: () => request("backups/settings"),
+  updateBackupSettings: (frequency) =>
+    request("backups/settings", { method: "PUT", body: JSON.stringify({ frequency }) }),
   restoreBackup: (file) => {
     const formData = new FormData();
     formData.append("backup", file);

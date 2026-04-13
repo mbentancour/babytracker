@@ -41,6 +41,7 @@ var bypassPaths = map[string]bool{
 	"/api/display":        true,
 	"/api/display/events": true,
 	"/api/backups/":       true,
+	"/api/import/":        true,
 }
 
 // Paths that only admins can write to (GET is open to all authenticated users)

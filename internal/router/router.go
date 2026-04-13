@@ -50,7 +50,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	galleryH := handlers.NewGalleryHandler(db)
 	photosH := handlers.NewPhotosHandler(db, cfg)
 	usersH := handlers.NewUsersHandler(db)
-	backupH := handlers.NewBackupHandler(cfg)
+	backupH := handlers.NewBackupHandler(cfg, db)
+	bbImportH := handlers.NewBBImportHandler(db)
 	displayH := handlers.NewDisplayHandler()
 
 	// Auth routes (public, rate-limited)
@@ -82,6 +83,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/children/", childrenH.List)
 		r.Post("/api/children/", childrenH.Create)
 		r.Patch("/api/children/{id}/", childrenH.Update)
+		r.Put("/api/children/{id}/photo", mediaH.SetChildPhotoFromFilename)
 		r.Delete("/api/children/{id}/", deleteH.DeleteChild())
 
 		// Feedings
@@ -212,6 +214,11 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/backups/", backupH.Create)
 		r.Get("/api/backups/download", backupH.Download)
 		r.Delete("/api/backups/", backupH.Delete)
+		r.Get("/api/backups/settings", backupH.GetSettings)
+		r.Put("/api/backups/settings", backupH.UpdateSettings)
+
+		// Baby Buddy import (admin only — handler checks is_admin)
+		r.Post("/api/import/babybuddy", bbImportH.Import)
 
 		// User management (admin only — handler checks is_admin)
 		r.Get("/api/users/", usersH.List)

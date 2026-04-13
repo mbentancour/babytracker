@@ -48,7 +48,7 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	// Union query across all tables that have photos, including child profile
 	query := `
-		SELECT id, 'profile' AS entity_type, picture AS photo, birth_date::text AS date,
+		SELECT id, 'profile' AS entity_type, picture AS photo, updated_at::date::text AS date,
 			CONCAT(first_name, ' ', last_name) AS label, 'Profile photo' AS detail
 		FROM children WHERE id = $1 AND picture != ''
 		UNION ALL

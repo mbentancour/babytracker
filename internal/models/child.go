@@ -13,7 +13,7 @@ type Child struct {
 	BirthDate string    `db:"birth_date" json:"birth_date"`
 	Picture   string    `db:"picture" json:"picture"`
 	CreatedAt time.Time `db:"created_at" json:"-"`
-	UpdatedAt time.Time `db:"updated_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
 func ListChildren(db *sqlx.DB) ([]Child, error) {

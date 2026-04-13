@@ -59,8 +59,13 @@ func main() {
 		}
 	}
 
-	// Start automatic daily backup scheduler
-	backup.StartScheduler(cfg.DatabaseURL, cfg.BackupsDir())
+	// Start automatic backup scheduler — DB setting overrides env var
+	backupFreq := cfg.BackupFrequency
+	var savedFreq string
+	if err := db.Get(&savedFreq, `SELECT value FROM settings WHERE key = 'backup_frequency'`); err == nil && savedFreq != "" {
+		backupFreq = savedFreq
+	}
+	backup.StartScheduler(cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), backupFreq)
 
 	r := router.New(db, cfg)
 

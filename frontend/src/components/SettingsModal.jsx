@@ -294,15 +294,28 @@ function BackupSection() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [frequency, setFrequency] = useState("daily");
 
   const refresh = () => {
-    api.getBackups()
-      .then((res) => setBackups(res.results || []))
-      .catch(() => setBackups([]))
+    Promise.all([api.getBackups(), api.getBackupSettings()])
+      .then(([backupsRes, settingsRes]) => {
+        setBackups(backupsRes.results || []);
+        setFrequency(settingsRes.frequency || "daily");
+      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   };
 
   useState(() => { refresh(); });
+
+  const handleFrequencyChange = async (newFreq) => {
+    setFrequency(newFreq);
+    try {
+      await api.updateBackupSettings(newFreq);
+    } catch {
+      alert("Failed to update backup frequency");
+    }
+  };
 
   const handleCreate = async () => {
     setCreating(true);
@@ -343,9 +356,27 @@ function BackupSection() {
   return (
     <div className="settings-card">
       <h4 className="settings-card-title">Backups</h4>
-      <p className="settings-hint" style={{ marginBottom: 12 }}>
-        Automatic daily backups are kept for 7 days. You can also create manual backups or restore from a file.
-      </p>
+
+      <div style={{ marginBottom: 16 }}>
+        <FormField label="Automatic Backup Frequency">
+          <FormSelect
+            options={[
+              { value: "disabled", label: "Disabled" },
+              { value: "6h", label: "Every 6 hours" },
+              { value: "12h", label: "Every 12 hours" },
+              { value: "daily", label: "Daily" },
+              { value: "weekly", label: "Weekly" },
+            ]}
+            value={frequency}
+            onChange={(e) => handleFrequencyChange(e.target.value)}
+          />
+        </FormField>
+        <p className="settings-hint">
+          {frequency === "disabled"
+            ? "Automatic backups are off. Use this if Home Assistant manages backups."
+            : `Backups include the database and all photos. Last 7 are kept.${frequency !== "daily" ? " Restart required to apply." : ""}`}
+        </p>
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button
@@ -363,7 +394,7 @@ function BackupSection() {
           {restoring ? "Restoring..." : "Restore from File"}
           <input
             type="file"
-            accept=".gz,.sql.gz"
+            accept=".gz,.tar.gz"
             style={{ display: "none" }}
             onChange={handleRestore}
             disabled={restoring}

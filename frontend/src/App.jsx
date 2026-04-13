@@ -355,28 +355,18 @@ function Dashboard({ demoMode, onLogout }) {
       {/* Header */}
       <header className="app-header fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <label className="avatar" style={{ cursor: "pointer" }} title="Click to upload photo">
+          <div
+            className="avatar"
+            style={{ cursor: "pointer" }}
+            onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
+            title="Tap to edit"
+          >
             {data.child?.picture ? (
               <img src={data.child.picture} alt={data.child.first_name} className="avatar-img" />
             ) : (
               <Icons.Baby />
             )}
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file && data.child) {
-                  try {
-                    await api.uploadChildPhoto(data.child.id, file);
-                    data.refetch();
-                  } catch { /* ignore */ }
-                }
-                e.target.value = "";
-              }}
-            />
-          </label>
+          </div>
           <div
             style={{ cursor: "pointer" }}
             onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
@@ -495,19 +485,37 @@ function Dashboard({ demoMode, onLogout }) {
         </div>
       ))}
 
-      {/* Tab Navigation */}
-      <nav className="tab-nav fade-in">
-        {TABS.filter((tab) => tab.features.some((f) => canRead(f))).map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-btn ${activeTab === tab.id ? "tab-active" : ""}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-      </nav>
+      {/* Tab Navigation — bar on desktop, dropdown on mobile */}
+      {(() => {
+        const visibleTabs = TABS.filter((tab) => tab.features.some((f) => canRead(f)));
+        return (
+          <>
+            <nav className="tab-nav tab-nav-desktop fade-in">
+              {visibleTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`tab-btn ${activeTab === tab.id ? "tab-active" : ""}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+            <div className="tab-nav-mobile fade-in">
+              <select
+                className="tab-select"
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+              >
+                {visibleTabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>{tab.label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Tab Content */}
       <main className="tab-content">

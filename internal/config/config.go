@@ -16,6 +16,7 @@ type Config struct {
 	UnitSystem      string
 	RefreshInterval int
 	DemoMode        bool
+	BackupFrequency string // "disabled", "6h", "12h", "daily", "weekly"
 }
 
 func New() *Config {
@@ -34,6 +35,7 @@ func New() *Config {
 		UnitSystem:      envOrDefault("UNIT_SYSTEM", "metric"),
 		RefreshInterval: 30,
 		DemoMode:        os.Getenv("DEMO_MODE") == "true",
+		BackupFrequency: envOrDefault("BACKUP_FREQUENCY", "daily"),
 	}
 }
 

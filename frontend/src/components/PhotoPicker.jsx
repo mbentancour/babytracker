@@ -2,20 +2,22 @@ import { useState } from "react";
 import { Icons } from "./Icons";
 
 export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
-  const [preview, setPreview] = useState(
-    currentPhoto ? `./api/media/photos/${currentPhoto}` : null
-  );
+  const [preview, setPreview] = useState(() => {
+    if (!currentPhoto) return null;
+    if (currentPhoto.startsWith("./api/") || currentPhoto.startsWith("/api/") || currentPhoto.startsWith("http") || currentPhoto.startsWith("data:")) {
+      return currentPhoto;
+    }
+    return `./api/media/photos/${currentPhoto}`;
+  });
 
   const handleChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target.result);
     reader.readAsDataURL(file);
-
     onPhotoSelected(file);
+    e.target.value = "";
   };
 
   const handleRemove = () => {
@@ -40,21 +42,42 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
       </label>
 
       {preview ? (
-        <div style={{ position: "relative", display: "inline-block" }}>
-          <img
-            src={preview}
-            alt="Preview"
-            style={{
-              width: "100%",
-              maxHeight: 200,
-              objectFit: "cover",
-              borderRadius: 10,
-              border: "1px solid var(--border)",
-            }}
-          />
+        <div style={{ position: "relative" }}>
+          {/* Clicking the image opens file picker to replace */}
+          <label style={{ cursor: "pointer", display: "block" }}>
+            <img
+              src={preview}
+              alt="Preview"
+              style={{
+                width: "100%",
+                maxHeight: 200,
+                objectFit: "cover",
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+              }}
+            />
+            <div style={{
+              position: "absolute", bottom: 0, left: 0, right: 0,
+              background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+              borderRadius: "0 0 10px 10px",
+              padding: "16px 12px 8px",
+              textAlign: "center",
+              color: "rgba(255,255,255,0.8)",
+              fontSize: 12,
+            }}>
+              Tap to change photo
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleChange}
+            />
+          </label>
           <button
             type="button"
             onClick={handleRemove}
+            title="Remove photo"
             style={{
               position: "absolute",
               top: 6,

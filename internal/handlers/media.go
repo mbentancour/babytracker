@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -141,7 +143,7 @@ func (h *MediaHandler) UploadChildPhoto(w http.ResponseWriter, r *http.Request) 
 		file.Seek(0, io.SeekStart)
 	}
 
-	filename := fmt.Sprintf("child-%d%s", id, ext)
+	filename := fmt.Sprintf("child-%d-%d%s", id, time.Now().UnixNano(), ext)
 	destPath := filepath.Join(h.cfg.PhotosDir(), filename)
 
 	dest, err := os.Create(destPath)
@@ -156,8 +158,65 @@ func (h *MediaHandler) UploadChildPhoto(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Update child record with photo filename
+	// Preserve the old profile photo as a standalone photo in the gallery
+	var oldPicture string
+	h.db.Get(&oldPicture, `SELECT picture FROM children WHERE id = $1`, id)
+	if oldPicture != "" {
+		h.db.Exec(
+			`INSERT INTO photos (child_id, filename, caption, date) VALUES ($1, $2, 'Profile photo', CURRENT_DATE)`,
+			id, oldPicture,
+		)
+	}
+
+	// Update child record with new photo filename
 	child, err := models.UpdateChild(h.db, id, map[string]any{"picture": filename})
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to update child")
+		return
+	}
+
+	pagination.WriteJSON(w, http.StatusOK, child)
+}
+
+// SetChildPhotoFromExisting sets a child's profile picture to an existing photo by filename.
+// PUT /api/children/{id}/photo
+func (h *MediaHandler) SetChildPhotoFromFilename(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req struct {
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Filename == "" {
+		pagination.WriteError(w, http.StatusBadRequest, "filename is required")
+		return
+	}
+
+	// Validate the file exists and prevent path traversal
+	cleaned := filepath.Clean(req.Filename)
+	if strings.Contains(cleaned, "..") || strings.Contains(cleaned, "/") {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid filename")
+		return
+	}
+	if _, err := os.Stat(filepath.Join(h.cfg.PhotosDir(), cleaned)); os.IsNotExist(err) {
+		pagination.WriteError(w, http.StatusNotFound, "photo not found")
+		return
+	}
+
+	// Preserve the old profile photo as a standalone photo
+	var oldPicture string
+	h.db.Get(&oldPicture, `SELECT picture FROM children WHERE id = $1`, id)
+	if oldPicture != "" && oldPicture != cleaned {
+		h.db.Exec(
+			`INSERT INTO photos (child_id, filename, caption, date) VALUES ($1, $2, 'Profile photo', CURRENT_DATE)`,
+			id, oldPicture,
+		)
+	}
+
+	child, err := models.UpdateChild(h.db, id, map[string]any{"picture": cleaned})
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to update child")
 		return

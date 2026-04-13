@@ -13,14 +13,16 @@ function fixChildPicture(c) {
     if (c.picture.startsWith("./api/") || c.picture.startsWith("/api/")) {
       return c;
     }
+    // Cache-bust with updated_at or current time
+    const cb = c.updated_at ? new Date(c.updated_at).getTime() : Date.now();
     try {
       // Handle absolute URLs (legacy Baby Buddy format)
       const url = new URL(c.picture);
-      c.picture = `./api/media${url.pathname}`;
+      c.picture = `./api/media${url.pathname}?v=${cb}`;
     } catch {
       // Assume it's a filename, build the API path
       if (c.picture && !c.picture.startsWith("http")) {
-        c.picture = `./api/media/photos/${c.picture}`;
+        c.picture = `./api/media/photos/${c.picture}?v=${cb}`;
       }
     }
   }

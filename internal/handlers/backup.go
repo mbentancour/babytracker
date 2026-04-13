@@ -9,18 +9,23 @@ import (
 	"sort"
 	"strings"
 
+	"encoding/json"
+
+	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/middleware"
+	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
 type BackupHandler struct {
 	cfg *config.Config
+	db  *sqlx.DB
 }
 
-func NewBackupHandler(cfg *config.Config) *BackupHandler {
-	return &BackupHandler{cfg: cfg}
+func NewBackupHandler(cfg *config.Config, db *sqlx.DB) *BackupHandler {
+	return &BackupHandler{cfg: cfg, db: db}
 }
 
 func (h *BackupHandler) requireAdmin(r *http.Request) bool {
@@ -51,7 +56,7 @@ func (h *BackupHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	var backups []backupInfo
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql.gz") {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".tar.gz") {
 			continue
 		}
 		info, err := e.Info()
@@ -87,7 +92,7 @@ func (h *BackupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path, err := backup.RunPgDump(h.cfg.DatabaseURL, h.cfg.BackupsDir())
+	path, err := backup.CreateBackup(h.cfg.DatabaseURL, h.cfg.DataDir, h.cfg.BackupsDir())
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "backup failed")
 		return
@@ -149,7 +154,7 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// Save to temp file
-	tmpFile, err := os.CreateTemp(h.cfg.BackupsDir(), "restore_*.sql.gz")
+	tmpFile, err := os.CreateTemp(h.cfg.BackupsDir(), "restore_*.tar.gz")
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create temp file")
 		return
@@ -164,8 +169,8 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpFile.Close()
 
-	// Restore
-	if err := backup.RestoreFromFile(h.cfg.DatabaseURL, tmpPath); err != nil {
+	// Restore database + photos
+	if err := backup.RestoreBackup(h.cfg.DatabaseURL, h.cfg.DataDir, tmpPath); err != nil {
 		os.Remove(tmpPath)
 		pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 		return
@@ -201,4 +206,55 @@ func (h *BackupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSettings returns the current backup frequency.
+func (h *BackupHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(r) {
+		pagination.WriteError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	freq, err := models.GetSetting(h.db, "backup_frequency")
+	if err != nil {
+		freq = h.cfg.BackupFrequency
+	}
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{
+		"frequency": freq,
+	})
+}
+
+// UpdateSettings changes the backup frequency.
+// Note: this persists to the DB but the running scheduler won't change until restart.
+func (h *BackupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(r) {
+		pagination.WriteError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+
+	var req struct {
+		Frequency string `json:"frequency"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	valid := map[string]bool{"disabled": true, "6h": true, "12h": true, "daily": true, "weekly": true}
+	if !valid[req.Frequency] {
+		pagination.WriteError(w, http.StatusBadRequest, "frequency must be: disabled, 6h, 12h, daily, or weekly")
+		return
+	}
+
+	if err := models.SetSetting(h.db, "backup_frequency", req.Frequency); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to save setting")
+		return
+	}
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]any{
+		"frequency":       req.Frequency,
+		"restart_required": true,
+		"message":         "Backup frequency updated. Restart the server for the change to take effect.",
+	})
 }

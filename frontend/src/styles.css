@@ -22,6 +22,10 @@ body {
   max-width: 960px;
   margin: 0 auto;
   padding: 20px 16px 100px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-bottom: max(100px, calc(100px + env(safe-area-inset-bottom)));
   min-height: 100vh;
 }
 
@@ -246,6 +250,11 @@ body {
   margin-bottom: 20px;
 }
 
+.tab-nav-mobile {
+  display: none;
+  margin-bottom: 20px;
+}
+
 .tab-btn {
   flex: 1;
   display: flex;
@@ -261,6 +270,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
+  white-space: nowrap;
   transition: all 0.2s;
 }
 
@@ -282,8 +292,8 @@ body {
 /* FAB */
 .fab-container {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -473,6 +483,35 @@ body {
     bottom: 16px;
     right: 16px;
   }
+  .tab-nav-desktop {
+    display: none;
+  }
+  .tab-nav-mobile {
+    display: block;
+  }
+}
+
+.tab-select {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238F96B0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+  outline: none;
+}
+
+.tab-select:focus {
+  border-color: #6C5CE7;
 }
 
 /* Login Screen */
@@ -482,6 +521,10 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
   background: var(--bg);
 }
 

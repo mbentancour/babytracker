@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -15,90 +16,102 @@ import (
 
 const maxBackups = 7
 
-// RunPgDump creates a gzipped pg_dump backup in the backups directory.
+// CreateBackup creates a .tar.gz archive containing:
+// - database.sql (pg_dump output)
+// - photos/ directory (all uploaded photos)
 // Returns the path to the created backup file.
-func RunPgDump(databaseURL, backupsDir string) (string, error) {
+func CreateBackup(databaseURL, dataDir, backupsDir string) (string, error) {
 	if err := os.MkdirAll(backupsDir, 0750); err != nil {
 		return "", fmt.Errorf("failed to create backups dir: %w", err)
 	}
 
-	filename := fmt.Sprintf("backup_%s.sql.gz", time.Now().Format("2006-01-02_150405"))
+	filename := fmt.Sprintf("backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
 	path := filepath.Join(backupsDir, filename)
-
-	// Run pg_dump and pipe through gzip
-	cmd := exec.Command("pg_dump", databaseURL)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Errorf("failed to create pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("failed to start pg_dump: %w", err)
-	}
 
 	outFile, err := os.Create(path)
 	if err != nil {
-		cmd.Wait()
 		return "", fmt.Errorf("failed to create backup file: %w", err)
 	}
+	defer outFile.Close()
 
 	gz := gzip.NewWriter(outFile)
-	gz.Comment = fmt.Sprintf("BabyTracker backup %s", time.Now().Format(time.RFC3339))
+	defer gz.Close()
 
-	if _, err := io.Copy(gz, stdout); err != nil {
-		gz.Close()
-		outFile.Close()
-		cmd.Wait()
-		os.Remove(path)
-		return "", fmt.Errorf("failed to write backup: %w", err)
+	tw := tar.NewWriter(gz)
+	defer tw.Close()
+
+	// 1. Dump database to a temp file, then add to archive
+	tmpSQL, err := os.CreateTemp("", "babytracker-dump-*.sql")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
+	tmpSQLPath := tmpSQL.Name()
+	defer os.Remove(tmpSQLPath)
 
-	gz.Close()
-	outFile.Close()
-
-	if err := cmd.Wait(); err != nil {
+	cmd := exec.Command("pg_dump", databaseURL)
+	cmd.Stdout = tmpSQL
+	if err := cmd.Run(); err != nil {
+		tmpSQL.Close()
 		os.Remove(path)
 		return "", fmt.Errorf("pg_dump failed: %w", err)
+	}
+	tmpSQL.Close()
+
+	if err := addFileToTar(tw, tmpSQLPath, "database.sql"); err != nil {
+		os.Remove(path)
+		return "", fmt.Errorf("failed to add database dump: %w", err)
+	}
+
+	// 2. Add all photos
+	photosDir := filepath.Join(dataDir, "photos")
+	if info, err := os.Stat(photosDir); err == nil && info.IsDir() {
+		entries, _ := os.ReadDir(photosDir)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			filePath := filepath.Join(photosDir, entry.Name())
+			if err := addFileToTar(tw, filePath, "photos/"+entry.Name()); err != nil {
+				slog.Warn("skipping photo in backup", "file", entry.Name(), "error", err)
+				continue
+			}
+		}
 	}
 
 	slog.Info("backup created", "path", path)
 	return path, nil
 }
 
-// RotateBackups keeps only the most recent maxBackups files in the directory.
-func RotateBackups(backupsDir string) {
-	entries, err := os.ReadDir(backupsDir)
+func addFileToTar(tw *tar.Writer, filePath, nameInArchive string) error {
+	f, err := os.Open(filePath)
 	if err != nil {
-		return
+		return err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return err
 	}
 
-	var backups []os.DirEntry
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasPrefix(e.Name(), "backup_") && strings.HasSuffix(e.Name(), ".sql.gz") {
-			backups = append(backups, e)
-		}
+	header := &tar.Header{
+		Name:    nameInArchive,
+		Size:    info.Size(),
+		Mode:    0644,
+		ModTime: info.ModTime(),
 	}
 
-	if len(backups) <= maxBackups {
-		return
+	if err := tw.WriteHeader(header); err != nil {
+		return err
 	}
 
-	// Sort by name (which includes timestamp) — oldest first
-	sort.Slice(backups, func(i, j int) bool {
-		return backups[i].Name() < backups[j].Name()
-	})
-
-	// Remove oldest
-	for i := 0; i < len(backups)-maxBackups; i++ {
-		path := filepath.Join(backupsDir, backups[i].Name())
-		os.Remove(path)
-		slog.Info("rotated old backup", "path", path)
-	}
+	_, err = io.Copy(tw, f)
+	return err
 }
 
-// RestoreFromFile restores a database from a gzipped SQL dump.
-func RestoreFromFile(databaseURL, filePath string) error {
-	f, err := os.Open(filePath)
+// RestoreBackup extracts a .tar.gz archive, restores the database, and copies photos.
+func RestoreBackup(databaseURL, dataDir, archivePath string) error {
+	f, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open backup: %w", err)
 	}
@@ -110,39 +123,125 @@ func RestoreFromFile(databaseURL, filePath string) error {
 	}
 	defer gz.Close()
 
-	cmd := exec.Command("psql", databaseURL)
-	cmd.Stdin = gz
-	cmd.Stderr = os.Stderr
+	tr := tar.NewReader(gz)
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("psql restore failed: %w", err)
+	photosDir := filepath.Join(dataDir, "photos")
+	os.MkdirAll(photosDir, 0750)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read tar entry: %w", err)
+		}
+
+		if header.Name == "database.sql" {
+			// Restore database
+			cmd := exec.Command("psql", databaseURL)
+			cmd.Stdin = tr
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("database restore failed: %w", err)
+			}
+			slog.Info("database restored from backup")
+		} else if strings.HasPrefix(header.Name, "photos/") {
+			// Extract photo
+			photoName := strings.TrimPrefix(header.Name, "photos/")
+			if photoName == "" || strings.Contains(photoName, "..") {
+				continue
+			}
+			destPath := filepath.Join(photosDir, photoName)
+			dest, err := os.Create(destPath)
+			if err != nil {
+				slog.Warn("failed to restore photo", "file", photoName, "error", err)
+				continue
+			}
+			io.Copy(dest, tr)
+			dest.Close()
+		}
 	}
 
-	slog.Info("backup restored", "path", filePath)
+	slog.Info("backup restored", "path", archivePath)
 	return nil
 }
 
-// StartScheduler runs daily backups in a background goroutine.
-func StartScheduler(databaseURL, backupsDir string) {
+// RotateBackups keeps only the most recent maxBackups files in the directory.
+func RotateBackups(backupsDir string) {
+	entries, err := os.ReadDir(backupsDir)
+	if err != nil {
+		return
+	}
+
+	var backups []os.DirEntry
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), "backup_") && strings.HasSuffix(e.Name(), ".tar.gz") {
+			backups = append(backups, e)
+		}
+	}
+
+	if len(backups) <= maxBackups {
+		return
+	}
+
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].Name() < backups[j].Name()
+	})
+
+	for i := 0; i < len(backups)-maxBackups; i++ {
+		path := filepath.Join(backupsDir, backups[i].Name())
+		os.Remove(path)
+		slog.Info("rotated old backup", "path", path)
+	}
+}
+
+// FrequencyToDuration converts a frequency string to a time.Duration.
+// Returns 0 for "disabled".
+func FrequencyToDuration(freq string) time.Duration {
+	switch freq {
+	case "6h":
+		return 6 * time.Hour
+	case "12h":
+		return 12 * time.Hour
+	case "daily":
+		return 24 * time.Hour
+	case "weekly":
+		return 7 * 24 * time.Hour
+	case "disabled", "":
+		return 0
+	default:
+		return 24 * time.Hour
+	}
+}
+
+// StartScheduler runs backups at the configured frequency.
+// Pass "disabled" to skip automatic backups entirely.
+func StartScheduler(databaseURL, dataDir, backupsDir, frequency string) {
+	interval := FrequencyToDuration(frequency)
+	if interval == 0 {
+		slog.Info("automatic backups disabled")
+		return
+	}
+
 	go func() {
-		// Run first backup shortly after start
+		// First backup shortly after start
 		time.Sleep(30 * time.Second)
-		if _, err := RunPgDump(databaseURL, backupsDir); err != nil {
+		if _, err := CreateBackup(databaseURL, dataDir, backupsDir); err != nil {
 			slog.Error("scheduled backup failed", "error", err)
 		} else {
 			RotateBackups(backupsDir)
 		}
 
-		// Then daily
-		ticker := time.NewTicker(24 * time.Hour)
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for range ticker.C {
-			if _, err := RunPgDump(databaseURL, backupsDir); err != nil {
+			if _, err := CreateBackup(databaseURL, dataDir, backupsDir); err != nil {
 				slog.Error("scheduled backup failed", "error", err)
 			} else {
 				RotateBackups(backupsDir)
 			}
 		}
 	}()
-	slog.Info("backup scheduler started", "dir", backupsDir)
+	slog.Info("backup scheduler started", "frequency", frequency, "dir", backupsDir)
 }
