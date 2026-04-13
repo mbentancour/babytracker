@@ -8,59 +8,70 @@ import (
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
-// DisplayHandler manages the picture frame state via API.
-// This allows external tools (Home Assistant, etc.) to control the display mode.
 type DisplayHandler struct {
-	mu    sync.RWMutex
-	state DisplayState
-
-	// Subscribers waiting for state changes (Server-Sent Events)
-	subs   map[chan DisplayState]struct{}
 	subsMu sync.Mutex
+	subs   map[string]chan DisplayCommand // keyed by device name
 }
 
-type DisplayState struct {
-	PictureFrame bool `json:"picture_frame"`
+type DisplayCommand struct {
+	PictureFrame bool   `json:"picture_frame"`
+	Device       string `json:"device,omitempty"` // empty = all devices
 }
 
 func NewDisplayHandler() *DisplayHandler {
 	return &DisplayHandler{
-		subs: make(map[chan DisplayState]struct{}),
+		subs: make(map[string]chan DisplayCommand),
 	}
 }
 
-func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
-	h.mu.RLock()
-	state := h.state
-	h.mu.RUnlock()
-	pagination.WriteJSON(w, http.StatusOK, state)
-}
-
+// SetState sends a display command to a specific device or all devices.
+// PUT /api/display
+// Body: {"picture_frame": true} — targets all devices
+// Body: {"picture_frame": true, "device": "nursery-tablet"} — targets one device
 func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
-	var req DisplayState
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var cmd DisplayCommand
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	h.mu.Lock()
-	h.state = req
-	h.mu.Unlock()
-
-	// Notify all SSE subscribers
 	h.subsMu.Lock()
-	for ch := range h.subs {
-		select {
-		case ch <- req:
-		default:
+	targeted := 0
+	for device, ch := range h.subs {
+		if cmd.Device == "" || cmd.Device == device {
+			select {
+			case ch <- cmd:
+				targeted++
+			default:
+			}
 		}
 	}
 	h.subsMu.Unlock()
 
-	pagination.WriteJSON(w, http.StatusOK, req)
+	pagination.WriteJSON(w, http.StatusOK, map[string]any{
+		"picture_frame":    cmd.PictureFrame,
+		"device":           cmd.Device,
+		"devices_targeted": targeted,
+	})
 }
 
-// SSE endpoint: the frontend listens here for real-time display state changes.
+// GetState returns the list of connected devices.
+// GET /api/display
+func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
+	h.subsMu.Lock()
+	devices := make([]string, 0, len(h.subs))
+	for name := range h.subs {
+		devices = append(devices, name)
+	}
+	h.subsMu.Unlock()
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]any{
+		"connected_devices": devices,
+	})
+}
+
+// Events is the SSE endpoint. Clients connect with ?device=name to register.
+// GET /api/display/events?device=nursery-tablet
 func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -68,37 +79,43 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	device := r.URL.Query().Get("device")
+	if device == "" {
+		device = "default"
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ch := make(chan DisplayState, 1)
+	ch := make(chan DisplayCommand, 1)
 	h.subsMu.Lock()
-	h.subs[ch] = struct{}{}
+	// Close existing connection for the same device name
+	if old, exists := h.subs[device]; exists {
+		close(old)
+	}
+	h.subs[device] = ch
 	h.subsMu.Unlock()
 
 	defer func() {
 		h.subsMu.Lock()
-		delete(h.subs, ch)
+		if h.subs[device] == ch {
+			delete(h.subs, device)
+		}
 		h.subsMu.Unlock()
 	}()
 
-	// Send current state immediately
-	h.mu.RLock()
-	current := h.state
-	h.mu.RUnlock()
-
-	data, _ := json.Marshal(current)
-	w.Write([]byte("data: "))
-	w.Write(data)
-	w.Write([]byte("\n\n"))
+	// Send a connected event
+	w.Write([]byte("data: {\"connected\":true,\"device\":\"" + device + "\"}\n\n"))
 	flusher.Flush()
 
-	// Stream updates
 	for {
 		select {
-		case state := <-ch:
-			data, _ := json.Marshal(state)
+		case cmd, ok := <-ch:
+			if !ok {
+				return // Channel closed (replaced by new connection)
+			}
+			data, _ := json.Marshal(cmd)
 			w.Write([]byte("data: "))
 			w.Write(data)
 			w.Write([]byte("\n\n"))

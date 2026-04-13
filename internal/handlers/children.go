@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -20,11 +21,37 @@ func NewChildrenHandler(db *sqlx.DB) *ChildrenHandler {
 }
 
 func (h *ChildrenHandler) List(w http.ResponseWriter, r *http.Request) {
-	children, err := models.ListChildren(h.db)
+	userID := middleware.GetUserID(r.Context())
+
+	// Get accessible child IDs for this user (admins get all)
+	accessibleIDs, err := models.GetAccessibleChildIDs(h.db, userID)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to check access")
+		return
+	}
+
+	allChildren, err := models.ListChildren(h.db)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to list children")
 		return
 	}
+
+	// Filter to only accessible children
+	idSet := make(map[int]bool, len(accessibleIDs))
+	for _, id := range accessibleIDs {
+		idSet[id] = true
+	}
+
+	var children []models.Child
+	for _, c := range allChildren {
+		if idSet[c.ID] {
+			children = append(children, c)
+		}
+	}
+	if children == nil {
+		children = []models.Child{}
+	}
+
 	pagination.WriteJSON(w, http.StatusOK, pagination.Response{
 		Count:   len(children),
 		Results: children,

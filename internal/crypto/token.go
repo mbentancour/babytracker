@@ -18,13 +18,15 @@ const (
 type Claims struct {
 	UserID   int    `json:"user_id"`
 	Username string `json:"username"`
+	IsAdmin  bool   `json:"is_admin"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(secret string, userID int, username string) (string, error) {
+func GenerateAccessToken(secret string, userID int, username string, isAdmin bool) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
+		IsAdmin:  isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(AccessTokenExpiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

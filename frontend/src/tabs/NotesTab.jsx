@@ -16,7 +16,7 @@ const MILESTONE_COLORS = {
   other: "#95a5a6",
 };
 
-export default function NotesTab({ notes, milestones = [], medications = [], onEditEntry, onDeleteEntry }) {
+export default function NotesTab({ notes, milestones = [], medications = [], onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const [expandedNotes, setExpandedNotes] = useState(false);
   const [expandedMilestones, setExpandedMilestones] = useState(false);
   const [expandedMeds, setExpandedMeds] = useState(false);
@@ -75,13 +75,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                       </div>
                     )}
                   </div>
-                  <button
-                    className="delete-entry-btn"
-                    onClick={() => onDeleteEntry?.("milestone", m.id)}
-                    title="Delete"
-                  >
-                    x
-                  </button>
+                  {canWrite("milestone") && (
+                    <button
+                      className="delete-entry-btn"
+                      onClick={() => onDeleteEntry?.("milestone", m.id)}
+                      title="Delete"
+                    >x</button>
+                  )}
                 </div>
               ))}
               {milestones.length > COLLAPSED_COUNT && (
@@ -141,13 +141,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                       {m.notes ? ` — ${m.notes}` : ""}
                     </div>
                   </div>
-                  <button
-                    className="delete-entry-btn"
-                    onClick={() => onDeleteEntry?.("medication", m.id)}
-                    title="Delete"
-                  >
-                    x
-                  </button>
+                  {canWrite("medication") && (
+                    <button
+                      className="delete-entry-btn"
+                      onClick={() => onDeleteEntry?.("medication", m.id)}
+                      title="Delete"
+                    >x</button>
+                  )}
                 </div>
               ))}
               {medications.length > COLLAPSED_COUNT && (
@@ -190,13 +190,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                       isLast={i === arr.length - 1}
                     />
                   </div>
-                  <button
-                    className="delete-entry-btn"
-                    onClick={() => onDeleteEntry?.("note", n.entry?.id)}
-                    title="Delete"
-                  >
-                    x
-                  </button>
+                  {canWrite("note") && (
+                    <button
+                      className="delete-entry-btn"
+                      onClick={() => onDeleteEntry?.("note", n.entry?.id)}
+                      title="Delete"
+                    >x</button>
+                  )}
                 </div>
               ))}
               {noteTimeline.length > COLLAPSED_COUNT && (

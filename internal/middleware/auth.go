@@ -14,6 +14,7 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 const UsernameKey contextKey = "username"
+const IsAdminKey contextKey = "is_admin"
 
 // Auth middleware that supports both JWT Bearer tokens and API tokens.
 // API tokens use "Token <token>" format, JWT uses "Bearer <token>".
@@ -42,6 +43,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 				}
 				ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 				ctx = context.WithValue(ctx, UsernameKey, claims.Username)
+				ctx = context.WithValue(ctx, IsAdminKey, claims.IsAdmin)
 				next.ServeHTTP(w, r.WithContext(ctx))
 
 			case "Token":

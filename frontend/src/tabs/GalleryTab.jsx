@@ -51,7 +51,7 @@ const TYPE_API_PATH = {
   note: "notes",
 };
 
-export default function GalleryTab({ childId }) {
+export default function GalleryTab({ childId, canWrite = false }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -142,7 +142,7 @@ export default function GalleryTab({ childId }) {
   return (
     <>
       {/* Upload button */}
-      <div className="fade-in" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      {canWrite && <div className="fade-in" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
         <label
           style={{
             display: "inline-flex", alignItems: "center", gap: 6,
@@ -164,7 +164,7 @@ export default function GalleryTab({ childId }) {
             disabled={uploading}
           />
         </label>
-      </div>
+      </div>}
 
       {/* Filter chips */}
       {types.length > 1 && (
@@ -235,28 +235,30 @@ export default function GalleryTab({ childId }) {
                     position: "relative",
                   }}
                 >
-                  <button
-                    className="delete-entry-btn"
-                    onClick={() => handleDeletePhoto(item)}
-                    title="Remove photo"
-                    style={{
-                      position: "absolute",
-                      top: 6,
-                      right: 6,
-                      background: "rgba(0,0,0,0.6)",
-                      color: "white",
-                      borderRadius: "50%",
-                      width: 24,
-                      height: 24,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      opacity: 0.7,
-                      zIndex: 1,
-                    }}
-                  >
-                    x
-                  </button>
+                  {canWrite && (
+                    <button
+                      className="delete-entry-btn"
+                      onClick={() => handleDeletePhoto(item)}
+                      title="Remove photo"
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 6,
+                        background: "rgba(0,0,0,0.6)",
+                        color: "white",
+                        borderRadius: "50%",
+                        width: 24,
+                        height: 24,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        opacity: 0.7,
+                        zIndex: 1,
+                      }}
+                    >
+                      x
+                    </button>
+                  )}
                   <img
                     src={`./api/media/photos/${item.photo}`}
                     alt={item.label}

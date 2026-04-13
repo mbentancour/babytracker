@@ -49,6 +49,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	exportH := handlers.NewExportHandler(db)
 	galleryH := handlers.NewGalleryHandler(db)
 	photosH := handlers.NewPhotosHandler(db, cfg)
+	usersH := handlers.NewUsersHandler(db)
 	displayH := handlers.NewDisplayHandler()
 
 	// Auth routes (public, rate-limited)
@@ -73,6 +74,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	// Protected API routes (with 1MB body limit for JSON endpoints)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(cfg.JWTSecret, db))
+		r.Use(middleware.RBAC(db))
 		r.Use(middleware.MaxBodySize(1 << 20))
 
 		// Children
@@ -204,12 +206,27 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/display", displayH.GetState)
 		r.Put("/api/display", displayH.SetState)
 
+		// User management (admin only — handler checks is_admin)
+		r.Get("/api/users/", usersH.List)
+		r.Post("/api/users/", usersH.Create)
+		r.Delete("/api/users/{id}/", usersH.Delete)
+		r.Post("/api/users/{id}/access", usersH.GrantAccess)
+		r.Delete("/api/users/{userId}/access/{childId}", usersH.RevokeAccess)
+		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
+
+		// Roles
+		r.Get("/api/roles/", usersH.ListRoles)
+		r.Post("/api/roles/", usersH.CreateRole)
+		r.Put("/api/roles/{id}/permissions", usersH.UpdateRolePermissions)
+		r.Delete("/api/roles/{id}/", usersH.DeleteRole)
+
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)
 	})
 
 	// Upload routes (auth required, NO body size limit — handlers set their own)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(cfg.JWTSecret, db))
+		r.Use(middleware.RBAC(db))
 		r.Post("/api/photos/", photosH.Upload)
 		r.Post("/api/children/{id}/photo", mediaH.UploadChildPhoto)
 		r.Post("/api/milestones/{id}/photo", mediaH.UploadMilestonePhoto)

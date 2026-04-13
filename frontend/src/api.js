@@ -319,6 +319,25 @@ export const api = {
   // Gallery
   getGallery: (params) => request(`gallery/${qs(params)}`),
 
+  // User management (admin)
+  getUsers: () => request("users/"),
+  createUser: (data) =>
+    request("users/", { method: "POST", body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`users/${id}/`, { method: "DELETE" }),
+  grantAccess: (userId, childId, roleId) =>
+    request(`users/${userId}/access`, { method: "POST", body: JSON.stringify({ child_id: childId, role_id: roleId }) }),
+  revokeAccess: (userId, childId) =>
+    request(`users/${userId}/access/${childId}`, { method: "DELETE" }),
+  getCurrentUserAccess: () => request("users/me"),
+
+  // Roles
+  getRoles: () => request("roles/"),
+  createRole: (data) =>
+    request("roles/", { method: "POST", body: JSON.stringify(data) }),
+  updateRolePermissions: (id, permissions) =>
+    request(`roles/${id}/permissions`, { method: "PUT", body: JSON.stringify({ permissions }) }),
+  deleteRole: (id) => request(`roles/${id}/`, { method: "DELETE" }),
+
   // Config
   getConfig: () => fetch(CONFIG_PATH).then((r) => r.json()),
 

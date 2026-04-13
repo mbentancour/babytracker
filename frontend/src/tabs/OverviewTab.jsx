@@ -32,7 +32,7 @@ import { usePreferences } from "../utils/preferences";
 
 const COLLAPSED_COUNT = 2;
 
-export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, temperatures, medications, onEditEntry, onDeleteEntry }) {
+export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, temperatures, medications, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { isFeatureEnabled } = usePreferences();
   const [expanded, setExpanded] = useState({});
@@ -397,7 +397,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                         {new Date(t.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("temp", t.id)} title="Delete">x</button>
+                    {canWrite("temp") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("temp", t.id)} title="Delete">x</button>}
                   </div>
                 ))}
                 {temperatures.length > 3 && (
@@ -428,7 +428,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                         {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("medication", m.id)} title="Delete">x</button>
+                    {canWrite("medication") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("medication", m.id)} title="Delete">x</button>}
                   </div>
                 ))}
                 {medications.length > 3 && (

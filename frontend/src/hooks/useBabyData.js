@@ -27,7 +27,11 @@ function fixChildPicture(c) {
   return c;
 }
 
-export function useBabyData() {
+const emptyPage = { results: [], count: 0 };
+
+export function useBabyData(canReadFn) {
+  const canReadRef = useRef(canReadFn || (() => true));
+  canReadRef.current = canReadFn || (() => true);
   const [children, setChildren] = useState([]);
   const [child, setChild] = useState(null);
   const [feedings, setFeedings] = useState([]);
@@ -97,26 +101,31 @@ export function useBabyData() {
         medicationsRes,
         milestonesRes,
         bmiRes,
-      ] = await Promise.all([
-        api.getFeedings({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" }),
-        api.getFeedings({ child: c, start_min: weekMin, limit: 200, ordering: "-start" }),
-        api.getSleep({ child: c, start_min: sleepMin, limit: 100, ordering: "-start" }),
-        api.getSleep({ child: c, start_min: weekMin, limit: 200, ordering: "-start" }),
-        api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" }),
-        api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" }),
-        api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" }),
-        api.getTemperature({ child: c, limit: 10, ordering: "-time" }),
-        api.getWeight({ child: c, limit: 20, ordering: "-date" }),
-        api.getHeight({ child: c, limit: 20, ordering: "-date" }),
-        api.getTimers(),
-        api.getNotes({ child: c, limit: 20, ordering: "-time" }),
-        api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" }),
-        api.getSleep({ child: c, start_min: monthMin, limit: 500, ordering: "-start" }),
-        api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" }),
-        api.getMedications({ child: c, limit: 20, ordering: "-time" }),
-        api.getMilestones({ child: c, limit: 50, ordering: "-date" }),
-        api.getBMI({ child: c, limit: 20, ordering: "-date" }),
-      ]);
+      ] = await Promise.all((() => {
+        // Only fetch data for features the user can read
+        const ep = emptyPage;
+        const q = (feature, call) => canReadRef.current(feature) ? call : Promise.resolve(ep);
+        return [
+        q("feeding", api.getFeedings({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("feeding", api.getFeedings({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("sleep", api.getSleep({ child: c, start_min: sleepMin, limit: 100, ordering: "-start" })),
+        q("sleep", api.getSleep({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("diaper", api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" })),
+        q("tummy", api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("tummy", api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("temp", api.getTemperature({ child: c, limit: 10, ordering: "-time" })),
+        q("weight", api.getWeight({ child: c, limit: 20, ordering: "-date" })),
+        q("height", api.getHeight({ child: c, limit: 20, ordering: "-date" })),
+        q("feeding", api.getTimers()),
+        q("note", api.getNotes({ child: c, limit: 20, ordering: "-time" })),
+        q("feeding", api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
+        q("sleep", api.getSleep({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
+        q("headcirc", api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" })),
+        q("medication", api.getMedications({ child: c, limit: 20, ordering: "-time" })),
+        q("milestone", api.getMilestones({ child: c, limit: 50, ordering: "-date" })),
+        q("bmi", api.getBMI({ child: c, limit: 20, ordering: "-date" })),
+        ];
+      })());
 
       setFeedings(feedingsRes.results || []);
       setWeeklyFeedings(weeklyFeedingsRes.results || []);

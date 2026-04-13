@@ -70,7 +70,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := models.CreateUser(h.db, req.Username, hash)
+	user, err := models.CreateUser(h.db, req.Username, hash, true) // First user is always admin
 	if err != nil {
 		pagination.WriteError(w, http.StatusConflict, "username already exists")
 		return
@@ -150,7 +150,7 @@ func (h *AuthHandler) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, user *models.User) {
-	accessToken, err := crypto.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.Username)
+	accessToken, err := crypto.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to generate token")
 		return

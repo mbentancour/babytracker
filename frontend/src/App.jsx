@@ -34,10 +34,10 @@ import PictureFrame from "./components/PictureFrame";
 import "./styles.css";
 
 const TABS = [
-  { id: "overview", label: "Overview", icon: <Icons.Activity /> },
-  { id: "growth", label: "Growth", icon: <Icons.TrendUp /> },
-  { id: "notes", label: "Journal", icon: <Icons.StickyNote /> },
-  { id: "gallery", label: "Photos", icon: <Icons.Baby /> },
+  { id: "overview", label: "Overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "temp", "medication"] },
+  { id: "growth", label: "Growth", icon: <Icons.TrendUp />, features: ["weight", "height", "headcirc", "bmi"] },
+  { id: "notes", label: "Journal", icon: <Icons.StickyNote />, features: ["note", "milestone", "medication"] },
+  { id: "gallery", label: "Photos", icon: <Icons.Baby />, features: ["photo"] },
 ];
 
 const ACTION_GROUPS = [
@@ -153,8 +153,6 @@ export default function App() {
 }
 
 function Dashboard({ demoMode, onLogout }) {
-  const data = useBabyData();
-  const timer = useTimers(data.timers, data.child?.id);
   const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
   const [activeTab, setActiveTab] = useState("overview");
   const [modal, setModal] = useState(null);
@@ -162,14 +160,74 @@ function Dashboard({ demoMode, onLogout }) {
   const [expandedGroup, setExpandedGroup] = useState("Track");
   const [showTimerPicker, setShowTimerPicker] = useState(false);
   const [editingTimerId, setEditingTimerId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(demoMode);
+  const [userAccess, setUserAccess] = useState([]);
+  const [selectedChildId, setSelectedChildId] = useState(null);
+
+  const [permissionsLoaded, setPermissionsLoaded] = useState(demoMode);
+  useEffect(() => {
+    if (demoMode) { setPermissionsLoaded(true); return; }
+    api.getCurrentUserAccess()
+      .then((res) => {
+        setIsAdmin(res.is_admin);
+        setUserAccess(res.access || []);
+        setPermissionsLoaded(true);
+      })
+      .catch(() => setPermissionsLoaded(true));
+  }, [demoMode]);
+
+  // Permission helpers — use selectedChildId to avoid circular dep with data.child
+  const getPermission = useCallback((feature) => {
+    if (demoMode || isAdmin) return "write";
+    if (!selectedChildId) return "none";
+    const access = userAccess.find((a) => a.child_id === selectedChildId);
+    if (!access) return "none";
+    const perm = access.permissions?.find((p) => p.feature === feature);
+    return perm?.access_level || "none";
+  }, [demoMode, isAdmin, userAccess, selectedChildId]);
+
+  const canWrite = useCallback((feature) => getPermission(feature) === "write", [getPermission]);
+  const canRead = useCallback((feature) => getPermission(feature) !== "none", [getPermission]);
+  const hasAnyWriteAccess = demoMode || isAdmin || userAccess.some((a) =>
+    a.permissions?.some((p) => p.access_level === "write")
+  );
+
+  // Data fetching — canRead is now defined before this call
+  const data = useBabyData(canRead);
+  const timer = useTimers(data.timers, data.child?.id);
+
+  // Keep selectedChildId in sync with the active child
+  useEffect(() => {
+    if (data.child?.id && data.child.id !== selectedChildId) {
+      setSelectedChildId(data.child.id);
+    }
+  }, [data.child?.id, selectedChildId]);
+
+  // Refetch data once permissions are known (so we only fetch what's allowed)
+  useEffect(() => {
+    if (permissionsLoaded && data.child?.id) {
+      data.refetch();
+    }
+  }, [permissionsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select first visible tab if current tab becomes hidden
+  useEffect(() => {
+    const visibleTabs = TABS.filter((tab) => tab.features.some((f) => canRead(f)));
+    if (visibleTabs.length > 0 && !visibleTabs.find((t) => t.id === activeTab)) {
+      setActiveTab(visibleTabs[0].id);
+    }
+  }, [canRead, activeTab]);
 
   // Picture frame screensaver
+  const slideshowParam = new URLSearchParams(window.location.search).get("slideshow") === "true";
   const [showPictureFrame, setShowPictureFrame] = useState(false);
   const [galleryPhotos, setGalleryPhotos] = useState([]);
+  const [slideshowTriggered, setSlideshowTriggered] = useState(false);
 
   // Picture frame: use refs so the idle timer doesn't get reset by re-renders
   const childIdRef = useRef(data.child?.id);
   childIdRef.current = data.child?.id;
+  const startPictureFrameRef = useRef(null);
 
   const startPictureFrame = useCallback(async () => {
     const cid = childIdRef.current;
@@ -183,6 +241,15 @@ function Dashboard({ demoMode, onLogout }) {
       }
     } catch { /* ignore */ }
   }, []); // No deps — uses ref
+  startPictureFrameRef.current = startPictureFrame;
+
+  // ?slideshow=true — start picture frame as soon as child data is available
+  useEffect(() => {
+    if (slideshowParam && !slideshowTriggered && data.child?.id) {
+      setSlideshowTriggered(true);
+      startPictureFrame();
+    }
+  }, [slideshowParam, slideshowTriggered, data.child?.id, startPictureFrame]);
 
   // Idle timeout trigger — only re-runs when the timeout setting changes
   const pictureFrameTimeout = prefs.pictureFrameTimeout;
@@ -206,15 +273,17 @@ function Dashboard({ demoMode, onLogout }) {
   }, [pictureFrameTimeout, startPictureFrame]);
 
   // Listen for remote display control via SSE (Home Assistant, etc.)
+  // Device name is stored in localStorage so it persists per browser
   useEffect(() => {
-    const evtSource = new EventSource("./api/display/events");
+    const deviceName = localStorage.getItem("babytracker_device_name") || "default";
+    const evtSource = new EventSource(`./api/display/events?device=${encodeURIComponent(deviceName)}`);
     let isFirst = true;
     evtSource.onmessage = (e) => {
       try {
         const state = JSON.parse(e.data);
         if (isFirst) { isFirst = false; return; }
         if (state.picture_frame) {
-          startPictureFrame();
+          startPictureFrameRef.current();
         } else {
           setShowPictureFrame(false);
         }
@@ -267,7 +336,17 @@ function Dashboard({ demoMode, onLogout }) {
   }
 
   if (!demoMode && data.children.length === 0) {
-    return <OnboardingScreen onChildAdded={data.refetch} />;
+    if (isAdmin) {
+      return <OnboardingScreen onChildAdded={data.refetch} />;
+    }
+    return (
+      <div className="app-loading">
+        <span style={{ color: "var(--text-muted)", fontSize: 14, textAlign: "center", padding: 20 }}>
+          No children have been shared with your account yet.<br />
+          Ask an admin to grant you access.
+        </span>
+      </div>
+    );
   }
 
   return (
@@ -340,14 +419,16 @@ function Dashboard({ demoMode, onLogout }) {
             {c.first_name}
           </button>
         ))}
-        <button
-          className="child-chip"
-          style={{ opacity: 0.6, fontSize: 16 }}
-          onClick={() => setModal({ type: "addChild" })}
-          title="Add baby"
-        >
-          +
-        </button>
+        {isAdmin && (
+          <button
+            className="child-chip"
+            style={{ opacity: 0.6, fontSize: 16 }}
+            onClick={() => setModal({ type: "addChild" })}
+            title="Add baby"
+          >
+            +
+          </button>
+        )}
       </div>
 
       {/* Active Timer Bars */}
@@ -416,7 +497,7 @@ function Dashboard({ demoMode, onLogout }) {
 
       {/* Tab Navigation */}
       <nav className="tab-nav fade-in">
-        {TABS.map((tab) => (
+        {TABS.filter((tab) => tab.features.some((f) => canRead(f))).map((tab) => (
           <button
             key={tab.id}
             className={`tab-btn ${activeTab === tab.id ? "tab-active" : ""}`}
@@ -441,8 +522,9 @@ function Dashboard({ demoMode, onLogout }) {
             weeklyTummyTimes={data.weeklyTummyTimes}
             temperatures={data.temperatures}
             medications={data.medications}
-            onEditEntry={(type, entry) => setModal({ type, entry })}
-            onDeleteEntry={handleDeleteEntry}
+            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            canWrite={canWrite}
           />
         )}
         {activeTab === "growth" && (
@@ -454,8 +536,8 @@ function Dashboard({ demoMode, onLogout }) {
             monthlyFeedings={data.monthlyFeedings}
             monthlySleep={data.monthlySleep}
             childBirthDate={data.child?.birth_date}
-            onEditEntry={(type, entry) => setModal({ type, entry })}
-            onDeleteEntry={handleDeleteEntry}
+            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
           />
         )}
         {activeTab === "notes" && (
@@ -463,12 +545,13 @@ function Dashboard({ demoMode, onLogout }) {
             notes={data.notes}
             milestones={data.milestones}
             medications={data.medications}
-            onEditEntry={(type, entry) => setModal({ type, entry })}
-            onDeleteEntry={handleDeleteEntry}
+            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            canWrite={canWrite}
           />
         )}
         {activeTab === "gallery" && (
-          <GalleryTab childId={data.child?.id} />
+          <GalleryTab childId={data.child?.id} canWrite={canWrite("photo")} />
         )}
       </main>
 
@@ -477,7 +560,7 @@ function Dashboard({ demoMode, onLogout }) {
         {showActions && (
           <div className="fab-menu fade-in">
             {ACTION_GROUPS.map((group) => {
-              const filteredActions = group.actions.filter((a) => isFeatureEnabled(a.id));
+              const filteredActions = group.actions.filter((a) => isFeatureEnabled(a.id) && canWrite(a.id));
               if (filteredActions.length === 0) return null;
               const isOpen = expandedGroup === group.label;
               return (
@@ -517,7 +600,7 @@ function Dashboard({ demoMode, onLogout }) {
         )}
         {showTimerPicker && (
           <div className="fab-menu fade-in" style={{ right: 76 }}>
-            {TIMER_TYPES.map((t) => (
+            {TIMER_TYPES.filter((t) => canWrite(t.id === "tummy" ? "tummy" : t.id === "sleep" ? "sleep" : "feeding")).map((t) => (
               <button
                 key={t.id}
                 className="fab-action"
@@ -537,25 +620,29 @@ function Dashboard({ demoMode, onLogout }) {
             ))}
           </div>
         )}
-        <TimerButton
-          label="Timer"
-          icon={<Icons.Timer />}
-          color={colors.feeding}
-          active={false}
-          onClick={() => {
-            setShowTimerPicker(!showTimerPicker);
-            setShowActions(false);
-          }}
-        />
-        <button
-          className="fab-btn"
-          style={{ background: showActions ? "var(--text-muted)" : colors.feeding }}
-          onClick={() => { setShowActions(!showActions); setShowTimerPicker(false); setExpandedGroup("Track"); }}
-        >
-          <span style={{ transform: showActions ? "rotate(45deg)" : "none", transition: "transform 0.2s", display: "flex" }}>
-            <Icons.Plus />
-          </span>
-        </button>
+        {(canWrite("feeding") || canWrite("sleep") || canWrite("tummy")) && (
+          <TimerButton
+            label="Timer"
+            icon={<Icons.Timer />}
+            color={colors.feeding}
+            active={false}
+            onClick={() => {
+              setShowTimerPicker(!showTimerPicker);
+              setShowActions(false);
+            }}
+          />
+        )}
+        {hasAnyWriteAccess && (
+          <button
+            className="fab-btn"
+            style={{ background: showActions ? "var(--text-muted)" : colors.feeding }}
+            onClick={() => { setShowActions(!showActions); setShowTimerPicker(false); setExpandedGroup("Track"); }}
+          >
+            <span style={{ transform: showActions ? "rotate(45deg)" : "none", transition: "transform 0.2s", display: "flex" }}>
+              <Icons.Plus />
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Modals */}
@@ -700,6 +787,8 @@ function Dashboard({ demoMode, onLogout }) {
         <SettingsModal
           childId={data.child?.id}
           unitSystem={data.unitSystem}
+          children={data.children}
+          isAdmin={isAdmin}
           onClose={closeModal}
           onLogout={demoMode ? undefined : onLogout}
           onRefetch={data.refetch}
@@ -709,7 +798,15 @@ function Dashboard({ demoMode, onLogout }) {
         <PictureFrame
           photos={galleryPhotos}
           childName={data.child?.first_name}
-          onWake={() => setShowPictureFrame(false)}
+          onWake={() => {
+            setShowPictureFrame(false);
+            // Remove ?slideshow=true from URL so it doesn't restart
+            if (slideshowParam) {
+              const url = new URL(window.location);
+              url.searchParams.delete("slideshow");
+              window.history.replaceState({}, "", url);
+            }
+          }}
         />
       )}
     </div>
