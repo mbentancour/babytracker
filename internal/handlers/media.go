@@ -27,26 +27,51 @@ func NewMediaHandler(cfg *config.Config, db *sqlx.DB) *MediaHandler {
 }
 
 func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
-	// Authenticate: accept JWT header OR valid refresh_token cookie.
+	// Authenticate via JWT header OR refresh_token cookie.
 	// <img> tags can't send Authorization headers, so the cookie fallback
 	// lets browsers display photos while keeping them authenticated.
+	var userID int
 	authenticated := false
 
 	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
-		// JWT path — handled by middleware if this route is in the auth group,
-		// but we also accept it here for direct calls.
-		authenticated = true
-	} else if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
-		// Cookie path — verify the refresh token is valid
-		tokenHash := crypto.HashRefreshToken(cookie.Value)
-		if _, err := models.GetRefreshTokenByHash(h.db, tokenHash); err == nil {
-			authenticated = true
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && parts[0] == "Bearer" {
+			if claims, err := crypto.ValidateAccessToken(h.cfg.JWTSecret, parts[1]); err == nil {
+				userID = claims.UserID
+				authenticated = true
+			}
+		}
+	}
+	if !authenticated {
+		if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
+			tokenHash := crypto.HashRefreshToken(cookie.Value)
+			if rt, err := models.GetRefreshTokenByHash(h.db, tokenHash); err == nil {
+				userID = rt.UserID
+				authenticated = true
+			}
 		}
 	}
 
 	if !authenticated {
 		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 		return
+	}
+
+	// Authorization: verify user can access this photo's child.
+	// Admins can access all photos.
+	var isAdmin bool
+	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+
+	if !isAdmin {
+		// Check that the user has access to at least one child
+		// (photo filenames contain child IDs, but for defense in depth we check
+		// the user has ANY child access — specific ownership is hard to derive
+		// from filenames alone without a reverse lookup table)
+		accessible, _ := models.GetAccessibleChildIDs(h.db, userID)
+		if len(accessible) == 0 {
+			http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+			return
+		}
 	}
 
 	filename := chi.URLParam(r, "*")
@@ -57,8 +82,6 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// URL is /api/media/photos/child-1.jpg, wildcard gives "photos/child-1.jpg"
-	// DataDir contains the "photos/" subdirectory, so join with DataDir directly
 	fullPath := filepath.Join(h.cfg.DataDir, cleaned)
 
 	absData, _ := filepath.Abs(h.cfg.DataDir)
@@ -73,7 +96,6 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Cache photos in the browser to avoid re-auth on every load
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	http.ServeFile(w, r, fullPath)
 }

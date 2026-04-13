@@ -8,9 +8,21 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
+
+// csvSafe prevents CSV injection by prefixing formula-starting characters.
+func csvSafe(s string) string {
+	if len(s) > 0 {
+		switch s[0] {
+		case '=', '+', '-', '@', '\t', '\r', '\n':
+			return "'" + s
+		}
+	}
+	return s
+}
 
 type ExportHandler struct {
 	db *sqlx.DB
@@ -35,6 +47,14 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	entityType := r.URL.Query().Get("type")
 	if entityType == "" {
 		entityType = "all"
+	}
+
+	// Verify the user has access to this child
+	userID := middleware.GetUserID(r.Context())
+	accessLevel := models.CheckAccess(h.db, userID, childID, "note") // export needs at least read
+	if accessLevel == "none" {
+		pagination.WriteError(w, http.StatusForbidden, "access denied")
+		return
 	}
 
 	child, err := models.GetChild(h.db, childID)
@@ -91,7 +111,7 @@ func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) {
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Type, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.Method, amount, dur, r.Notes})
+		w.Write([]string{r.Type, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.Method, amount, dur, csvSafe(r.Notes)})
 	}
 }
 
@@ -104,7 +124,7 @@ func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) {
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, fmt.Sprintf("%t", r.Nap), r.Notes})
+		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, fmt.Sprintf("%t", r.Nap), csvSafe(r.Notes)})
 	}
 }
 
@@ -113,7 +133,7 @@ func (h *ExportHandler) exportChanges(w *csv.Writer, childID int) {
 	var rows []models.Change
 	h.db.Select(&rows, `SELECT * FROM changes WHERE child_id = $1 ORDER BY time DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%t", r.Wet), fmt.Sprintf("%t", r.Solid), r.Color, r.Notes})
+		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%t", r.Wet), fmt.Sprintf("%t", r.Solid), r.Color, csvSafe(r.Notes)})
 	}
 }
 
@@ -126,7 +146,7 @@ func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) {
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, r.Milestone, r.Notes})
+		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, csvSafe(r.Milestone),csvSafe(r.Notes)})
 	}
 }
 
@@ -135,7 +155,7 @@ func (h *ExportHandler) exportTemperature(w *csv.Writer, childID int) {
 	var rows []models.Temperature
 	h.db.Select(&rows, `SELECT * FROM temperature WHERE child_id = $1 ORDER BY time DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Temperature), r.Notes})
+		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Temperature), csvSafe(r.Notes)})
 	}
 }
 
@@ -144,7 +164,7 @@ func (h *ExportHandler) exportWeight(w *csv.Writer, childID int) {
 	var rows []models.Weight
 	h.db.Select(&rows, `SELECT * FROM weight WHERE child_id = $1 ORDER BY date DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Date, fmt.Sprintf("%.2f", r.Weight), r.Notes})
+		w.Write([]string{r.Date, fmt.Sprintf("%.2f", r.Weight), csvSafe(r.Notes)})
 	}
 }
 
@@ -153,7 +173,7 @@ func (h *ExportHandler) exportHeight(w *csv.Writer, childID int) {
 	var rows []models.Height
 	h.db.Select(&rows, `SELECT * FROM height WHERE child_id = $1 ORDER BY date DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.Height), r.Notes})
+		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.Height), csvSafe(r.Notes)})
 	}
 }
 
@@ -162,7 +182,7 @@ func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) {
 	var rows []models.HeadCircumference
 	h.db.Select(&rows, `SELECT * FROM head_circumference WHERE child_id = $1 ORDER BY date DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.HeadCircumference), r.Notes})
+		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.HeadCircumference), csvSafe(r.Notes)})
 	}
 }
 
@@ -171,7 +191,7 @@ func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) {
 	var rows []models.Medication
 	h.db.Select(&rows, `SELECT * FROM medications WHERE child_id = $1 ORDER BY time DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Time.Format(time.RFC3339), r.Name, r.Dosage, r.DosageUnit, r.Notes})
+		w.Write([]string{r.Time.Format(time.RFC3339), csvSafe(r.Name), csvSafe(r.Dosage), r.DosageUnit, csvSafe(r.Notes)})
 	}
 }
 
@@ -180,7 +200,7 @@ func (h *ExportHandler) exportMilestones(w *csv.Writer, childID int) {
 	var rows []models.Milestone
 	h.db.Select(&rows, `SELECT * FROM milestones WHERE child_id = $1 ORDER BY date DESC`, childID)
 	for _, r := range rows {
-		w.Write([]string{r.Date, r.Title, r.Category, r.Description})
+		w.Write([]string{r.Date, csvSafe(r.Title), r.Category, csvSafe(r.Description)})
 	}
 }
 

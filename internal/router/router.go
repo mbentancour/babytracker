@@ -35,7 +35,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	notesH := handlers.NewNotesHandler(db)
 	configH := handlers.NewConfigHandler(cfg)
 	mediaH := handlers.NewMediaHandler(cfg, db)
-	deleteH := handlers.NewGenericDeleteHandler(db)
+	deleteH := handlers.NewGenericDeleteHandler(db, cfg)
 
 	// New feature handlers
 	headCircH := handlers.NewHeadCircumferenceHandler(db)

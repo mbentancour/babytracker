@@ -72,10 +72,9 @@ func RateLimit(maxRequests int, window time.Duration) func(http.Handler) http.Ha
 	rl := newRateLimiter(maxRequests, window)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Use RemoteAddr only — X-Forwarded-For is user-controlled and spoofable.
+			// If behind a trusted reverse proxy, configure it to set RemoteAddr.
 			ip := r.RemoteAddr
-			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-				ip = forwarded
-			}
 
 			if !rl.allow(ip) {
 				w.Header().Set("Retry-After", "60")

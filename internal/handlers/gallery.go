@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/middleware"
+	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
@@ -34,6 +36,13 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 	childID, err := strconv.Atoi(childIDStr)
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid child id")
+		return
+	}
+
+	// Verify the user has access to this child
+	userID := middleware.GetUserID(r.Context())
+	if models.CheckAccess(h.db, userID, childID, "photo") == "none" {
+		pagination.WriteError(w, http.StatusForbidden, "access denied")
 		return
 	}
 

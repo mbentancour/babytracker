@@ -84,6 +84,12 @@ func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Reject individual files over 10MB
+		if fileHeader.Size > 10<<20 {
+			file.Close()
+			continue
+		}
+
 		// Validate content type
 		buf := make([]byte, 512)
 		n, _ := file.Read(buf)

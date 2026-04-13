@@ -45,6 +45,10 @@ func (h *WebhooksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "name and url are required")
 		return
 	}
+	if len(input.Secret) < 16 {
+		pagination.WriteError(w, http.StatusBadRequest, "secret must be at least 16 characters for HMAC verification")
+		return
+	}
 
 	active := true
 	if input.Active != nil {

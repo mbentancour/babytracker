@@ -22,10 +22,10 @@ func NewUsersHandler(db *sqlx.DB) *UsersHandler {
 }
 
 func (h *UsersHandler) requireAdmin(r *http.Request) bool {
-	userID := middleware.GetUserID(r.Context())
-	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
-	return isAdmin
+	if isAdmin, ok := r.Context().Value(middleware.IsAdminKey).(bool); ok {
+		return isAdmin
+	}
+	return false
 }
 
 // List all users (admin only)
@@ -119,7 +119,7 @@ func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := models.DeleteUser(h.db, id); err != nil {
-		pagination.WriteError(w, http.StatusBadRequest, err.Error())
+		pagination.WriteError(w, http.StatusBadRequest, "cannot delete this user")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
