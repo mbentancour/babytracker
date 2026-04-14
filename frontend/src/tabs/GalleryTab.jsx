@@ -297,6 +297,26 @@ export default function GalleryTab({ childId, canWrite = false }) {
                         {item.detail}
                       </div>
                     )}
+                    {item.entity_type === "shared" && childId && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await api.assignSharedPhoto(childId, item.photo);
+                            setRefreshKey((k) => k + 1);
+                          } catch { /* ignore */ }
+                        }}
+                        style={{
+                          marginTop: 4, fontSize: 10, fontWeight: 600,
+                          color: "#0984e3", background: "#0984e318",
+                          border: "none", borderRadius: 4,
+                          padding: "3px 8px", cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Assign to child
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
