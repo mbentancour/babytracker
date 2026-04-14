@@ -606,7 +606,7 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
             bmiEntries={data.bmiEntries}
             monthlyFeedings={data.monthlyFeedings}
             monthlySleep={data.monthlySleep}
-            childBirthDate={data.child?.birth_date}
+            child={data.child}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
             onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
           />

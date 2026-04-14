@@ -12,6 +12,7 @@ type Child struct {
 	LastName  string    `db:"last_name" json:"last_name"`
 	BirthDate string    `db:"birth_date" json:"birth_date"`
 	Picture   string    `db:"picture" json:"picture"`
+	Sex       *string   `db:"sex" json:"sex"`
 	CreatedAt time.Time `db:"created_at" json:"-"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
@@ -30,9 +31,9 @@ func ListChildren(db *sqlx.DB) ([]Child, error) {
 
 func CreateChild(db *sqlx.DB, c *Child) error {
 	return db.QueryRowx(
-		`INSERT INTO children (first_name, last_name, birth_date, picture)
-		 VALUES ($1, $2, $3, $4) RETURNING *`,
-		c.FirstName, c.LastName, c.BirthDate, c.Picture,
+		`INSERT INTO children (first_name, last_name, birth_date, picture, sex)
+		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+		c.FirstName, c.LastName, c.BirthDate, c.Picture, c.Sex,
 	).StructScan(c)
 }
 

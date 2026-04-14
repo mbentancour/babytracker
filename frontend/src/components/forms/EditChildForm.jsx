@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../../api";
-import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import Modal, { FormField, FormInput, FormSelect, FormButton, FormDeleteButton } from "../Modal";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
@@ -16,6 +16,7 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
   const [firstName, setFirstName] = useState(child.first_name || "");
   const [lastName, setLastName] = useState(child.last_name || "");
   const [birthDate, setBirthDate] = useState(child.birth_date ? toLocalDate(child.birth_date) : "");
+  const [sex, setSex] = useState(child.sex || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showGalleryPicker, setShowGalleryPicker] = useState(false);
@@ -37,6 +38,7 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
         first_name: firstName,
         last_name: lastName,
         birth_date: birthDate,
+        sex: sex || null,
       });
       if (photoFile) {
         await api.uploadChildPhoto(child.id, photoFile);
@@ -54,6 +56,7 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
         first_name: firstName,
         last_name: lastName,
         birth_date: birthDate,
+        sex: sex || null,
       });
       await api.setChildPhotoFromFilename(child.id, filename);
       onDone();
@@ -73,6 +76,17 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
         </FormField>
         <FormField label={t("onboarding.birthDate")}>
           <FormInput type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required />
+        </FormField>
+        <FormField label={t("onboarding.sex")}>
+          <FormSelect
+            value={sex}
+            onChange={(e) => setSex(e.target.value)}
+            options={[
+              { value: "", label: t("onboarding.sexUnspecified") },
+              { value: "male", label: t("onboarding.sexMale") },
+              { value: "female", label: t("onboarding.sexFemale") },
+            ]}
+          />
         </FormField>
 
         {showGalleryPicker ? (
@@ -106,8 +120,9 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
                     onMouseOut={(e) => e.currentTarget.style.borderColor = "var(--border)"}
                   >
                     <img
-                      src={`./api/media/photos/${p.photo}`}
+                      src={`./api/media/photos/${p.photo}?size=thumb`}
                       alt={p.label}
+                      loading="lazy"
                       style={{ width: "100%", height: 70, objectFit: "cover", display: "block" }}
                     />
                   </button>

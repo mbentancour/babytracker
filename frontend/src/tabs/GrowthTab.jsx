@@ -14,6 +14,7 @@ import SectionCard from "../components/SectionCard";
 import CustomTooltip from "../components/CustomTooltip";
 import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
+import WHOGrowthChart from "../components/WHOGrowthChart";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
@@ -21,12 +22,16 @@ import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailySleepTotals,
 import { usePreferences } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
-export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, childBirthDate, onEditEntry, onDeleteEntry }) {
+export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry }) {
   const units = useUnits();
   const { t } = useI18n();
   const { prefs } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
+  const birthDate = child?.birth_date;
+  const sex = child?.sex;
+  const canShowWHO = !!(birthDate && sex);
   const weightSeries = toGrowthSeries(weights, "weight");
   const heightSeries = toGrowthSeries(heights, "height");
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
@@ -336,8 +341,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Weight Chart */}
         <div className="fade-in fade-in-7">
-          <SectionCard title={t("growth.weightTrend")} icon={<Icons.Weight />} color={colors.growth}>
-            {weightSeries.length >= 2 ? (
+          <SectionCard
+            title={t("growth.weightTrend")}
+            icon={<Icons.Weight />}
+            color={colors.growth}
+            action={canShowWHO ? <WHOToggle on={whoView.weight} onToggle={() => setWhoView(v => ({ ...v, weight: !v.weight }))} /> : null}
+          >
+            {whoView.weight && canShowWHO ? (
+              <WHOGrowthChart metric="weight" sex={sex} birthDate={birthDate} entries={weights} valueField="weight" unit={units.weight} color={colors.growth} />
+            ) : weightSeries.length >= 2 ? (
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -382,8 +394,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Height Chart */}
         <div className="fade-in fade-in-8">
-          <SectionCard title={t("growth.heightTrend")} icon={<Icons.Ruler />} color={colors.height}>
-            {heightSeries.length >= 2 ? (
+          <SectionCard
+            title={t("growth.heightTrend")}
+            icon={<Icons.Ruler />}
+            color={colors.height}
+            action={canShowWHO ? <WHOToggle on={whoView.height} onToggle={() => setWhoView(v => ({ ...v, height: !v.height }))} /> : null}
+          >
+            {whoView.height && canShowWHO ? (
+              <WHOGrowthChart metric="height" sex={sex} birthDate={birthDate} entries={heights} valueField="height" unit={units.length} color={colors.height} />
+            ) : heightSeries.length >= 2 ? (
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -427,8 +446,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
         {/* Head Circumference Chart */}
         <div className="fade-in fade-in-9">
-          <SectionCard title={t("growth.headCircTrend")} icon={<Icons.Baby />} color={colors.growth}>
-            {headCircSeries.length >= 2 ? (
+          <SectionCard
+            title={t("growth.headCircTrend")}
+            icon={<Icons.Baby />}
+            color={colors.growth}
+            action={canShowWHO ? <WHOToggle on={whoView.headcirc} onToggle={() => setWhoView(v => ({ ...v, headcirc: !v.headcirc }))} /> : null}
+          >
+            {whoView.headcirc && canShowWHO ? (
+              <WHOGrowthChart metric="headcirc" sex={sex} birthDate={birthDate} entries={headCircumferences} valueField="head_circumference" unit={units.length} color={colors.growth} />
+            ) : headCircSeries.length >= 2 ? (
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={headCircSeries} onClick={(data) => handleChartClick(data, "headcirc")}>
@@ -450,8 +476,23 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* BMI Chart */}
         <div className="fade-in fade-in-10">
-          <SectionCard title={t("growth.bmiTrend")} icon={<Icons.TrendUp />} color={colors.feeding}>
-            {bmiSeries.length >= 2 ? (
+          <SectionCard
+            title={t("growth.bmiTrend")}
+            icon={<Icons.TrendUp />}
+            color={colors.feeding}
+            action={canShowWHO ? <WHOToggle on={whoView.bmi} onToggle={() => setWhoView(v => ({ ...v, bmi: !v.bmi }))} /> : null}
+          >
+            {whoView.bmi && canShowWHO ? (
+              <WHOGrowthChart
+                metric="bmi"
+                sex={sex}
+                birthDate={birthDate}
+                entries={bmiSeries.map((p) => ({ date: p.dateStr, bmi: p.bmi }))}
+                valueField="bmi"
+                unit="kg/m²"
+                color={colors.feeding}
+              />
+            ) : bmiSeries.length >= 2 ? (
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={bmiSeries}>
@@ -482,5 +523,28 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         />
       )}
     </>
+  );
+}
+
+function WHOToggle({ on, onToggle }) {
+  const { t } = useI18n();
+  return (
+    <button
+      onClick={onToggle}
+      title={t("growth.whoTooltip")}
+      style={{
+        fontSize: 11,
+        fontWeight: 500,
+        padding: "4px 10px",
+        borderRadius: 6,
+        border: "1px solid var(--border)",
+        background: on ? "#6C5CE7" : "var(--card-bg)",
+        color: on ? "white" : "var(--text-muted)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      {on ? t("growth.whoOn") : t("growth.whoOff")}
+    </button>
   );
 }

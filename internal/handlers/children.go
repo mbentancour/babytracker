@@ -98,6 +98,7 @@ func (h *ChildrenHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"last_name":  "last_name",
 		"birth_date": "birth_date",
 		"picture":    "picture",
+		"sex":        "sex",
 	}
 
 	updates := filterAllowed(body, allowed)

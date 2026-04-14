@@ -79,6 +79,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
   }, [childId, refreshKey]);
 
   const [uploading, setUploading] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const handleDeletePhoto = async (item) => {
     if (!confirm(`Remove this ${TYPE_LABELS[item.entity_type] || ""} photo?`)) return;
@@ -135,6 +136,9 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
     grouped[date].push(item);
   }
   const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+  // Flat list in display order (newest date first, then within each date) for lightbox navigation
+  const flatItems = dates.flatMap((d) => grouped[d]);
 
   if (loading) {
     return (
@@ -265,13 +269,16 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
                     </button>
                   )}
                   <img
-                    src={`./api/media/photos/${item.photo}`}
+                    src={`./api/media/photos/${item.photo}?size=thumb`}
                     alt={item.label}
+                    loading="lazy"
+                    onClick={() => setLightboxIndex(flatItems.indexOf(item))}
                     style={{
                       width: "100%",
                       height: 150,
                       objectFit: "cover",
                       display: "block",
+                      cursor: "zoom-in",
                     }}
                   />
                   <div style={{ padding: "8px 10px" }}>
@@ -340,6 +347,119 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           </div>
         ))
       )}
+
+      {lightboxIndex != null && flatItems[lightboxIndex] && (
+        <Lightbox
+          item={flatItems[lightboxIndex]}
+          hasPrev={lightboxIndex > 0}
+          hasNext={lightboxIndex < flatItems.length - 1}
+          onPrev={() => setLightboxIndex((i) => Math.max(0, i - 1))}
+          onNext={() => setLightboxIndex((i) => Math.min(flatItems.length - 1, i + 1))}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </>
+  );
+}
+
+function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && hasPrev) onPrev();
+      else if (e.key === "ArrowRight" && hasNext) onNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hasPrev, hasNext, onPrev, onNext, onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.92)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+    >
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        aria-label="Close"
+        style={{
+          position: "absolute", top: 16, right: 16,
+          background: "rgba(255,255,255,0.15)", color: "white",
+          border: "none", borderRadius: "50%",
+          width: 40, height: 40, fontSize: 22,
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        ×
+      </button>
+
+      {hasPrev && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPrev(); }}
+          aria-label="Previous"
+          style={{
+            position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)",
+            background: "rgba(255,255,255,0.15)", color: "white",
+            border: "none", borderRadius: "50%",
+            width: 48, height: 48, fontSize: 24,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          ‹
+        </button>
+      )}
+
+      {hasNext && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNext(); }}
+          aria-label="Next"
+          style={{
+            position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)",
+            background: "rgba(255,255,255,0.15)", color: "white",
+            border: "none", borderRadius: "50%",
+            width: 48, height: 48, fontSize: 24,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          ›
+        </button>
+      )}
+
+      <img
+        src={`./api/media/photos/${item.photo}`}
+        alt={item.label}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: "92vw",
+          maxHeight: "88vh",
+          objectFit: "contain",
+          borderRadius: 8,
+          boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
+        }}
+      />
+
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(0,0,0,0.6)", color: "white",
+          padding: "8px 16px", borderRadius: 8,
+          fontSize: 13, textAlign: "center", maxWidth: "80vw",
+        }}
+      >
+        <div style={{ fontWeight: 600 }}>{item.label}</div>
+        {item.detail && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>{item.detail}</div>}
+        <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>
+          {new Date(item.date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+        </div>
+      </div>
+    </div>
   );
 }

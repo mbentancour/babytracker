@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import Modal, { FormField, FormInput, FormButton } from "../Modal";
+import Modal, { FormField, FormInput, FormSelect, FormButton } from "../Modal";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 
@@ -9,6 +9,7 @@ export default function ChildForm({ onDone, onClose }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [sex, setSex] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -19,6 +20,7 @@ export default function ChildForm({ onDone, onClose }) {
         first_name: firstName,
         last_name: lastName,
         birth_date: birthDate,
+        sex: sex || null,
       });
       onDone();
     } catch {
@@ -52,6 +54,17 @@ export default function ChildForm({ onDone, onClose }) {
             value={birthDate}
             onChange={(e) => setBirthDate(e.target.value)}
             required
+          />
+        </FormField>
+        <FormField label={t("onboarding.sex")}>
+          <FormSelect
+            value={sex}
+            onChange={(e) => setSex(e.target.value)}
+            options={[
+              { value: "", label: t("onboarding.sexUnspecified") },
+              { value: "male", label: t("onboarding.sexMale") },
+              { value: "female", label: t("onboarding.sexFemale") },
+            ]}
           />
         </FormField>
         <FormButton color={colors.feeding} disabled={saving}>

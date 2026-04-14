@@ -9,7 +9,7 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
     if (currentPhoto.startsWith("./api/") || currentPhoto.startsWith("/api/") || currentPhoto.startsWith("http") || currentPhoto.startsWith("data:")) {
       return currentPhoto;
     }
-    return `./api/media/photos/${currentPhoto}`;
+    return `./api/media/photos/${currentPhoto}?size=thumb`;
   });
 
   const handleChange = (e) => {

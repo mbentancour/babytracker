@@ -1,4 +1,4 @@
-export default function SectionCard({ title, icon, children, color }) {
+export default function SectionCard({ title, icon, children, color, action }) {
   return (
     <div
       style={{
@@ -38,10 +38,12 @@ export default function SectionCard({ title, icon, children, color }) {
             fontWeight: 600,
             color: "var(--text)",
             letterSpacing: "-0.01em",
+            flex: 1,
           }}
         >
           {title}
         </span>
+        {action && <div>{action}</div>}
       </div>
       <div style={{ padding: "16px 20px" }}>{children}</div>
     </div>

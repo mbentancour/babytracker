@@ -22,7 +22,7 @@ function fixChildPicture(c) {
     } catch {
       // Assume it's a filename, build the API path
       if (c.picture && !c.picture.startsWith("http")) {
-        c.picture = `./api/media/photos/${c.picture}?v=${cb}`;
+        c.picture = `./api/media/photos/${c.picture}?size=thumb&v=${cb}`;
       }
     }
   }
