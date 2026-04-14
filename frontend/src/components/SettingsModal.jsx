@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { id: "features", label: "settings.features", icon: <Icons.Activity /> },
   { id: "defaults", label: "settings.defaults", icon: <Icons.Clock /> },
   { id: "data", label: "settings.data", icon: <Icons.Download /> },
+  { id: "integrations", label: "settings.integrations", icon: <Icons.Link /> },
   { id: "users", label: "settings.users", icon: <Icons.Baby /> },
 ];
 
@@ -385,12 +386,23 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
                 {/* Backups (admin only) */}
                 {isAdmin && <BackupSection />}
+              </div>
+            )}
 
-                {/* API Tokens (admin only) */}
-                {isAdmin && <APITokensSection />}
-
-                {/* Webhooks (admin only) */}
-                {isAdmin && <WebhooksSection />}
+            {/* Integrations */}
+            {section === "integrations" && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.integrations")}</h3>
+                {isAdmin ? (
+                  <>
+                    <APITokensSection />
+                    <WebhooksSection />
+                  </>
+                ) : (
+                  <div className="settings-card" style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
+                    {t("settings.adminOnly")}
+                  </div>
+                )}
               </div>
             )}
 
