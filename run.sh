@@ -66,11 +66,8 @@ else
         sleep 1
     done
 
-    # Create database if it doesn't exist
-    if ! su postgres -c "psql -h /run/postgresql -lqt" | cut -d \| -f 1 | grep -qw babytracker; then
-        bashio::log.info "Creating babytracker database..."
-        su postgres -c "createdb -h /run/postgresql babytracker"
-    fi
+    # Create database if it doesn't exist (ignore error if it already exists)
+    su postgres -c "createdb -h /run/postgresql babytracker" 2>/dev/null || true
 
     export DATABASE_URL="postgres://postgres@/babytracker?host=/run/postgresql&sslmode=disable"
 
