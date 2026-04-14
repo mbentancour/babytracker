@@ -27,22 +27,19 @@ func NewPhotosHandler(db *sqlx.DB, cfg *config.Config) *PhotosHandler {
 }
 
 func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
-	pp := pagination.ParseParams(r, "photos")
-	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "photos",
-		ChildIDField: "child_id",
-		DateFields: map[string]string{
-			"date_min": "date",
-			"date_max": "date",
-		},
-	}, pp)
-
-	resp, err := pagination.Execute[models.Photo](h.db, qr)
+	var photos []models.Photo
+	err := h.db.Select(&photos, `SELECT * FROM photos ORDER BY date DESC`)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to list photos")
 		return
 	}
-	pagination.WriteJSON(w, http.StatusOK, resp)
+	if photos == nil {
+		photos = []models.Photo{}
+	}
+	pagination.WriteJSON(w, http.StatusOK, pagination.Response{
+		Count:   len(photos),
+		Results: photos,
+	})
 }
 
 // Upload handles multipart bulk photo uploads. Accepts multiple files.
@@ -123,7 +120,6 @@ func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		file.Close()
 
 		photo := models.Photo{
-			ChildID:  childID,
 			Filename: filename,
 			Caption:  caption,
 			Date:     photoDate,
@@ -132,6 +128,9 @@ func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			os.Remove(destPath)
 			continue
 		}
+
+		// Auto-tag with the selected child
+		models.TagPhotoWithChild(h.db, filename, childID)
 
 		created = append(created, photo)
 	}

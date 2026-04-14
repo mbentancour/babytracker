@@ -229,18 +229,67 @@ function Dashboard({ demoMode, onLogout }) {
   childIdRef.current = data.child?.id;
   const startPictureFrameRef = useRef(null);
 
+  // Picture frame prefs ref — so startPictureFrame always reads the latest
+  const pfPrefsRef = useRef(prefs.pictureFrame);
+  pfPrefsRef.current = prefs.pictureFrame;
+  const childrenRef = useRef(data.children);
+  childrenRef.current = data.children;
+
   const startPictureFrame = useCallback(async () => {
-    const cid = childIdRef.current;
-    if (!cid) return;
+    const pf = pfPrefsRef.current || {};
+    const allChildren = childrenRef.current || [];
+
+    // Determine which children to fetch gallery for
+    let childIds = pf.childIds?.length > 0 ? pf.childIds : allChildren.map((c) => c.id);
+    if (childIds.length === 0 && childIdRef.current) childIds = [childIdRef.current];
+
     try {
-      const res = await api.getGallery({ child: cid });
-      const photos = res.results || [];
-      if (photos.length > 0) {
-        setGalleryPhotos(photos);
+      // Fetch gallery for each selected child and merge
+      const responses = await Promise.all(
+        childIds.map((cid) => api.getGallery({ child: cid }).catch(() => ({ results: [] })))
+      );
+      let allPhotos = [];
+      const seen = new Set();
+      for (const res of responses) {
+        for (const item of res.results || []) {
+          const key = `${item.entity_type}-${item.photo}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            allPhotos.push(item);
+          }
+        }
+      }
+
+      // Map entity_type to preference key
+      const typeFilter = {
+        shared: "showShared",
+        photo: "showPhoto",
+        profile: "showProfile",
+        milestone: "showMilestone",
+        weight: "showWeight",
+        height: "showHeight",
+        head_circumference: "showHeadCirc",
+        feeding: "showFeeding",
+        sleep: "showSleep",
+        tummy_time: "showTummy",
+        diaper: "showDiaper",
+        temperature: "showTemp",
+        medication: "showMedication",
+        note: "showNote",
+      };
+
+      allPhotos = allPhotos.filter((p) => {
+        const key = typeFilter[p.entity_type];
+        if (key === undefined) return true; // Unknown types: show by default
+        return pf[key] !== false;
+      });
+
+      if (allPhotos.length > 0) {
+        setGalleryPhotos(allPhotos);
         setShowPictureFrame(true);
       }
     } catch { /* ignore */ }
-  }, []); // No deps — uses ref
+  }, []); // No deps — uses refs
   startPictureFrameRef.current = startPictureFrame;
 
   // ?slideshow=true — start picture frame as soon as child data is available

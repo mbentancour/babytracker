@@ -1,7 +1,7 @@
 configuration:
   mode:
     name: Mode
-    description: >-
+    description: >- 
       "standalone" runs BabyTracker with a built-in database (all data stored locally).
       "external" connects to an existing BabyTracker instance running elsewhere on your network.
   external_url:

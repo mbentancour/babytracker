@@ -26,6 +26,21 @@ const DEFAULT_PREFERENCES = {
   // Picture frame screensaver (0 = disabled, value in minutes)
   pictureFrameTimeout: 0,
 
+  // Picture frame content filters (only types that support photos)
+  pictureFrame: {
+    showShared: true,
+    showProfile: true,
+    showPhoto: true,
+    showMilestone: true,
+    showWeight: true,
+    showHeight: true,
+    showHeadCirc: false,
+    showTemp: false,
+    showMedication: false,
+    showNote: false,
+    childIds: [], // empty = all children
+  },
+
   // Form defaults
   defaults: {
     feeding: {
@@ -51,6 +66,7 @@ function loadPreferences() {
         features: { ...DEFAULT_PREFERENCES.features, ...parsed.features },
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,
+        pictureFrame: { ...DEFAULT_PREFERENCES.pictureFrame, ...parsed.pictureFrame },
         defaults: {
           feeding: { ...DEFAULT_PREFERENCES.defaults.feeding, ...parsed.defaults?.feeding },
           diaper: { ...DEFAULT_PREFERENCES.defaults.diaper, ...parsed.defaults?.diaper },

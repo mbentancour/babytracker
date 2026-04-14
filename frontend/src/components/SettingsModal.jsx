@@ -108,6 +108,77 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   <p className="settings-hint">
                     After no interaction, the app shows a slideshow of your baby's photos. Tap anywhere to return.
                   </p>
+
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
+                      Slideshow Content
+                    </div>
+
+                    {children && children.length > 1 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Show photos from:</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {children.map((c) => {
+                            const selected = prefs.pictureFrame.childIds.length === 0 || prefs.pictureFrame.childIds.includes(c.id);
+                            return (
+                              <button
+                                key={c.id}
+                                onClick={() => {
+                                  const current = prefs.pictureFrame.childIds;
+                                  let next;
+                                  if (current.length === 0) {
+                                    // Currently "all" — switch to all except this one
+                                    next = children.map((ch) => ch.id).filter((id) => id !== c.id);
+                                  } else if (current.includes(c.id)) {
+                                    next = current.filter((id) => id !== c.id);
+                                  } else {
+                                    next = [...current, c.id];
+                                  }
+                                  // If all selected, reset to empty (means "all")
+                                  if (next.length === children.length) next = [];
+                                  setPref("pictureFrame", { ...prefs.pictureFrame, childIds: next });
+                                }}
+                                style={{
+                                  fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6,
+                                  border: `1px solid ${selected ? "#6C5CE7" : "var(--border)"}`,
+                                  background: selected ? "#6C5CE718" : "none",
+                                  color: selected ? "#6C5CE7" : "var(--text-dim)",
+                                  cursor: "pointer", fontFamily: "inherit",
+                                }}
+                              >
+                                {c.first_name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                      {[
+                        { key: "showShared", label: "Shared photos" },
+                        { key: "showPhoto", label: "Standalone photos" },
+                        { key: "showProfile", label: "Profile pictures" },
+                        { key: "showMilestone", label: "Milestones" },
+                        { key: "showWeight", label: "Weight" },
+                        { key: "showHeight", label: "Height" },
+                        { key: "showHeadCirc", label: "Head circumference" },
+                        { key: "showTemp", label: "Temperature" },
+                        { key: "showMedication", label: "Medications" },
+                        { key: "showNote", label: "Notes" },
+                      ].map(({ key, label }) => (
+                        <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px", cursor: "pointer", fontSize: 12, color: "var(--text-muted)" }}>
+                          <input
+                            type="checkbox"
+                            checked={prefs.pictureFrame[key] !== false}
+                            onChange={(e) => setPref("pictureFrame", { ...prefs.pictureFrame, [key]: e.target.checked })}
+                            style={{ width: 14, height: 14, accentColor: "#6C5CE7" }}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="settings-card">

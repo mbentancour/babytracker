@@ -107,9 +107,11 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 			'Note' AS label, note AS detail
 		FROM notes WHERE child_id = $1 AND photo != ''
 		UNION ALL
-		SELECT id, 'photo' AS entity_type, filename AS photo, date::text AS date,
-			COALESCE(NULLIF(caption, ''), 'Photo') AS label, NULL AS detail
-		FROM photos WHERE child_id = $1
+		SELECT DISTINCT p.id, 'photo' AS entity_type, p.filename AS photo, p.date::text AS date,
+			COALESCE(NULLIF(p.caption, ''), 'Photo') AS label, NULL AS detail
+		FROM photos p
+		JOIN photo_children pc ON pc.photo_filename = p.filename
+		WHERE pc.child_id = $1
 		ORDER BY date DESC
 	`
 
@@ -122,8 +124,19 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 		items = []GalleryItem{}
 	}
 
+	// Add photos from the photos table that have NO child tags (shared)
+	var sharedDBPhotos []GalleryItem
+	h.db.Select(&sharedDBPhotos, `
+		SELECT p.id, 'shared' AS entity_type, p.filename AS photo, p.date::text AS date,
+			COALESCE(NULLIF(p.caption, ''), 'Photo') AS label, NULL AS detail
+		FROM photos p
+		LEFT JOIN photo_children pc ON pc.photo_filename = p.filename
+		WHERE pc.id IS NULL
+	`)
+	items = append(items, sharedDBPhotos...)
+
 	// Scan PhotosDir for files not tracked in any database table.
-	// These are "shared" photos — visible to all children until tagged.
+	// These are also "shared" photos — visible to all children until tagged.
 	var allTrackedFiles []string
 	for _, table := range []string{"feedings", "sleep", "changes", "tummy_times", "temperature", "weight", "height", "head_circumference", "pumping", "medications", "milestones", "notes", "bmi"} {
 		var files []string

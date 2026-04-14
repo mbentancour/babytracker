@@ -8,7 +8,6 @@ import (
 
 type Photo struct {
 	ID        int       `db:"id" json:"id"`
-	ChildID   int       `db:"child_id" json:"child"`
 	Filename  string    `db:"filename" json:"filename"`
 	Caption   string    `db:"caption" json:"caption"`
 	Date      string    `db:"date" json:"date"`
@@ -17,10 +16,19 @@ type Photo struct {
 
 func CreatePhoto(db *sqlx.DB, p *Photo) error {
 	return db.QueryRowx(
-		`INSERT INTO photos (child_id, filename, caption, date)
-		 VALUES ($1, $2, $3, $4) RETURNING *`,
-		p.ChildID, p.Filename, p.Caption, p.Date,
+		`INSERT INTO photos (filename, caption, date)
+		 VALUES ($1, $2, $3) RETURNING *`,
+		p.Filename, p.Caption, p.Date,
 	).StructScan(p)
+}
+
+// TagPhotoWithChild adds a child tag to a photo.
+func TagPhotoWithChild(db *sqlx.DB, filename string, childID int) error {
+	_, err := db.Exec(
+		`INSERT INTO photo_children (photo_filename, child_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		filename, childID,
+	)
+	return err
 }
 
 func UpdatePhoto(db *sqlx.DB, id int, updates map[string]any) (*Photo, error) {
