@@ -54,22 +54,24 @@ jobs:
             -S "$GITHUB_WORKSPACE/deploy/rpi-image-gen" \
             -c "$GITHUB_WORKSPACE/deploy/rpi-image-gen/config/babytracker.yaml"
 
-      - name: Locate output image
-        id: image
+      - name: Inspect output
         run: |
-          IMG=$(find /tmp/rpi-image-gen/work -type f \( -name '*.img.xz' -o -name '*.img' \) | head -n 1)
-          echo "Found image: $IMG"
-          echo "path=$IMG" >> "$GITHUB_OUTPUT"
+          echo "=== All candidate files in work dir ==="
+          find /tmp/rpi-image-gen/work -type f \( -name '*.img*' -o -name '*.zst' -o -name '*.xz' -o -name '*.ext4' -o -name '*.vfat' \) -printf '%10s\t%p\n' | sort -rn
+          echo
+          echo "=== Image output dir ==="
+          ls -lah /tmp/rpi-image-gen/work/image-babytracker/ 2>/dev/null || echo "(no image dir)"
+          echo
+          echo "=== Deploy output dir(s) ==="
+          ls -lah /tmp/rpi-image-gen/work/deploy-*/ 2>/dev/null || echo "(no deploy dir)"
 
-      - name: Upload artifact
+      - name: Upload entire output dir
         uses: actions/upload-artifact@v4
         with:
           name: babytracker-pi-image
-          path: ${{ steps.image.outputs.path }}
+          path: |
+            /tmp/rpi-image-gen/work/image-babytracker/
+            /tmp/rpi-image-gen/work/deploy-*/
           if-no-files-found: error
 
-      - name: Upload to release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.image.outputs.path }}
+      # TODO: add release upload once we confirm which file is the disk image
