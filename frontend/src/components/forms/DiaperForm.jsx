@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -17,6 +18,7 @@ const COLORS = [
 ];
 
 export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, preset }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [time, setTime] = useState(entry?.time ? toLocalDatetime(new Date(entry.time)) : toLocalDatetime(new Date()));
   const [wet, setWet] = useState(entry ? entry.wet : (preset === "wet" || preset === "both"));
@@ -45,9 +47,9 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
   };
 
   return (
-    <Modal title={isEdit ? "Edit Diaper Change" : "Log Diaper Change"} onClose={onClose}>
+    <Modal title={isEdit ? t("diaper.edit") : t("diaper.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Time">
+        <FormField label={t("general.time")}>
           <FormInput
             type="datetime-local"
             value={time}
@@ -57,8 +59,8 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
         </FormField>
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
           {[
-            { key: "wet", label: "Wet", active: wet, toggle: () => setWet(!wet) },
-            { key: "solid", label: "Solid", active: solid, toggle: () => setSolid(!solid) },
+            { key: "wet", label: t("diaper.wet"), active: wet, toggle: () => setWet(!wet) },
+            { key: "solid", label: t("diaper.solid"), active: solid, toggle: () => setSolid(!solid) },
           ].map((btn) => (
             <button
               key={btn.key}
@@ -82,20 +84,20 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
           ))}
         </div>
         {solid && (
-          <FormField label="Color">
+          <FormField label={t("diaper.color")}>
             <FormSelect options={COLORS} value={color} onChange={(e) => setColor(e.target.value)} />
           </FormField>
         )}
-        <FormField label="Notes">
+        <FormField label={t("general.notes")}>
           <FormInput
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional"
+            placeholder={t("form.optional")}
           />
         </FormField>
         <FormButton color={colors.diaper} disabled={saving || (!wet && !solid)}>
-          {saving ? "Saving..." : isEdit ? "Update Change" : "Save Change"}
+          {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

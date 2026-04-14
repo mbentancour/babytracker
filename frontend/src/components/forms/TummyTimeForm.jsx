@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -9,6 +10,7 @@ function toLocalDatetime(date) {
 }
 
 export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
   const now = new Date();
   const tenMinsAgo = new Date(now.getTime() - 10 * 60 * 1000);
@@ -43,7 +45,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   };
 
   return (
-    <Modal title={isEdit ? "Edit Tummy Time" : "Log Tummy Time"} onClose={onClose}>
+    <Modal title={isEdit ? t("tummy.edit") : t("tummy.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         {!isEdit && timerId ? (
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
@@ -52,7 +54,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
         ) : null}
         {(isEdit || !timerId) && (
           <>
-            <FormField label="Start">
+            <FormField label={t("general.start")}>
               <FormInput
                 type="datetime-local"
                 value={start}
@@ -60,7 +62,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
                 required
               />
             </FormField>
-            <FormField label="End">
+            <FormField label={t("general.end")}>
               <FormInput
                 type="datetime-local"
                 value={end}
@@ -70,7 +72,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
             </FormField>
           </>
         )}
-        <FormField label="Milestone (optional)">
+        <FormField label={`${t("milestone.title")} (${t("form.optional").toLowerCase()})`}>
           <FormInput
             value={milestone}
             onChange={(e) => setMilestone(e.target.value)}
@@ -78,7 +80,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
           />
         </FormField>
         <FormButton color={colors.tummy} disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update Tummy Time" : "Save Tummy Time"}
+          {saving ? t("form.saving") : isEdit ? t("tummy.edit") : t("tummy.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

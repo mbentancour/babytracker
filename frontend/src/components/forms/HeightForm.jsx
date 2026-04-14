@@ -4,6 +4,7 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDate(date) {
   const d = new Date(date);
@@ -13,6 +14,7 @@ function toLocalDate(date) {
 
 export default function HeightForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [height, setHeight] = useState(entry?.height ? String(entry.height) : "");
   const [date, setDate] = useState(entry?.date ? toLocalDate(entry.date) : toLocalDate(new Date()));
@@ -42,17 +44,17 @@ export default function HeightForm({ childId, entry, onDone, onClose, onDelete }
   };
 
   return (
-    <Modal title={isEdit ? "Edit Height" : "Log Height"} onClose={onClose}>
+    <Modal title={isEdit ? t("height.edit") : t("height.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={`Height (${units.length})`}>
           <FormInput type="number" value={height} onChange={(e) => setHeight(e.target.value)} placeholder="50.0" min="0" max="200" step="0.1" autoFocus required />
         </FormField>
-        <FormField label="Date">
+        <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.height} disabled={saving || !height}>
-          {saving ? "Saving..." : isEdit ? "Update Height" : "Save Height"}
+          {saving ? t("form.saving") : isEdit ? t("height.edit") : t("height.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

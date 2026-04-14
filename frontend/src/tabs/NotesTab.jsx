@@ -5,6 +5,7 @@ import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { toNoteTimeline } from "../utils/formatters";
 import { usePreferences } from "../utils/preferences";
+import { useI18n } from "../utils/i18n";
 
 const COLLAPSED_COUNT = 5;
 
@@ -20,6 +21,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
   const [expandedNotes, setExpandedNotes] = useState(false);
   const [expandedMilestones, setExpandedMilestones] = useState(false);
   const [expandedMeds, setExpandedMeds] = useState(false);
+  const { t } = useI18n();
   const { isFeatureEnabled } = usePreferences();
   const noteTimeline = toNoteTimeline(notes || []);
 
@@ -27,7 +29,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
     <>
       {/* Milestones */}
       {isFeatureEnabled("milestone") && <div className="fade-in fade-in-1" style={{ marginBottom: 16 }}>
-        <SectionCard title="Milestones" icon={<Icons.TrendUp />} color="#00b894">
+        <SectionCard title={t("journal.milestones")} icon={<Icons.TrendUp />} color="#00b894">
           {milestones.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(expandedMilestones ? milestones : milestones.slice(0, COLLAPSED_COUNT)).map((m) => (
@@ -89,13 +91,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                   className="expand-toggle"
                   onClick={() => setExpandedMilestones(!expandedMilestones)}
                 >
-                  {expandedMilestones ? "Show less" : `Show ${milestones.length - COLLAPSED_COUNT} more`}
+                  {expandedMilestones ? t("overview.showLess") : t("overview.showMore", { count: milestones.length - COLLAPSED_COUNT })}
                 </button>
               )}
             </div>
           ) : (
             <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-              No milestones yet — tap + to record one
+              {t("journal.noMilestones")}
             </div>
           )}
         </SectionCard>
@@ -103,7 +105,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
 
       {/* Medications */}
       {isFeatureEnabled("medication") && <div className="fade-in fade-in-2" style={{ marginBottom: 16 }}>
-        <SectionCard title="Medications" icon={<Icons.Temp />} color="#e67e22">
+        <SectionCard title={t("journal.medications")} icon={<Icons.Temp />} color="#e67e22">
           {medications.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(expandedMeds ? medications : medications.slice(0, COLLAPSED_COUNT)).map((m) => (
@@ -155,13 +157,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                   className="expand-toggle"
                   onClick={() => setExpandedMeds(!expandedMeds)}
                 >
-                  {expandedMeds ? "Show less" : `Show ${medications.length - COLLAPSED_COUNT} more`}
+                  {expandedMeds ? t("overview.showLess") : t("overview.showMore", { count: medications.length - COLLAPSED_COUNT })}
                 </button>
               )}
             </div>
           ) : (
             <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-              No medications recorded yet
+              {t("journal.noMedications")}
             </div>
           )}
         </SectionCard>
@@ -169,7 +171,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
 
       {/* Notes */}
       {isFeatureEnabled("note") && <div className="fade-in fade-in-3">
-        <SectionCard title="Notes" icon={<Icons.StickyNote />} color={colors.note}>
+        <SectionCard title={t("journal.notes")} icon={<Icons.StickyNote />} color={colors.note}>
           {noteTimeline.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {(expandedNotes ? noteTimeline : noteTimeline.slice(0, COLLAPSED_COUNT)).map((n, i, arr) => (
@@ -204,13 +206,13 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
                   className="expand-toggle"
                   onClick={() => setExpandedNotes(!expandedNotes)}
                 >
-                  {expandedNotes ? "Show less" : `Show ${noteTimeline.length - COLLAPSED_COUNT} more`}
+                  {expandedNotes ? t("overview.showLess") : t("overview.showMore", { count: noteTimeline.length - COLLAPSED_COUNT })}
                 </button>
               )}
             </div>
           ) : (
             <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-              No notes yet — tap + to add one
+              {t("journal.noNotes")}
             </div>
           )}
         </SectionCard>

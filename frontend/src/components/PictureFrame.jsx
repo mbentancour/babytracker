@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { useI18n } from "../utils/i18n";
 
 export default function PictureFrame({ photos, childName, onWake }) {
+  const { t } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fading, setFading] = useState(false);
 
@@ -62,7 +64,7 @@ export default function PictureFrame({ photos, childName, onWake }) {
           </div>
         </div>
       </div>
-      <div className="picture-frame-hint">Tap anywhere to return</div>
+      <div className="picture-frame-hint">{t("pictureFrame.tapToReturn")}</div>
       <div className="picture-frame-counter">
         {currentIndex + 1} / {shuffled.length}
       </div>

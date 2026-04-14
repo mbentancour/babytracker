@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import SectionCard from "../components/SectionCard";
 import { Icons } from "../components/Icons";
+import { useI18n } from "../utils/i18n";
 
 const TYPE_LABELS = {
   shared: "Shared",
@@ -54,6 +55,7 @@ const TYPE_API_PATH = {
 };
 
 export default function GalleryTab({ childId, children = [], canWrite = false }) {
+  const { t } = useI18n();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -157,7 +159,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           }}
         >
           <Icons.Plus />
-          {uploading ? "Uploading..." : "Add Photos"}
+          {uploading ? t("gallery.uploading") : t("gallery.addPhotos")}
           <input
             type="file"
             accept="image/*"
@@ -215,9 +217,9 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           <div style={{ fontSize: 32, marginBottom: 12 }}>
             <Icons.Baby />
           </div>
-          <div style={{ fontSize: 14 }}>No photos yet</div>
+          <div style={{ fontSize: 14 }}>{t("gallery.noPhotos")}</div>
           <div style={{ fontSize: 12, marginTop: 4 }}>
-            Add photos when logging measurements or milestones
+            {t("gallery.noPhotosHint")}
           </div>
         </div>
       ) : (

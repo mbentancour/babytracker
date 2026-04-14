@@ -3,22 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
-
-const TYPES = [
-  { value: "breast milk", label: "Breast Milk" },
-  { value: "formula", label: "Formula" },
-  { value: "fortified breast milk", label: "Fortified Breast Milk" },
-  { value: "solid food", label: "Solid Food" },
-];
-
-const METHODS = [
-  { value: "bottle", label: "Bottle" },
-  { value: "left breast", label: "Left Breast" },
-  { value: "right breast", label: "Right Breast" },
-  { value: "both breasts", label: "Both Breasts" },
-  { value: "parent fed", label: "Parent Fed" },
-  { value: "self fed", label: "Self Fed" },
-];
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -27,7 +12,24 @@ function toLocalDatetime(date) {
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
+
+  const TYPES = [
+    { value: "breast milk", label: t("feeding.breastMilk") },
+    { value: "formula", label: t("feeding.formula") },
+    { value: "fortified breast milk", label: t("feeding.fortified") },
+    { value: "solid food", label: t("feeding.solidFood") },
+  ];
+
+  const METHODS = [
+    { value: "bottle", label: t("feeding.bottle") },
+    { value: "left breast", label: t("feeding.leftBreast") },
+    { value: "right breast", label: t("feeding.rightBreast") },
+    { value: "both breasts", label: t("feeding.bothBreasts") },
+    { value: "parent fed", label: t("feeding.parentFed") },
+    { value: "self fed", label: t("feeding.selfFed") },
+  ];
   const now = new Date();
   const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
   const [type, setType] = useState(entry?.type || defaultType || "breast milk");
@@ -66,20 +68,20 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
   };
 
   return (
-    <Modal title={isEdit ? "Edit Feeding" : "Log Feeding"} onClose={onClose}>
+    <Modal title={isEdit ? t("feeding.edit") : t("feeding.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Type">
+        <FormField label={t("feeding.type")}>
           <FormSelect options={TYPES} value={type} onChange={(e) => setType(e.target.value)} />
         </FormField>
-        <FormField label="Method">
+        <FormField label={t("feeding.method")}>
           <FormSelect options={METHODS} value={method} onChange={(e) => setMethod(e.target.value)} />
         </FormField>
-        <FormField label={`Amount (${units.volume})`}>
-          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" min="0" step="5" />
+        <FormField label={`${t("feeding.amount")} (${units.volume})`}>
+          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="5" />
         </FormField>
         {(isEdit || !timerId) && (
           <>
-            <FormField label="Start">
+            <FormField label={t("general.start")}>
               <FormInput
                 type="datetime-local"
                 value={start}
@@ -87,7 +89,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
                 required
               />
             </FormField>
-            <FormField label="End">
+            <FormField label={t("general.end")}>
               <FormInput
                 type="datetime-local"
                 value={end}
@@ -97,16 +99,16 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
             </FormField>
           </>
         )}
-        <FormField label="Notes">
+        <FormField label={t("general.notes")}>
           <FormInput
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional"
+            placeholder={t("form.optional")}
           />
         </FormField>
         <FormButton color={colors.feeding} disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update Feeding" : "Save Feeding"}
+          {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

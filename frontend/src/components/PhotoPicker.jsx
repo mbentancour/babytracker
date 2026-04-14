@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Icons } from "./Icons";
+import { useI18n } from "../utils/i18n";
 
 export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
+  const { t } = useI18n();
   const [preview, setPreview] = useState(() => {
     if (!currentPhoto) return null;
     if (currentPhoto.startsWith("./api/") || currentPhoto.startsWith("/api/") || currentPhoto.startsWith("http") || currentPhoto.startsWith("data:")) {
@@ -38,7 +40,7 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
           letterSpacing: "0.03em",
         }}
       >
-        Photo
+        {t("photo.label")}
       </label>
 
       {preview ? (
@@ -65,7 +67,7 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
               color: "rgba(255,255,255,0.8)",
               fontSize: 12,
             }}>
-              Tap to change photo
+              {t("photo.change")}
             </div>
             <input
               type="file"
@@ -115,7 +117,7 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
           }}
         >
           <Icons.Plus />
-          Add photo
+          {t("photo.add")}
           <input
             type="file"
             accept="image/*"

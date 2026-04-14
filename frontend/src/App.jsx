@@ -7,6 +7,7 @@ import { colors } from "./utils/colors";
 import { getAge, formatElapsed } from "./utils/formatters";
 import { api, setAccessToken, setOnAuthRequired } from "./api";
 import { usePreferences } from "./utils/preferences";
+import { useI18n } from "./utils/i18n";
 import OverviewTab from "./tabs/OverviewTab";
 import GrowthTab from "./tabs/GrowthTab";
 import NotesTab from "./tabs/NotesTab";
@@ -34,10 +35,10 @@ import PictureFrame from "./components/PictureFrame";
 import "./styles.css";
 
 const TABS = [
-  { id: "overview", label: "Overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "temp", "medication"] },
-  { id: "growth", label: "Growth", icon: <Icons.TrendUp />, features: ["weight", "height", "headcirc", "bmi"] },
-  { id: "notes", label: "Journal", icon: <Icons.StickyNote />, features: ["note", "milestone", "medication"] },
-  { id: "gallery", label: "Photos", icon: <Icons.Baby />, features: ["photo"] },
+  { id: "overview", labelKey: "nav.overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "temp", "medication"] },
+  { id: "growth", labelKey: "nav.growth", icon: <Icons.TrendUp />, features: ["weight", "height", "headcirc", "bmi"] },
+  { id: "notes", labelKey: "nav.journal", icon: <Icons.StickyNote />, features: ["note", "milestone", "medication"] },
+  { id: "gallery", labelKey: "nav.photos", icon: <Icons.Baby />, features: ["photo"] },
 ];
 
 const ACTION_GROUPS = [
@@ -91,6 +92,7 @@ function timerNameToType(name) {
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup, login, authenticated
   const [demoMode, setDemoMode] = useState(false);
 
@@ -135,7 +137,7 @@ export default function App() {
     return (
       <div className="app-loading">
         <div className="loading-spinner" />
-        <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading...</span>
+        <span style={{ color: "var(--text-muted)", fontSize: 14 }}>{t("general.loading")}</span>
       </div>
     );
   }
@@ -153,6 +155,7 @@ export default function App() {
 }
 
 function Dashboard({ demoMode, onLogout }) {
+  const { t: tr } = useI18n();
   const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
   const [activeTab, setActiveTab] = useState("overview");
   const [modal, setModal] = useState(null);
@@ -379,7 +382,7 @@ function Dashboard({ demoMode, onLogout }) {
     return (
       <div className="app-loading">
         <div className="loading-spinner" />
-        <span style={{ color: "var(--text-muted)", fontSize: 14 }}>Loading...</span>
+        <span style={{ color: "var(--text-muted)", fontSize: 14 }}>{tr("general.loading")}</span>
       </div>
     );
   }
@@ -391,8 +394,8 @@ function Dashboard({ demoMode, onLogout }) {
     return (
       <div className="app-loading">
         <span style={{ color: "var(--text-muted)", fontSize: 14, textAlign: "center", padding: 20 }}>
-          No children have been shared with your account yet.<br />
-          Ask an admin to grant you access.
+          {tr("onboarding.noAccess")}<br />
+          {tr("onboarding.askAdmin")}
         </span>
       </div>
     );
@@ -408,7 +411,7 @@ function Dashboard({ demoMode, onLogout }) {
             className="avatar"
             style={{ cursor: "pointer" }}
             onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
-            title="Tap to edit"
+            title={tr("general.tapToEdit")}
           >
             {data.child?.picture ? (
               <img src={data.child.picture} alt={data.child.first_name} className="avatar-img" />
@@ -419,7 +422,7 @@ function Dashboard({ demoMode, onLogout }) {
           <div
             style={{ cursor: "pointer" }}
             onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
-            title="Tap to edit"
+            title={tr("general.tapToEdit")}
           >
             <h1 className="baby-name">
               {data.child?.first_name || "Baby"}
@@ -431,14 +434,14 @@ function Dashboard({ demoMode, onLogout }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {data.error && (
-            <span className="sync-error">Connection error</span>
+            <span className="sync-error">{tr("general.connectionError")}</span>
           )}
           {data.lastSync && !data.error && (
             <span className="sync-time">
               {data.lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
-          <button className="refresh-btn" onClick={data.refetch} title="Refresh">
+          <button className="refresh-btn" onClick={data.refetch} title={tr("general.refresh")}>
             <Icons.Activity />
           </button>
           <button className="refresh-btn" onClick={() => setModal({ type: "settings" })} title="Settings">
@@ -463,7 +466,7 @@ function Dashboard({ demoMode, onLogout }) {
             className="child-chip"
             style={{ opacity: 0.6, fontSize: 16 }}
             onClick={() => setModal({ type: "addChild" })}
-            title="Add baby"
+            title={tr("general.addBaby")}
           >
             +
           </button>
@@ -547,7 +550,7 @@ function Dashboard({ demoMode, onLogout }) {
                   onClick={() => setActiveTab(tab.id)}
                 >
                   {tab.icon}
-                  {tab.label}
+                  {tr(tab.labelKey)}
                 </button>
               ))}
             </nav>
@@ -558,7 +561,7 @@ function Dashboard({ demoMode, onLogout }) {
                 onChange={(e) => setActiveTab(e.target.value)}
               >
                 {visibleTabs.map((tab) => (
-                  <option key={tab.id} value={tab.id}>{tab.label}</option>
+                  <option key={tab.id} value={tab.id}>{tr(tab.labelKey)}</option>
                 ))}
               </select>
             </div>

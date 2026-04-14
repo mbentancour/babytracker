@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -9,6 +10,7 @@ function toLocalDatetime(date) {
 }
 
 export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [time, setTime] = useState(entry?.time ? toLocalDatetime(new Date(entry.time)) : toLocalDatetime(new Date()));
   const [note, setNote] = useState(entry?.note || "");
@@ -33,9 +35,9 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
   };
 
   return (
-    <Modal title={isEdit ? "Edit Note" : "Add Note"} onClose={onClose}>
+    <Modal title={isEdit ? t("note.edit") : t("note.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Time">
+        <FormField label={t("general.time")}>
           <FormInput
             type="datetime-local"
             value={time}
@@ -43,7 +45,7 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
             required
           />
         </FormField>
-        <FormField label="Note">
+        <FormField label={t("general.notes")}>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -64,7 +66,7 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
           />
         </FormField>
         <FormButton color={colors.note} disabled={saving || !note.trim()}>
-          {saving ? "Saving..." : isEdit ? "Update Note" : "Save Note"}
+          {saving ? t("form.saving") : isEdit ? t("note.edit") : t("note.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

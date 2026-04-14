@@ -2,8 +2,10 @@ import { useState } from "react";
 import { api } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
+import { useI18n } from "../utils/i18n";
 
 export default function OnboardingScreen({ onChildAdded }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState(null); // null = choose, "new", "import", "restore"
 
   if (!mode) {
@@ -14,29 +16,29 @@ export default function OnboardingScreen({ onChildAdded }) {
             <div className="login-icon">
               <Icons.Baby />
             </div>
-            <h1 className="login-title">Welcome to BabyTracker!</h1>
-            <p className="login-subtitle">How would you like to get started?</p>
+            <h1 className="login-title">{t("onboarding.welcome")}</h1>
+            <p className="login-subtitle">{t("onboarding.howToStart")}</p>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <OnboardingOption
               icon={<Icons.Plus />}
-              title="Start Fresh"
-              description="Add your baby and start tracking"
+              title={t("onboarding.startFresh")}
+              description={t("onboarding.startFreshDesc")}
               color={colors.feeding}
               onClick={() => setMode("new")}
             />
             <OnboardingOption
               icon={<Icons.Download />}
-              title="Import from Baby Buddy"
-              description="Migrate data from an existing Baby Buddy instance"
+              title={t("onboarding.importBB")}
+              description={t("onboarding.importBBDesc")}
               color="#6C5CE7"
               onClick={() => setMode("import")}
             />
             <OnboardingOption
               icon={<Icons.Clock />}
-              title="Restore from Backup"
-              description="Restore a previous BabyTracker backup file"
+              title={t("onboarding.restore")}
+              description={t("onboarding.restoreDesc")}
               color="#00b894"
               onClick={() => setMode("restore")}
             />
@@ -82,6 +84,7 @@ function OnboardingOption({ icon, title, description, color, onClick }) {
 }
 
 function NewBabyForm({ onDone, onBack }) {
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -106,27 +109,27 @@ function NewBabyForm({ onDone, onBack }) {
       <div className="login-card">
         <div className="login-header">
           <div className="login-icon"><Icons.Baby /></div>
-          <h1 className="login-title">Add Your Baby</h1>
+          <h1 className="login-title">{t("onboarding.addBaby")}</h1>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="login-error">{error}</div>}
           <div className="login-field">
-            <label className="login-label">First Name</label>
+            <label className="login-label">{t("onboarding.firstName")}</label>
             <input type="text" className="login-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoFocus placeholder="Emma" />
           </div>
           <div className="login-field">
-            <label className="login-label">Last Name (optional)</label>
+            <label className="login-label">{t("onboarding.lastName")} ({t("form.optional")})</label>
             <input type="text" className="login-input" value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </div>
           <div className="login-field">
-            <label className="login-label">Birth Date</label>
+            <label className="login-label">{t("onboarding.birthDate")}</label>
             <input type="date" className="login-input" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required />
           </div>
           <button type="submit" className="login-button" style={{ background: colors.feeding }} disabled={saving}>
-            {saving ? "Adding..." : "Add Baby"}
+            {saving ? t("form.saving") : t("onboarding.addBabyBtn")}
           </button>
           <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
-            Back
+            {t("form.back")}
           </button>
         </form>
       </div>
@@ -135,6 +138,7 @@ function NewBabyForm({ onDone, onBack }) {
 }
 
 function BabyBuddyImport({ onDone, onBack }) {
+  const { t } = useI18n();
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   const [importing, setImporting] = useState(false);
@@ -160,7 +164,7 @@ function BabyBuddyImport({ onDone, onBack }) {
         <div className="login-card">
           <div className="login-header">
             <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Activity /></div>
-            <h1 className="login-title">Import Complete!</h1>
+            <h1 className="login-title">{t("onboarding.importComplete")}</h1>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
             {Object.entries(result).map(([key, count]) => (
@@ -171,7 +175,7 @@ function BabyBuddyImport({ onDone, onBack }) {
             ))}
           </div>
           <button onClick={onDone} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
-            Continue to Dashboard
+            {t("onboarding.continueToDashboard")}
           </button>
         </div>
       </div>
@@ -183,24 +187,24 @@ function BabyBuddyImport({ onDone, onBack }) {
       <div className="login-card">
         <div className="login-header">
           <div className="login-icon" style={{ background: "#6C5CE718", color: "#6C5CE7" }}><Icons.Download /></div>
-          <h1 className="login-title">Import from Baby Buddy</h1>
+          <h1 className="login-title">{t("onboarding.importBB")}</h1>
           <p className="login-subtitle">Enter your Baby Buddy server URL and API token</p>
         </div>
         <form onSubmit={handleImport} className="login-form">
           {error && <div className="login-error">{error}</div>}
           <div className="login-field">
-            <label className="login-label">Baby Buddy URL</label>
+            <label className="login-label">{t("onboarding.bbUrl")}</label>
             <input type="url" className="login-input" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="http://192.168.1.100:8000" autoFocus />
           </div>
           <div className="login-field">
-            <label className="login-label">API Token</label>
+            <label className="login-label">{t("onboarding.bbToken")}</label>
             <input type="text" className="login-input" value={token} onChange={(e) => setToken(e.target.value)} required placeholder="From Baby Buddy Settings > API Key" style={{ fontFamily: "var(--mono)", fontSize: 12 }} />
           </div>
           <button type="submit" className="login-button" style={{ background: "#6C5CE7" }} disabled={importing}>
-            {importing ? "Importing... this may take a moment" : "Start Import"}
+            {importing ? t("onboarding.importing") : t("onboarding.startImport")}
           </button>
           <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
-            Back
+            {t("form.back")}
           </button>
         </form>
       </div>
@@ -209,6 +213,7 @@ function BabyBuddyImport({ onDone, onBack }) {
 }
 
 function RestoreBackup({ onDone, onBack }) {
+  const { t } = useI18n();
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState("");
 
@@ -232,7 +237,7 @@ function RestoreBackup({ onDone, onBack }) {
       <div className="login-card">
         <div className="login-header">
           <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Clock /></div>
-          <h1 className="login-title">Restore from Backup</h1>
+          <h1 className="login-title">{t("onboarding.restore")}</h1>
           <p className="login-subtitle">Select a BabyTracker backup file (.tar.gz)</p>
         </div>
         <div className="login-form">
@@ -248,11 +253,11 @@ function RestoreBackup({ onDone, onBack }) {
             }}
           >
             <Icons.Download />
-            {restoring ? "Restoring..." : "Choose backup file"}
+            {restoring ? t("onboarding.restoring") : t("onboarding.chooseBackup")}
             <input type="file" accept=".gz,.tar.gz" style={{ display: "none" }} onChange={handleRestore} disabled={restoring} />
           </label>
           <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 12, padding: 8, width: "100%", textAlign: "center" }}>
-            Back
+            {t("form.back")}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
+import { useI18n } from "../utils/i18n";
 
 const FEATURES = [
   "feeding", "sleep", "diaper", "tummy", "temp",
@@ -9,6 +10,7 @@ const FEATURES = [
 ];
 
 export default function UserManagement({ children }) {
+  const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,19 +28,19 @@ export default function UserManagement({ children }) {
 
   useEffect(() => { refresh(); }, []);
 
-  if (loading) return <div style={{ color: "var(--text-dim)", padding: 20, textAlign: "center" }}>Loading...</div>;
+  if (loading) return <div style={{ color: "var(--text-dim)", padding: 20, textAlign: "center" }}>{t("general.loading")}</div>;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Users */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Users</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{t("users.title")}</div>
           <button
             onClick={() => setShowAddUser(!showAddUser)}
             style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
           >
-            {showAddUser ? "Cancel" : "+ Add User"}
+            {showAddUser ? t("users.cancel") : t("users.addUser")}
           </button>
         </div>
 
@@ -52,12 +54,12 @@ export default function UserManagement({ children }) {
       {/* Roles */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Roles</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{t("users.roles")}</div>
           <button
             onClick={() => setShowAddRole(!showAddRole)}
             style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
           >
-            {showAddRole ? "Cancel" : "+ Custom Role"}
+            {showAddRole ? t("users.cancel") : t("users.customRole")}
           </button>
         </div>
 
@@ -72,6 +74,7 @@ export default function UserManagement({ children }) {
 }
 
 function AddUserForm({ onDone }) {
+  const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
@@ -86,7 +89,7 @@ function AddUserForm({ onDone }) {
       await api.createUser({ username, password, is_admin: isAdmin });
       onDone();
     } catch (err) {
-      setError(err.error || err.message || "Failed");
+      setError(err.error || err.message || t("users.failed"));
       setSaving(false);
     }
   };
@@ -94,24 +97,25 @@ function AddUserForm({ onDone }) {
   return (
     <form onSubmit={handleSubmit} style={{ background: "var(--bg)", borderRadius: 10, padding: 14, border: "1px solid var(--border)", marginBottom: 12 }}>
       {error && <div style={{ color: "#e74c3c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
-      <FormField label="Username">
+      <FormField label={t("users.username")}>
         <FormInput type="text" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} />
       </FormField>
-      <FormField label="Password">
+      <FormField label={t("users.password")}>
         <FormInput type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
       </FormField>
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)", marginBottom: 12, cursor: "pointer" }}>
         <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ accentColor: "#6C5CE7" }} />
-        Admin (full access to everything)
+        {t("users.adminLabel")}
       </label>
       <FormButton color="#6C5CE7" disabled={saving}>
-        {saving ? "Creating..." : "Create User"}
+        {saving ? t("users.creating") : t("users.createUser")}
       </FormButton>
     </form>
   );
 }
 
 function UserCard({ user, roles, children, onRefresh }) {
+  const { t } = useI18n();
   const [showGrant, setShowGrant] = useState(false);
   const [grantChild, setGrantChild] = useState("");
   const [grantRole, setGrantRole] = useState("");
@@ -134,7 +138,7 @@ function UserCard({ user, roles, children, onRefresh }) {
           <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{user.username}</span>
           {user.is_admin && (
             <span style={{ fontSize: 10, fontWeight: 600, color: "#6C5CE7", background: "#6C5CE718", padding: "2px 6px", borderRadius: 4, marginLeft: 8 }}>
-              ADMIN
+              {t("users.admin")}
             </span>
           )}
         </div>
@@ -142,7 +146,7 @@ function UserCard({ user, roles, children, onRefresh }) {
           <button
             className="delete-entry-btn"
             onClick={async () => {
-              if (confirm(`Delete user "${user.username}"?`)) {
+              if (confirm(`${t("users.deleteConfirm")} "${user.username}"?`)) {
                 await api.deleteUser(user.id);
                 onRefresh();
               }
@@ -166,13 +170,13 @@ function UserCard({ user, roles, children, onRefresh }) {
                     style={{ fontSize: 11 }}
                     onClick={async () => { await api.revokeAccess(user.id, a.child_id); onRefresh(); }}
                   >
-                    revoke
+                    {t("users.revoke")}
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>No child access assigned</div>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>{t("users.noAccess")}</div>
           )}
 
           {/* Grant access */}
@@ -180,27 +184,27 @@ function UserCard({ user, roles, children, onRefresh }) {
             <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 <FormSelect
-                  options={[{ value: "", label: "Child..." }, ...children.map((c) => ({ value: String(c.id), label: c.first_name }))]}
+                  options={[{ value: "", label: t("users.childPlaceholder") }, ...children.map((c) => ({ value: String(c.id), label: c.first_name }))]}
                   value={grantChild}
                   onChange={(e) => setGrantChild(e.target.value)}
                 />
               </div>
               <div style={{ flex: 1 }}>
                 <FormSelect
-                  options={[{ value: "", label: "Role..." }, ...roles.map((r) => ({ value: String(r.id), label: r.name }))]}
+                  options={[{ value: "", label: t("users.rolePlaceholder") }, ...roles.map((r) => ({ value: String(r.id), label: r.name }))]}
                   value={grantRole}
                   onChange={(e) => setGrantRole(e.target.value)}
                 />
               </div>
               <button onClick={handleGrant} disabled={!grantChild || !grantRole}
                 style={{ padding: "8px 12px", borderRadius: 8, border: "none", background: "#6C5CE7", color: "white", fontSize: 12, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                Grant
+                {t("users.grant")}
               </button>
             </div>
           ) : (
             <button onClick={() => setShowGrant(true)}
               style={{ fontSize: 11, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-              + Grant child access
+              {t("users.grantAccess")}
             </button>
           )}
 
@@ -211,30 +215,30 @@ function UserCard({ user, roles, children, onRefresh }) {
                 type="password"
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
-                placeholder="New password (min 8 chars)"
+                placeholder={t("users.newPasswordPlaceholder")}
                 style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontSize: 12, fontFamily: "inherit" }}
               />
               <button
                 onClick={async () => {
-                  if (newPw.length < 8) { alert("Password must be at least 8 characters"); return; }
+                  if (newPw.length < 8) { alert(t("users.passwordMinLength")); return; }
                   await api.resetUserPassword(user.id, newPw);
                   setShowResetPw(false);
                   setNewPw("");
-                  alert("Password reset");
+                  alert(t("users.passwordResetDone"));
                 }}
                 style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#6C5CE7", color: "white", fontSize: 11, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
               >
-                Reset
+                {t("users.reset")}
               </button>
               <button onClick={() => { setShowResetPw(false); setNewPw(""); }}
                 style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                Cancel
+                {t("users.cancel")}
               </button>
             </div>
           ) : (
             <button onClick={() => setShowResetPw(true)}
               style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>
-              Reset password
+              {t("users.resetPassword")}
             </button>
           )}
         </>
@@ -244,6 +248,7 @@ function UserCard({ user, roles, children, onRefresh }) {
 }
 
 function AddRoleForm({ onDone }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [perms, setPerms] = useState({});
@@ -260,37 +265,38 @@ function AddRoleForm({ onDone }) {
 
   return (
     <form onSubmit={handleSubmit} style={{ background: "var(--bg)", borderRadius: 10, padding: 14, border: "1px solid var(--border)", marginBottom: 12 }}>
-      <FormField label="Role Name">
-        <FormInput type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Babysitter" />
+      <FormField label={t("users.roleName")}>
+        <FormInput type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder={t("users.roleNamePlaceholder")} />
       </FormField>
-      <FormField label="Description">
-        <FormInput type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Optional" />
+      <FormField label={t("users.description")}>
+        <FormInput type="text" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={t("users.optional")} />
       </FormField>
-      <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase" }}>Permissions</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase" }}>{t("users.permissions")}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
         {FEATURES.map((f) => (
           <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-            <span style={{ color: "var(--text-muted)" }}>{f}</span>
+            <span style={{ color: "var(--text-muted)" }}>{t(`feature.${f}`) || f}</span>
             <select
               value={perms[f] || "none"}
               onChange={(e) => setPerms((p) => ({ ...p, [f]: e.target.value }))}
               style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontFamily: "inherit" }}
             >
-              <option value="none">None</option>
-              <option value="read">Read</option>
-              <option value="write">Write</option>
+              <option value="none">{t("users.permNone")}</option>
+              <option value="read">{t("users.permRead")}</option>
+              <option value="write">{t("users.permWrite")}</option>
             </select>
           </div>
         ))}
       </div>
       <FormButton color="#6C5CE7" disabled={saving}>
-        {saving ? "Creating..." : "Create Role"}
+        {saving ? t("users.creatingRole") : t("users.createRole")}
       </FormButton>
     </form>
   );
 }
 
 function RoleCard({ role, onRefresh }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [perms, setPerms] = useState({});
 
@@ -314,17 +320,17 @@ function RoleCard({ role, onRefresh }) {
         <div>
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{role.name}</span>
           {role.is_system && (
-            <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 6 }}>system</span>
+            <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 6 }}>{t("users.system")}</span>
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setEditing(!editing)}
             style={{ fontSize: 11, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-            {editing ? "Cancel" : "Edit"}
+            {editing ? t("users.cancel") : t("users.edit")}
           </button>
           {!role.is_system && (
             <button className="delete-entry-btn" style={{ fontSize: 11 }}
-              onClick={async () => { if (confirm(`Delete role "${role.name}"?`)) { await api.deleteRole(role.id); onRefresh(); } }}>
+              onClick={async () => { if (confirm(`${t("users.deleteRoleConfirm")} "${role.name}"?`)) { await api.deleteRole(role.id); onRefresh(); } }}>
               x
             </button>
           )}
@@ -337,22 +343,22 @@ function RoleCard({ role, onRefresh }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
             {FEATURES.map((f) => (
               <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-                <span style={{ color: "var(--text-muted)" }}>{f}</span>
+                <span style={{ color: "var(--text-muted)" }}>{t(`feature.${f}`) || f}</span>
                 <select
                   value={perms[f] || "none"}
                   onChange={(e) => setPerms((p) => ({ ...p, [f]: e.target.value }))}
                   style={{ fontSize: 11, padding: "3px 6px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontFamily: "inherit" }}
                 >
-                  <option value="none">None</option>
-                  <option value="read">Read</option>
-                  <option value="write">Write</option>
+                  <option value="none">{t("users.permNone")}</option>
+                  <option value="read">{t("users.permRead")}</option>
+                  <option value="write">{t("users.permWrite")}</option>
                 </select>
               </div>
             ))}
           </div>
           <button onClick={handleSave}
             style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#6C5CE7", color: "white", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-            Save Permissions
+            {t("users.savePermissions")}
           </button>
         </div>
       ) : (

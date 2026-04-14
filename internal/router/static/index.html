@@ -15,12 +15,17 @@
     />
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #0F1117; }
+      body { background: var(--bg, #0F1117); transition: background-color 0.2s; }
     </style>
-    <script type="module" crossorigin src="./assets/index-DwBoC1sM.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CDXgotFj.css">
+    <script type="module" crossorigin src="./assets/index-DOcyO2PH.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Boa3NVjd.css">
   </head>
   <body>
+    <script>
+      // Apply theme before React loads to prevent flash
+      const t = localStorage.getItem("babytracker_theme") || "system";
+      document.documentElement.setAttribute("data-theme", t);
+    </script>
     <div id="root"></div>
   </body>
 </html>

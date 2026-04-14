@@ -1,4 +1,10 @@
 :root {
+  --mono: "JetBrains Mono", monospace;
+  --font: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Dark theme (default) */
+:root, [data-theme="dark"] {
   --bg: #0F1117;
   --card-bg: #181A24;
   --border: #252836;
@@ -6,8 +12,33 @@
   --text-muted: #8F96B0;
   --text-dim: #5A6178;
   --tooltip-bg: #1C1F2Eee;
-  --mono: "JetBrains Mono", monospace;
-  --font: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  color-scheme: dark;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg: #F5F6FA;
+  --card-bg: #FFFFFF;
+  --border: #E2E4EC;
+  --text: #1A1D2E;
+  --text-muted: #5A6178;
+  --text-dim: #8F96B0;
+  --tooltip-bg: #FFFFFFee;
+  color-scheme: light;
+}
+
+/* System preference — auto-detect if no explicit theme set */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg: #F5F6FA;
+    --card-bg: #FFFFFF;
+    --border: #E2E4EC;
+    --text: #1A1D2E;
+    --text-muted: #5A6178;
+    --text-dim: #8F96B0;
+    --tooltip-bg: #FFFFFFee;
+    color-scheme: light;
+  }
 }
 
 body {

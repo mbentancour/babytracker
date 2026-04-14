@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDate(date) {
   const d = new Date(date);
@@ -11,6 +12,7 @@ function toLocalDate(date) {
 }
 
 export default function EditChildForm({ child, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState(child.first_name || "");
   const [lastName, setLastName] = useState(child.last_name || "");
   const [birthDate, setBirthDate] = useState(child.birth_date ? toLocalDate(child.birth_date) : "");
@@ -61,15 +63,15 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
   };
 
   return (
-    <Modal title="Edit Baby" onClose={onClose}>
+    <Modal title={t("onboarding.addBaby")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="First Name">
+        <FormField label={t("onboarding.firstName")}>
           <FormInput type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoFocus />
         </FormField>
-        <FormField label="Last Name">
-          <FormInput type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Optional" />
+        <FormField label={t("onboarding.lastName")}>
+          <FormInput type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={t("form.optional")} />
         </FormField>
-        <FormField label="Birth Date">
+        <FormField label={t("onboarding.birthDate")}>
           <FormInput type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required />
         </FormField>
 
@@ -132,7 +134,7 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
 
         {!showGalleryPicker && (
           <FormButton color={colors.feeding} disabled={saving}>
-            {saving ? "Saving..." : "Update"}
+            {saving ? t("form.saving") : t("form.update")}
           </FormButton>
         )}
       </form>

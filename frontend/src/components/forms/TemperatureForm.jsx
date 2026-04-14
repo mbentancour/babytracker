@@ -4,6 +4,7 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -12,6 +13,7 @@ function toLocalDatetime(date) {
 
 export default function TemperatureForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [temp, setTemp] = useState(entry?.temperature ? String(entry.temperature) : "");
   const [time, setTime] = useState(
@@ -45,20 +47,20 @@ export default function TemperatureForm({ childId, entry, onDone, onClose, onDel
   };
 
   return (
-    <Modal title={isEdit ? "Edit Temperature" : "Log Temperature"} onClose={onClose}>
+    <Modal title={isEdit ? t("temp.edit") : t("temp.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={`Temperature (${units.temp})`}>
           <FormInput type="number" value={temp} onChange={(e) => setTemp(e.target.value)} placeholder="36.6" min="30" max="45" step="0.1" autoFocus />
         </FormField>
-        <FormField label="Time">
+        <FormField label={t("general.time")}>
           <FormInput type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} required />
         </FormField>
-        <FormField label="Notes">
-          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+        <FormField label={t("general.notes")}>
+          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("form.optional")} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.temp} disabled={saving || !temp}>
-          {saving ? "Saving..." : isEdit ? "Update" : "Save Temperature"}
+          {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

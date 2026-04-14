@@ -19,9 +19,11 @@ import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
 import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailySleepTotals, getEntriesForDate } from "../utils/formatters";
 import { usePreferences } from "../utils/preferences";
+import { useI18n } from "../utils/i18n";
 
 export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, childBirthDate, onEditEntry, onDeleteEntry }) {
   const units = useUnits();
+  const { t } = useI18n();
   const { prefs } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
@@ -142,7 +144,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 <Icons.Weight />
               </div>
               <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                Weight
+                {t("growth.weight")}
               </span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
@@ -181,7 +183,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 <Icons.Ruler />
               </div>
               <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                Height
+                {t("growth.height")}
               </span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
@@ -201,7 +203,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.growth}18`, color: colors.growth, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.Baby />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>Head Circ.</span>
+              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.headCirc")}</span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
               {latestHeadCirc ? `${latestHeadCirc.head_circumference} ${units.length}` : "—"}
@@ -220,7 +222,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.feeding}18`, color: colors.feeding, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.TrendUp />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>BMI</span>
+              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.bmi")}</span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
               {bmi ? bmi.value : "—"}
@@ -228,9 +230,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
               {bmi
                 ? bmi.source === "manual"
-                  ? `Doctor value · ${new Date(bmi.date).toLocaleDateString()}`
-                  : `Calculated from ${latestWeight.weight} ${units.weight} / ${latestHeight.height} ${units.length}`
-                : "No data"}
+                  ? `${t("growth.doctorValue")} · ${new Date(bmi.date).toLocaleDateString()}`
+                  : t("growth.calculatedFrom", { weight: `${latestWeight.weight} ${units.weight}`, height: `${latestHeight.height} ${units.length}` })
+                : t("general.noData")}
             </div>
           </div>
         </div>
@@ -246,7 +248,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       >
         {/* Daily Feeding Totals */}
         <div className="fade-in fade-in-5">
-          <SectionCard title="Daily Feeding (30d)" icon={<Icons.Bottle />} color={colors.feeding}>
+          <SectionCard title={t("growth.dailyFeeding30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingSeries.some((d) => d.amount > 0) ? (
               <>
                 <div style={{ height: 200 }}>
@@ -282,7 +284,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                No feeding data recorded yet
+                {t("growth.noData", { type: "feeding" })}
               </div>
             )}
           </SectionCard>
@@ -290,7 +292,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Daily Sleep Totals */}
         <div className="fade-in fade-in-6">
-          <SectionCard title="Daily Sleep (30d)" icon={<Icons.Moon />} color={colors.sleep}>
+          <SectionCard title={t("growth.dailySleep30d")} icon={<Icons.Moon />} color={colors.sleep}>
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
                 <div style={{ height: 200 }}>
@@ -326,7 +328,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                No sleep data recorded yet
+                {t("growth.noData", { type: "sleep" })}
               </div>
             )}
           </SectionCard>
@@ -334,7 +336,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Weight Chart */}
         <div className="fade-in fade-in-7">
-          <SectionCard title="Weight Trend" icon={<Icons.Weight />} color={colors.growth}>
+          <SectionCard title={t("growth.weightTrend")} icon={<Icons.Weight />} color={colors.growth}>
             {weightSeries.length >= 2 ? (
               <>
                 <div style={{ height: 200 }}>
@@ -372,7 +374,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                {weightSeries.length === 1 ? "Need at least 2 measurements to show trend" : "No weight data recorded yet"}
+                {weightSeries.length === 1 ? t("growth.needTwoMeasurements") : t("growth.noData", { type: "weight" })}
               </div>
             )}
           </SectionCard>
@@ -380,7 +382,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* Height Chart */}
         <div className="fade-in fade-in-8">
-          <SectionCard title="Height Trend" icon={<Icons.Ruler />} color={colors.height}>
+          <SectionCard title={t("growth.heightTrend")} icon={<Icons.Ruler />} color={colors.height}>
             {heightSeries.length >= 2 ? (
               <>
                 <div style={{ height: 200 }}>
@@ -418,14 +420,14 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                {heightSeries.length === 1 ? "Need at least 2 measurements to show trend" : "No height data recorded yet"}
+                {heightSeries.length === 1 ? t("growth.needTwoMeasurements") : t("growth.noData", { type: "height" })}
               </div>
             )}
           </SectionCard>
         </div>
         {/* Head Circumference Chart */}
         <div className="fade-in fade-in-9">
-          <SectionCard title="Head Circumference" icon={<Icons.Baby />} color={colors.growth}>
+          <SectionCard title={t("growth.headCircTrend")} icon={<Icons.Baby />} color={colors.growth}>
             {headCircSeries.length >= 2 ? (
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -440,7 +442,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                {headCircSeries.length === 1 ? "Need at least 2 measurements to show trend" : "No head circumference data recorded yet"}
+                {headCircSeries.length === 1 ? t("growth.needTwoMeasurements") : t("growth.noData", { type: "head circumference" })}
               </div>
             )}
           </SectionCard>
@@ -448,7 +450,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         {/* BMI Chart */}
         <div className="fade-in fade-in-10">
-          <SectionCard title="BMI Trend" icon={<Icons.TrendUp />} color={colors.feeding}>
+          <SectionCard title={t("growth.bmiTrend")} icon={<Icons.TrendUp />} color={colors.feeding}>
             {bmiSeries.length >= 2 ? (
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -463,7 +465,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                {bmiSeries.length === 1 ? "Need at least 2 data points to show trend" : "No BMI data yet"}
+                {bmiSeries.length === 1 ? t("growth.needTwoMeasurements") : t("growth.noData", { type: "BMI" })}
               </div>
             )}
           </SectionCard>

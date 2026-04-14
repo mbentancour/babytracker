@@ -3,6 +3,7 @@ import { api } from "../api";
 import { FormField, FormInput, FormSelect } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
+import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
 import {
   usePreferences,
   FEATURE_LIST,
@@ -11,19 +12,20 @@ import {
 } from "../utils/preferences";
 
 const UNIT_OPTIONS = [
-  { value: "metric", label: "Metric (kg, cm, mL, \u00b0C)" },
-  { value: "imperial", label: "Imperial (lb, in, oz, \u00b0F)" },
+  { value: "metric", label: "settings.metric" },
+  { value: "imperial", label: "settings.imperial" },
 ];
 
 const NAV_ITEMS = [
-  { id: "general", label: "General", icon: <Icons.Settings /> },
-  { id: "features", label: "Features", icon: <Icons.Activity /> },
-  { id: "defaults", label: "Defaults", icon: <Icons.Clock /> },
-  { id: "data", label: "Data", icon: <Icons.Download /> },
-  { id: "users", label: "Users & Roles", icon: <Icons.Baby /> },
+  { id: "general", label: "settings.general", icon: <Icons.Settings /> },
+  { id: "features", label: "settings.features", icon: <Icons.Activity /> },
+  { id: "defaults", label: "settings.defaults", icon: <Icons.Clock /> },
+  { id: "data", label: "settings.data", icon: <Icons.Download /> },
+  { id: "users", label: "settings.users", icon: <Icons.Baby /> },
 ];
 
 export default function SettingsModal({ childId, unitSystem, children, isAdmin, onClose, onLogout, onRefetch }) {
+  const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("general");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
@@ -47,7 +49,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
       <div className="settings-page">
         {/* Header */}
         <div className="settings-header">
-          <h2 className="settings-title">Settings</h2>
+          <h2 className="settings-title">{t("settings.title")}</h2>
           <button className="settings-close" onClick={onClose}>
             <Icons.X />
           </button>
@@ -63,7 +65,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 onClick={() => setSection(item.id)}
               >
                 <span className="settings-nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
               </button>
             ))}
           </nav>
@@ -73,12 +75,12 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
             {/* General */}
             {section === "general" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">General</h3>
+                <h3 className="settings-section-title">{t("settings.general")}</h3>
 
                 <div className="settings-card">
-                  <FormField label="Unit System">
+                  <FormField label={t("settings.unitSystem")}>
                     <FormSelect
-                      options={UNIT_OPTIONS}
+                      options={UNIT_OPTIONS.map(o => ({ ...o, label: t(o.label) }))}
                       value={units}
                       onChange={(e) => {
                         setUnits(e.target.value);
@@ -87,36 +89,54 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       }}
                     />
                   </FormField>
+                  <FormField label={t("settings.theme")}>
+                    <FormSelect
+                      options={[
+                        { value: "system", label: t("settings.themeSystem") },
+                        { value: "dark", label: t("settings.themeDark") },
+                        { value: "light", label: t("settings.themeLight") },
+                      ]}
+                      value={prefs.theme || "system"}
+                      onChange={(e) => setPref("theme", e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label={t("settings.language")}>
+                    <FormSelect
+                      options={AVAILABLE_LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+                      value={locale}
+                      onChange={(e) => setLocale(e.target.value)}
+                    />
+                  </FormField>
                 </div>
 
                 <div className="settings-card">
-                  <FormField label="Picture Frame (screensaver)">
+                  <FormField label={t("settings.pictureFrame")}>
                     <FormSelect
                       options={[
-                        { value: "0", label: "Disabled" },
-                        { value: "1", label: "After 1 minute" },
-                        { value: "2", label: "After 2 minutes" },
-                        { value: "5", label: "After 5 minutes" },
-                        { value: "10", label: "After 10 minutes" },
-                        { value: "15", label: "After 15 minutes" },
-                        { value: "30", label: "After 30 minutes" },
+                        { value: "0", label: t("settings.disabled") },
+                        { value: "1", label: t("settings.after1min") },
+                        { value: "2", label: t("settings.after2min") },
+                        { value: "5", label: t("settings.after5min") },
+                        { value: "10", label: t("settings.after10min") },
+                        { value: "15", label: t("settings.after15min") },
+                        { value: "30", label: t("settings.after30min") },
                       ]}
                       value={String(prefs.pictureFrameTimeout || 0)}
                       onChange={(e) => setPref("pictureFrameTimeout", parseInt(e.target.value))}
                     />
                   </FormField>
                   <p className="settings-hint">
-                    After no interaction, the app shows a slideshow of your baby's photos. Tap anywhere to return.
+                    {t("settings.pictureFrameHint")}
                   </p>
 
                   <div style={{ marginTop: 16 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
-                      Slideshow Content
+                      {t("settings.slideshowContent")}
                     </div>
 
                     {children && children.length > 1 && (
                       <div style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Show photos from:</div>
+                        <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>{t("settings.showPhotosFrom")}</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           {children.map((c) => {
                             const selected = prefs.pictureFrame.childIds.length === 0 || prefs.pictureFrame.childIds.includes(c.id);
@@ -156,17 +176,17 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                       {[
-                        { key: "showShared", label: "Shared photos" },
-                        { key: "showPhoto", label: "Standalone photos" },
-                        { key: "showProfile", label: "Profile pictures" },
-                        { key: "showMilestone", label: "Milestones" },
-                        { key: "showWeight", label: "Weight" },
-                        { key: "showHeight", label: "Height" },
-                        { key: "showHeadCirc", label: "Head circumference" },
-                        { key: "showTemp", label: "Temperature" },
-                        { key: "showMedication", label: "Medications" },
-                        { key: "showNote", label: "Notes" },
-                      ].map(({ key, label }) => (
+                        { key: "showShared", labelKey: "settings.sharedPhotos" },
+                        { key: "showPhoto", labelKey: "settings.standalonePhotos" },
+                        { key: "showProfile", labelKey: "settings.profilePictures" },
+                        { key: "showMilestone", labelKey: "journal.milestones" },
+                        { key: "showWeight", labelKey: "growth.weight" },
+                        { key: "showHeight", labelKey: "growth.height" },
+                        { key: "showHeadCirc", labelKey: "growth.headCirc" },
+                        { key: "showTemp", labelKey: "overview.temperature" },
+                        { key: "showMedication", labelKey: "journal.medications" },
+                        { key: "showNote", labelKey: "journal.notes" },
+                      ].map(({ key, labelKey }) => (
                         <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px", cursor: "pointer", fontSize: 12, color: "var(--text-muted)" }}>
                           <input
                             type="checkbox"
@@ -174,7 +194,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                             onChange={(e) => setPref("pictureFrame", { ...prefs.pictureFrame, [key]: e.target.checked })}
                             style={{ width: 14, height: 14, accentColor: "#6C5CE7" }}
                           />
-                          {label}
+                          {t(labelKey)}
                         </label>
                       ))}
                     </div>
@@ -182,7 +202,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 </div>
 
                 <div className="settings-card">
-                  <FormField label="Device Name">
+                  <FormField label={t("settings.deviceName")}>
                     <FormInput
                       type="text"
                       value={deviceName}
@@ -196,8 +216,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     />
                   </FormField>
                   <p className="settings-hint">
-                    Optional. Identifies this device for remote control via Home Assistant.
-                    Used to target specific devices when starting/stopping the picture frame.
+                    {t("settings.deviceNameHint")}
                   </p>
                 </div>
 
@@ -206,7 +225,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 {onLogout && (
                   <button onClick={onLogout} className="settings-signout">
                     <Icons.Logout />
-                    Sign Out
+                    {t("settings.signOut")}
                   </button>
                 )}
               </div>
@@ -215,9 +234,9 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
             {/* Features */}
             {section === "features" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">Features</h3>
+                <h3 className="settings-section-title">{t("settings.features")}</h3>
                 <p className="settings-hint" style={{ marginBottom: 16 }}>
-                  Disable features you don't need. They'll be hidden from the menus and dashboard.
+                  {t("settings.featuresHint")}
                 </p>
                 <div className="settings-card">
                   {FEATURE_LIST.map((f, i) => (
@@ -227,8 +246,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}
                     >
                       <div>
-                        <div className="settings-toggle-label">{f.label}</div>
-                        <div className="settings-toggle-desc">{f.description}</div>
+                        <div className="settings-toggle-label">{t(f.labelKey)}</div>
+                        <div className="settings-toggle-desc">{t(f.descKey)}</div>
                       </div>
                       <input
                         type="checkbox"
@@ -245,24 +264,24 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
             {/* Defaults */}
             {section === "defaults" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">Form Defaults</h3>
+                <h3 className="settings-section-title">{t("settings.defaults")}</h3>
                 <p className="settings-hint" style={{ marginBottom: 16 }}>
-                  Set default values for new entries. These will be pre-selected when you open a form.
+                  {t("settings.defaultsHint")}
                 </p>
 
                 <div className="settings-card" style={{ marginBottom: 16 }}>
-                  <h4 className="settings-card-title">Feeding Defaults</h4>
+                  <h4 className="settings-card-title">{t("settings.feedingDefaults")}</h4>
                   <div className="settings-card-grid">
-                    <FormField label="Default Type">
+                    <FormField label={t("settings.defaultType")}>
                       <FormSelect
-                        options={FEEDING_TYPES}
+                        options={FEEDING_TYPES.map(o => ({ ...o, label: t(o.labelKey) }))}
                         value={prefs.defaults.feeding?.type || "breast milk"}
                         onChange={(e) => setFormDefault("feeding", "type", e.target.value)}
                       />
                     </FormField>
-                    <FormField label="Default Method">
+                    <FormField label={t("settings.defaultMethod")}>
                       <FormSelect
-                        options={FEEDING_METHODS}
+                        options={FEEDING_METHODS.map(o => ({ ...o, label: t(o.labelKey) }))}
                         value={prefs.defaults.feeding?.method || "bottle"}
                         onChange={(e) => setFormDefault("feeding", "method", e.target.value)}
                       />
@@ -271,8 +290,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 </div>
 
                 <div className="settings-card" style={{ marginBottom: 16 }}>
-                  <h4 className="settings-card-title">Medication Defaults</h4>
-                  <FormField label="Default Dosage Unit">
+                  <h4 className="settings-card-title">{t("settings.medicationDefaults")}</h4>
+                  <FormField label={t("settings.defaultDosageUnit")}>
                     <FormSelect
                       options={[
                         { value: "ml", label: "ml" },
@@ -290,9 +309,9 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 <div className="settings-card">
                   <label className="settings-toggle-row">
                     <div>
-                      <div className="settings-toggle-label">Auto-calculate BMI</div>
+                      <div className="settings-toggle-label">{t("settings.autoCalculateBMI")}</div>
                       <div className="settings-toggle-desc">
-                        Fill BMI from weight and height when no doctor-provided value exists. Manual entries always take priority.
+                        {t("settings.autoCalculateBMIHint")}
                       </div>
                     </div>
                     <input
@@ -309,11 +328,11 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
             {/* Data */}
             {section === "data" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">Data</h3>
+                <h3 className="settings-section-title">{t("settings.data")}</h3>
 
                 {/* Export */}
                 <div className="settings-card" style={{ marginBottom: 16 }}>
-                  <h4 className="settings-card-title">Export (CSV)</h4>
+                  <h4 className="settings-card-title">{t("settings.export")}</h4>
                   <button
                     className="settings-export-main"
                     onClick={() => handleExport("all")}
@@ -321,7 +340,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     style={{ marginBottom: 12 }}
                   >
                     <Icons.Download />
-                    {exporting ? "Exporting..." : "Export All Data (CSV)"}
+                    {exporting ? "Exporting..." : t("settings.exportAll")}
                   </button>
                   <div className="settings-export-grid">
                     {["feedings", "sleep", "changes", "weight", "height", "head_circumference", "temperature", "medications", "milestones"].map((type) => (
@@ -331,7 +350,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                         onClick={() => handleExport(type)}
                         disabled={exporting || !childId}
                       >
-                        {type.replace("_", " ")}
+                        {t(`export.${type}`)}
                       </button>
                     ))}
                   </div>
@@ -345,12 +364,12 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
             {/* Users */}
             {section === "users" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">Users & Roles</h3>
+                <h3 className="settings-section-title">{t("settings.users")}</h3>
                 {isAdmin ? (
                   <UserManagement children={children || []} />
                 ) : (
                   <div className="settings-card" style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
-                    Only admins can manage users and roles.
+                    {t("settings.adminOnly")}
                   </div>
                 )}
               </div>
@@ -363,6 +382,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 }
 
 function BackupSection() {
+  const { t } = useI18n();
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -428,17 +448,17 @@ function BackupSection() {
 
   return (
     <div className="settings-card">
-      <h4 className="settings-card-title">Backups</h4>
+      <h4 className="settings-card-title">{t("settings.backups")}</h4>
 
       <div style={{ marginBottom: 16 }}>
-        <FormField label="Automatic Backup Frequency">
+        <FormField label={t("settings.backupFrequency")}>
           <FormSelect
             options={[
-              { value: "disabled", label: "Disabled" },
-              { value: "6h", label: "Every 6 hours" },
-              { value: "12h", label: "Every 12 hours" },
-              { value: "daily", label: "Daily" },
-              { value: "weekly", label: "Weekly" },
+              { value: "disabled", label: t("settings.disabled") },
+              { value: "6h", label: t("settings.every6h") },
+              { value: "12h", label: t("settings.every12h") },
+              { value: "daily", label: t("settings.daily") },
+              { value: "weekly", label: t("settings.weekly") },
             ]}
             value={frequency}
             onChange={(e) => handleFrequencyChange(e.target.value)}
@@ -446,8 +466,8 @@ function BackupSection() {
         </FormField>
         <p className="settings-hint">
           {frequency === "disabled"
-            ? "Automatic backups are off. Use this if Home Assistant manages backups."
-            : `Backups include the database and all photos. Last 7 are kept.${frequency !== "daily" ? " Restart required to apply." : ""}`}
+            ? t("settings.backupDisabledHint")
+            : t("settings.backupEnabledHint")}
         </p>
       </div>
 
@@ -458,13 +478,13 @@ function BackupSection() {
           disabled={creating}
           style={{ flex: 1 }}
         >
-          {creating ? "Creating..." : "Create Backup Now"}
+          {creating ? t("settings.creating") : t("settings.createBackup")}
         </button>
         <label
           className="settings-export-main"
           style={{ flex: 1, cursor: restoring ? "not-allowed" : "pointer", opacity: restoring ? 0.6 : 1, textAlign: "center" }}
         >
-          {restoring ? "Restoring..." : "Restore from File"}
+          {restoring ? t("settings.restoring") : t("settings.restoreFromFile")}
           <input
             type="file"
             accept=".gz,.tar.gz"
@@ -476,9 +496,9 @@ function BackupSection() {
       </div>
 
       {loading ? (
-        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>Loading...</div>
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("general.loading")}</div>
       ) : backups.length === 0 ? (
-        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>No backups yet</div>
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("settings.noBackups")}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {backups.map((b) => (
@@ -505,7 +525,7 @@ function BackupSection() {
                   style={{ padding: "4px 10px" }}
                   onClick={() => api.downloadBackup(b.name).catch(() => alert("Download failed"))}
                 >
-                  Download
+                  {t("settings.download")}
                 </button>
                 <button
                   className="delete-entry-btn"
@@ -528,6 +548,7 @@ function BackupSection() {
 }
 
 function ChangePasswordSection() {
+  const { t } = useI18n();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -548,7 +569,7 @@ function ChangePasswordSection() {
     setSaving(true);
     try {
       await api.changePassword(currentPassword, newPassword);
-      setMessage({ type: "success", text: "Password changed successfully" });
+      setMessage({ type: "success", text: t("settings.passwordChanged") });
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -560,7 +581,7 @@ function ChangePasswordSection() {
 
   return (
     <div className="settings-card" style={{ marginTop: 16 }}>
-      <h4 className="settings-card-title">Change Password</h4>
+      <h4 className="settings-card-title">{t("settings.changePassword")}</h4>
       <form onSubmit={handleSubmit}>
         {message && (
           <div style={{
@@ -571,17 +592,17 @@ function ChangePasswordSection() {
             {message.text}
           </div>
         )}
-        <FormField label="Current Password">
+        <FormField label={t("settings.currentPassword")}>
           <FormInput type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoComplete="current-password" />
         </FormField>
-        <FormField label="New Password">
+        <FormField label={t("settings.newPassword")}>
           <FormInput type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
         </FormField>
-        <FormField label="Confirm New Password">
+        <FormField label={t("settings.confirmNewPassword")}>
           <FormInput type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
         </FormField>
         <button type="submit" className="settings-export-main" disabled={saving} style={{ marginTop: 4 }}>
-          {saving ? "Changing..." : "Change Password"}
+          {saving ? t("settings.changing") : t("settings.changePasswordBtn")}
         </button>
       </form>
     </div>

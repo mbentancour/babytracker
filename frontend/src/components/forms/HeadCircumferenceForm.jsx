@@ -4,9 +4,11 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
+import { useI18n } from "../../utils/i18n";
 
 export default function HeadCircumferenceForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(entry?.date?.slice(0, 10) || today);
@@ -40,20 +42,20 @@ export default function HeadCircumferenceForm({ childId, entry, onDone, onClose,
   };
 
   return (
-    <Modal title={isEdit ? "Edit Head Circumference" : "Log Head Circumference"} onClose={onClose}>
+    <Modal title={isEdit ? t("headCirc.edit") : t("headCirc.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Date">
+        <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </FormField>
         <FormField label={`Circumference (${units.length})`}>
           <FormInput type="number" value={headCircumference} onChange={(e) => setHeadCircumference(e.target.value)} required min="0" step="0.1" />
         </FormField>
-        <FormField label="Notes">
-          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+        <FormField label={t("general.notes")}>
+          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("form.optional")} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.growth} disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update" : "Save"}
+          {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

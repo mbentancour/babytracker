@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import PhotoPicker from "../PhotoPicker";
 import { useUnits } from "../../utils/units";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -11,6 +12,7 @@ function toLocalDatetime(date) {
 
 export default function PumpingForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
   const now = new Date();
   const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
@@ -46,20 +48,20 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
   };
 
   return (
-    <Modal title={isEdit ? "Edit Pumping" : "Log Pumping"} onClose={onClose}>
+    <Modal title={isEdit ? t("pumping.edit") : t("pumping.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Start">
+        <FormField label={t("general.start")}>
           <FormInput type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
         </FormField>
-        <FormField label="End">
+        <FormField label={t("general.end")}>
           <FormInput type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
         </FormField>
-        <FormField label={`Amount (${units.volume})`}>
-          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Optional" min="0" step="5" />
+        <FormField label={`${t("feeding.amount")} (${units.volume})`}>
+          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="5" />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color="#6C5CE7" disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update" : "Save Pumping"}
+          {saving ? t("form.saving") : isEdit ? t("pumping.edit") : t("pumping.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

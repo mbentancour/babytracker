@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import PhotoPicker from "../PhotoPicker";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -9,6 +10,7 @@ function toLocalDatetime(date) {
 }
 
 export default function MedicationForm({ childId, entry, defaultDosageUnit, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [name, setName] = useState(entry?.name || "");
   const [dosage, setDosage] = useState(entry?.dosage || "");
@@ -43,26 +45,26 @@ export default function MedicationForm({ childId, entry, defaultDosageUnit, onDo
   };
 
   return (
-    <Modal title={isEdit ? "Edit Medication" : "Log Medication"} onClose={onClose}>
+    <Modal title={isEdit ? t("medication.edit") : t("medication.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Medication Name">
+        <FormField label={t("medication.name")}>
           <FormInput type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Vitamin D" />
         </FormField>
-        <FormField label="Dosage">
+        <FormField label={t("medication.dosage")}>
           <div style={{ display: "flex", gap: 8 }}>
             <FormInput type="text" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="e.g. 5" style={{ flex: 1 }} />
             <FormInput type="text" value={dosageUnit} onChange={(e) => setDosageUnit(e.target.value)} placeholder="ml" style={{ width: 80 }} />
           </div>
         </FormField>
-        <FormField label="Time">
+        <FormField label={t("general.time")}>
           <FormInput type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} required />
         </FormField>
-        <FormField label="Notes">
-          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" />
+        <FormField label={t("general.notes")}>
+          <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("form.optional")} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color="#e67e22" disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update" : "Save"}
+          {saving ? t("form.saving") : isEdit ? t("medication.edit") : t("medication.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

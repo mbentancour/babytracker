@@ -2,17 +2,20 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormSelect, FormButton, FormDeleteButton } from "../Modal";
 import PhotoPicker from "../PhotoPicker";
-
-const CATEGORIES = [
-  { value: "motor", label: "Motor" },
-  { value: "cognitive", label: "Cognitive" },
-  { value: "social", label: "Social" },
-  { value: "language", label: "Language" },
-  { value: "other", label: "Other" },
-];
+import { useI18n } from "../../utils/i18n";
 
 export default function MilestoneForm({ childId, entry, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
+
+  const CATEGORIES = [
+    { value: "motor", label: t("milestone.motor") },
+    { value: "cognitive", label: t("milestone.cognitive") },
+    { value: "social", label: t("milestone.social") },
+    { value: "language", label: t("milestone.language") },
+    { value: "other", label: t("milestone.other") },
+  ];
+
   const today = new Date().toISOString().slice(0, 10);
   const [title, setTitle] = useState(entry?.title || "");
   const [category, setCategory] = useState(entry?.category || "other");
@@ -44,23 +47,23 @@ export default function MilestoneForm({ childId, entry, onDone, onClose, onDelet
   };
 
   return (
-    <Modal title={isEdit ? "Edit Milestone" : "Log Milestone"} onClose={onClose}>
+    <Modal title={isEdit ? t("milestone.edit") : t("milestone.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="Title">
+        <FormField label={t("milestone.title")}>
           <FormInput type="text" value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g. First smile, Rolled over" />
         </FormField>
-        <FormField label="Category">
+        <FormField label={t("milestone.category")}>
           <FormSelect options={CATEGORIES} value={category} onChange={(e) => setCategory(e.target.value)} />
         </FormField>
-        <FormField label="Date">
+        <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </FormField>
-        <FormField label="Description">
-          <FormInput type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional details" />
+        <FormField label={t("milestone.description")}>
+          <FormInput type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("form.optional")} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color="#00b894" disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update" : "Save"}
+          {saving ? t("form.saving") : isEdit ? t("milestone.edit") : t("milestone.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

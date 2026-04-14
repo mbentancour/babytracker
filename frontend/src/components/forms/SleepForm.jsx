@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
-
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -10,6 +10,7 @@ function toLocalDatetime(date) {
 }
 
 export default function SleepForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
+  const { t } = useI18n();
   const isEdit = !!entry;
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -47,7 +48,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   };
 
   return (
-    <Modal title={isEdit ? "Edit Sleep" : "Log Sleep"} onClose={onClose}>
+    <Modal title={isEdit ? t("sleep.edit") : t("sleep.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         {!isEdit && timerId ? (
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
@@ -55,7 +56,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
           </p>
         ) : (
           <>
-            <FormField label="Start">
+            <FormField label={t("general.start")}>
               <FormInput
                 type="datetime-local"
                 value={start}
@@ -63,7 +64,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
                 required
               />
             </FormField>
-            <FormField label="End">
+            <FormField label={t("general.end")}>
               <FormInput
                 type="datetime-local"
                 value={end}
@@ -73,16 +74,16 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
             </FormField>
           </>
         )}
-        <FormField label="Notes">
+        <FormField label={t("general.notes")}>
           <FormInput
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Optional"
+            placeholder={t("form.optional")}
           />
         </FormField>
         <FormButton color={colors.sleep} disabled={saving}>
-          {saving ? "Saving..." : isEdit ? "Update Sleep" : "Save Sleep"}
+          {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

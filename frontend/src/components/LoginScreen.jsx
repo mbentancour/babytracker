@@ -2,8 +2,10 @@ import { useState } from "react";
 import { api, setAccessToken } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
+import { useI18n } from "../utils/i18n";
 
 export default function LoginScreen({ isSetup, onAuthenticated }) {
+  const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -50,8 +52,8 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
           <h1 className="login-title">BabyTracker</h1>
           <p className="login-subtitle">
             {isSetup
-              ? "Create your account to get started"
-              : "Sign in to continue"}
+              ? t("auth.createAccountHint")
+              : t("auth.signInHint")}
           </p>
         </div>
 
@@ -59,7 +61,7 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
           {error && <div className="login-error">{error}</div>}
 
           <div className="login-field">
-            <label className="login-label">Username</label>
+            <label className="login-label">{t("auth.username")}</label>
             <input
               type="text"
               className="login-input"
@@ -73,7 +75,7 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
           </div>
 
           <div className="login-field">
-            <label className="login-label">Password</label>
+            <label className="login-label">{t("auth.password")}</label>
             <input
               type="password"
               className="login-input"
@@ -87,7 +89,7 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
 
           {isSetup && (
             <div className="login-field">
-              <label className="login-label">Confirm Password</label>
+              <label className="login-label">{t("auth.confirmPassword")}</label>
               <input
                 type="password"
                 className="login-input"
@@ -107,10 +109,10 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
             disabled={loading}
           >
             {loading
-              ? "Please wait..."
+              ? t("auth.pleaseWait")
               : isSetup
-                ? "Create Account"
-                : "Sign In"}
+                ? t("auth.createAccount")
+                : t("auth.signIn")}
           </button>
         </form>
       </div>

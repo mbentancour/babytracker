@@ -15,10 +15,15 @@
     />
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #0F1117; }
+      body { background: var(--bg, #0F1117); transition: background-color 0.2s; }
     </style>
   </head>
   <body>
+    <script>
+      // Apply theme before React loads to prevent flash
+      const t = localStorage.getItem("babytracker_theme") || "system";
+      document.documentElement.setAttribute("data-theme", t);
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

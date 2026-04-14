@@ -4,6 +4,7 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
+import { useI18n } from "../../utils/i18n";
 
 function toLocalDate(date) {
   const d = new Date(date);
@@ -13,6 +14,7 @@ function toLocalDate(date) {
 
 export default function WeightForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
+  const { t } = useI18n();
   const isEdit = !!entry;
   const [weight, setWeight] = useState(entry?.weight ? String(entry.weight) : "");
   const [date, setDate] = useState(entry?.date ? toLocalDate(entry.date) : toLocalDate(new Date()));
@@ -42,17 +44,17 @@ export default function WeightForm({ childId, entry, onDone, onClose, onDelete }
   };
 
   return (
-    <Modal title={isEdit ? "Edit Weight" : "Log Weight"} onClose={onClose}>
+    <Modal title={isEdit ? t("weight.edit") : t("weight.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={`Weight (${units.weight})`}>
           <FormInput type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="5.0" min="0" max="30" step="0.01" autoFocus required />
         </FormField>
-        <FormField label="Date">
+        <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.growth} disabled={saving || !weight}>
-          {saving ? "Saving..." : isEdit ? "Update Weight" : "Save Weight"}
+          {saving ? t("form.saving") : isEdit ? t("weight.edit") : t("weight.log")}
         </FormButton>
       </form>
       {onDelete && <FormDeleteButton onDelete={onDelete} />}

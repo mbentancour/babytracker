@@ -2,8 +2,10 @@ import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton } from "../Modal";
 import { colors } from "../../utils/colors";
+import { useI18n } from "../../utils/i18n";
 
 export default function ChildForm({ onDone, onClose }) {
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
@@ -25,9 +27,9 @@ export default function ChildForm({ onDone, onClose }) {
   };
 
   return (
-    <Modal title="Add Baby" onClose={onClose}>
+    <Modal title={t("onboarding.addBaby")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        <FormField label="First Name">
+        <FormField label={t("onboarding.firstName")}>
           <FormInput
             type="text"
             value={firstName}
@@ -36,15 +38,15 @@ export default function ChildForm({ onDone, onClose }) {
             autoFocus
           />
         </FormField>
-        <FormField label="Last Name">
+        <FormField label={t("onboarding.lastName")}>
           <FormInput
             type="text"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            placeholder="Optional"
+            placeholder={t("form.optional")}
           />
         </FormField>
-        <FormField label="Birth Date">
+        <FormField label={t("onboarding.birthDate")}>
           <FormInput
             type="date"
             value={birthDate}
@@ -53,7 +55,7 @@ export default function ChildForm({ onDone, onClose }) {
           />
         </FormField>
         <FormButton color={colors.feeding} disabled={saving}>
-          {saving ? "Adding..." : "Add Baby"}
+          {saving ? t("form.saving") : t("onboarding.addBabyBtn")}
         </FormButton>
       </form>
     </Modal>
