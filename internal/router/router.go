@@ -3,7 +3,6 @@ package router
 import (
 	"io/fs"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +16,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware
+	r.Use(middleware.Ingress) // Strip HA ingress path prefix before routing
 	r.Use(middleware.SecurityHeaders)
 	r.Use(middleware.Logging)
 
@@ -273,14 +273,6 @@ func newSPAHandler() *spaHandler {
 
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-
-	// Handle X-Ingress-Path for Home Assistant
-	if ingressPath := r.Header.Get("X-Ingress-Path"); ingressPath != "" {
-		path = strings.TrimPrefix(path, ingressPath)
-		if path == "" {
-			path = "/"
-		}
-	}
 
 	// Try to serve the file directly
 	if f, err := h.staticFS.Open(path); err == nil {
