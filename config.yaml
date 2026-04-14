@@ -24,15 +24,19 @@ panel_admin: false
 map:
   - type: data
     read_only: false
+  - type: media
+    read_only: true
 options:
   mode: "standalone"
   external_url: ""
   unit_system: "metric"
-  backup_frequency: "daily"
+  backup_frequency: "disabled"
   demo_mode: false
+  media_path: ""
 schema:
   mode: "list(standalone|external)"
   external_url: "str?"
   unit_system: "list(metric|imperial)"
   backup_frequency: "list(disabled|6h|12h|daily|weekly)"
   demo_mode: bool
+  media_path: "str?"

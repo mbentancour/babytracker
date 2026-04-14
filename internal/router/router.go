@@ -53,6 +53,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
 	displayH := handlers.NewDisplayHandler(db)
+	mediaScanH := handlers.NewMediaScanHandler(cfg)
 
 	// Auth routes (public, rate-limited)
 	r.Group(func(r chi.Router) {
@@ -204,6 +205,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 		// Photo gallery (aggregates all photos)
 		r.Get("/api/gallery/", galleryH.List)
+
+		// HA media scan (external photos from HA media directory)
+		r.Get("/api/media-scan/", mediaScanH.List)
+		r.Get("/api/media-scan/{filename}", mediaScanH.Serve)
 
 		// Display control (for Home Assistant / external automation)
 		r.Get("/api/display", displayH.GetState)

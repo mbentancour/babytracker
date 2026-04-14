@@ -7,11 +7,19 @@ UNIT_SYSTEM=$(bashio::config 'unit_system')
 BACKUP_FREQUENCY=$(bashio::config 'backup_frequency')
 DEMO_MODE=$(bashio::config 'demo_mode')
 
+MEDIA_SCAN_PATH=$(bashio::config 'media_path')
+
 export UNIT_SYSTEM
 export BACKUP_FREQUENCY
 export DEMO_MODE
 export DATA_DIR="/data/babytracker"
 export PORT=8099
+
+# If media path is configured, set the full path to HA's media directory
+if [ -n "${MEDIA_SCAN_PATH}" ]; then
+    export MEDIA_PATH="/media/${MEDIA_SCAN_PATH}"
+    bashio::log.info "Media scan path: ${MEDIA_PATH}"
+fi
 
 # All persistent data goes in /data/ which HA maps as a persistent volume
 PG_DATA="/data/postgresql"

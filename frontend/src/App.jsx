@@ -233,10 +233,22 @@ function Dashboard({ demoMode, onLogout }) {
     const cid = childIdRef.current;
     if (!cid) return;
     try {
-      const res = await api.getGallery({ child: cid });
-      const photos = res.results || [];
-      if (photos.length > 0) {
-        setGalleryPhotos(photos);
+      const [galleryRes, mediaRes] = await Promise.all([
+        api.getGallery({ child: cid }).catch(() => ({ results: [] })),
+        api.getMediaScan().catch(() => ({ results: [] })),
+      ]);
+      const galleryPhotos = galleryRes.results || [];
+      const mediaPhotos = (mediaRes.results || []).map((m) => ({
+        id: m.filename,
+        entity_type: "media",
+        photo: m.filename,
+        date: m.date,
+        label: m.filename.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+        detail: "Home Assistant Media",
+      }));
+      const allPhotos = [...galleryPhotos, ...mediaPhotos];
+      if (allPhotos.length > 0) {
+        setGalleryPhotos(allPhotos);
         setShowPictureFrame(true);
       }
     } catch { /* ignore */ }

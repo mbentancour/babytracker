@@ -20,3 +20,9 @@ configuration:
   demo_mode:
     name: Demo Mode
     description: "Show mock data without requiring login or real data"
+  media_path:
+    name: Media Path
+    description: >-
+      Subfolder inside Home Assistant's media directory to scan for photos
+      (e.g., "baby-photos"). Photos found here will appear in the gallery
+      and picture frame slideshow. Leave empty to disable.
