@@ -11,7 +11,7 @@ function toLocalDate(date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default function EditChildForm({ child, onDone, onClose, onDelete }) {
+export default function EditChildForm({ child, onDone, onClose, onDelete, onAddBaby }) {
   const { t } = useI18n();
   const [firstName, setFirstName] = useState(child.first_name || "");
   const [lastName, setLastName] = useState(child.last_name || "");
@@ -66,7 +66,34 @@ export default function EditChildForm({ child, onDone, onClose, onDelete }) {
   };
 
   return (
-    <Modal title={t("onboarding.addBaby")} onClose={onClose}>
+    <Modal
+      title={t("onboarding.editBaby", { name: child.first_name || "" })}
+      onClose={onClose}
+      headerAction={onAddBaby ? (
+        <button
+          type="button"
+          onClick={onAddBaby}
+          title={t("onboarding.addBaby")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "4px 10px",
+            borderRadius: 8,
+            border: `1px solid ${colors.feeding}40`,
+            background: `${colors.feeding}15`,
+            color: colors.feeding,
+            fontSize: 12,
+            fontWeight: 500,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            whiteSpace: "nowrap",
+          }}
+        >
+          + {t("onboarding.addBaby")}
+        </button>
+      ) : null}
+    >
       <form onSubmit={handleSubmit}>
         <FormField label={t("onboarding.firstName")}>
           <FormInput type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} required autoFocus />

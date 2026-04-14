@@ -1,6 +1,6 @@
 import { Icons } from "./Icons";
 
-export default function Modal({ title, children, onClose }) {
+export default function Modal({ title, children, onClose, headerAction }) {
   return (
     <div
       style={{
@@ -36,9 +36,12 @@ export default function Modal({ title, children, onClose }) {
             borderBottom: "1px solid var(--border)",
           }}
         >
-          <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
-            {title}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {title}
+            </span>
+            {headerAction}
+          </div>
           <button
             onClick={onClose}
             style={{

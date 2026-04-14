@@ -447,42 +447,28 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
           {data.error && (
             <span className="sync-error">{tr("general.connectionError")}</span>
           )}
-          {data.lastSync && !data.error && (
-            <span className="sync-time">
-              {data.lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-          )}
-          <button className="refresh-btn" onClick={data.refetch} title={tr("general.refresh")}>
-            <Icons.Activity />
-          </button>
           <button className="refresh-btn" onClick={() => setModal({ type: "settings" })} title="Settings">
             <Icons.Settings />
           </button>
         </div>
       </header>
 
-      {/* Child Switcher */}
-      <div className="child-switcher fade-in">
-        {data.children.map((c) => (
-          <button
-            key={c.id}
-            className={`child-chip${c.id === data.child?.id ? " child-chip-active" : ""}`}
-            onClick={() => data.selectChild(c.id)}
-          >
-            {c.first_name}
-          </button>
-        ))}
-        {isAdmin && (
-          <button
-            className="child-chip"
-            style={{ opacity: 0.6, fontSize: 16 }}
-            onClick={() => setModal({ type: "addChild" })}
-            title={tr("general.addBaby")}
-          >
-            +
-          </button>
-        )}
-      </div>
+      {/* Child Switcher — only shown when more than one child. The "add baby"
+          action lives in the header for admins so a single-child setup doesn't
+          carry an empty row. */}
+      {data.children.length > 1 && (
+        <div className="child-switcher fade-in">
+          {data.children.map((c) => (
+            <button
+              key={c.id}
+              className={`child-chip${c.id === data.child?.id ? " child-chip-active" : ""}`}
+              onClick={() => data.selectChild(c.id)}
+            >
+              {c.first_name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Active Timer Bars */}
       {timer.activeTimers.map((t) => (
@@ -853,6 +839,7 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
           onDone={handleFormDone}
           onClose={closeModal}
           onDelete={isAdmin ? () => { handleDeleteEntry("child", modal.child.id); closeModal(); } : undefined}
+          onAddBaby={isAdmin ? () => setModal({ type: "addChild" }) : undefined}
         />
       )}
       {modal?.type === "settings" && (
