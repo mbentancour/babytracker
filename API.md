@@ -544,3 +544,181 @@ DELETE /api/tags/{id}/                     Delete
 GET    /api/tags/{entityType}/{entityId}/  Get tags for an entry
 PUT    /api/tags/{entityType}/{entityId}/  Set tags: {tag_ids: [1, 2]}
 ```
+
+---
+
+## Configuration
+
+```
+GET /api/config
+```
+
+Public endpoint (no auth required). Returns:
+```json
+{
+  "refresh_interval": 30,
+  "demo_mode": false,
+  "unit_system": "metric",
+  "setup_mode": false,
+  "appliance_mode": false
+}
+```
+
+- `setup_mode`: true during first-boot Wi-Fi setup (Pi image only)
+- `appliance_mode`: true when running as a Pi appliance (TLS configured)
+
+---
+
+## Backups (admin only)
+
+```
+GET    /api/backups/              List available backups
+POST   /api/backups/              Create a new backup
+GET    /api/backups/download?name=<filename>  Download a backup file
+DELETE /api/backups/?name=<filename>          Delete a backup
+```
+
+Backups are `.tar.gz` files containing a PostgreSQL dump and all photos.
+
+### Backup settings
+
+```
+GET /api/backups/settings
+```
+
+Response: `{"frequency": "daily"}`
+
+```
+PUT /api/backups/settings
+Content-Type: application/json
+
+{"frequency": "daily"}
+```
+
+Frequencies: `disabled`, `6h`, `12h`, `daily`, `weekly`
+
+### Restore
+
+```
+POST /api/backups/restore
+Content-Type: multipart/form-data
+
+backup=@babytracker-backup-2026-04-14.tar.gz
+```
+
+Replaces the entire database and photos directory. Use with caution.
+
+---
+
+## Baby Buddy Import (admin only)
+
+Import data from an existing Baby Buddy instance:
+
+```
+POST /api/import/babybuddy
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "url": "https://babybuddy.example.com",
+  "token": "baby-buddy-api-key"
+}
+```
+
+Fetches all children, feedings, sleep, changes, tummy times, temperature, weight, height, pumping, and notes via the Baby Buddy API. Handles pagination automatically.
+
+---
+
+## Password Management
+
+Change your own password:
+```
+PUT /api/users/me/password
+Content-Type: application/json
+
+{"current_password": "old", "new_password": "new"}
+```
+
+Reset another user's password (admin only):
+```
+PUT /api/users/{id}/password
+Content-Type: application/json
+
+{"new_password": "new"}
+```
+
+---
+
+## Photo Gallery
+
+Aggregated view of all photos (standalone + entry-attached) for a child:
+
+```
+GET /api/gallery/?child=1
+```
+
+Tag a photo with a child:
+```
+POST /api/gallery/tag
+Content-Type: application/json
+
+{"filename": "photo-abc123.jpg", "child_id": 1}
+```
+
+---
+
+## Domain Settings (admin only, appliance mode)
+
+Get current custom domain:
+```
+GET /api/settings/domain
+```
+
+Response: `{"domain": "baby.example.com"}`
+
+Set custom domain (enables Let's Encrypt):
+```
+PUT /api/settings/domain
+Content-Type: application/json
+
+{"domain": "baby.example.com"}
+```
+
+Requires DNS A record pointing to the device and port 443 forwarded. Restart required after changing.
+
+---
+
+## System Controls (admin only, appliance mode)
+
+Restart the device:
+```
+POST /api/system/restart
+```
+
+Shut down the device:
+```
+POST /api/system/shutdown
+```
+
+These only work when running as a Pi appliance (appliance mode). The response is sent before the action executes.
+
+---
+
+## Setup (Pi first boot only)
+
+These endpoints are only available when the device is in setup mode (first boot). They require no authentication.
+
+```
+GET  /api/setup/status          Setup status: {setup_mode, wifi_connected}
+GET  /api/setup/wifi/scan       Scan for Wi-Fi networks
+POST /api/setup/wifi/connect    Connect to Wi-Fi: {ssid, password}
+POST /api/setup/complete        Mark setup as complete
+```
+
+Wi-Fi scan response:
+```json
+[
+  {"ssid": "HomeNetwork", "signal": "85", "security": "WPA2"},
+  {"ssid": "Neighbor", "signal": "42", "security": "WPA2"}
+]
+```
