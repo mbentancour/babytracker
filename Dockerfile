@@ -1,7 +1,7 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# Install build tools and runtime dependencies
+# Install runtime dependencies and build tools
 RUN apk add --no-cache \
     postgresql17 \
     postgresql17-client \
@@ -10,7 +10,21 @@ RUN apk add --no-cache \
     bash \
     nodejs \
     npm \
-    go
+    wget
+
+# Install Go from official tarball (Alpine's packaged version is too old)
+RUN ARCH=$(uname -m) && \
+    case "${ARCH}" in \
+      x86_64) GOARCH=amd64 ;; \
+      aarch64) GOARCH=arm64 ;; \
+      armv7l) GOARCH=armv6l ;; \
+      i686|i386) GOARCH=386 ;; \
+      *) GOARCH=amd64 ;; \
+    esac && \
+    wget -q "https://go.dev/dl/go1.25.0.linux-${GOARCH}.tar.gz" -O /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Build frontend
 WORKDIR /tmp/frontend
@@ -30,8 +44,8 @@ RUN cp -r /tmp/frontend/dist/ ./internal/router/static/ && \
     CGO_ENABLED=0 go build -o /usr/local/bin/babytracker ./cmd/babytracker/
 
 # Clean up build tools and source
-RUN apk del go nodejs npm && \
-    rm -rf /tmp/frontend /tmp/build /root/go /root/.cache
+RUN rm -rf /usr/local/go /tmp/frontend /tmp/build /root/go /root/.cache && \
+    apk del nodejs npm wget
 
 # Setup PostgreSQL data directory
 RUN mkdir -p /run/postgresql /var/lib/postgresql/data && \
