@@ -1,9 +1,11 @@
 package middleware
 
-import "net/http"
+import (
+	"net/http"
+	"os"
+)
 
 // noServerHeader wraps a ResponseWriter to suppress the default Server header.
-// HA's ingress proxy breaks when it encounters certain response headers.
 type noServerHeader struct {
 	http.ResponseWriter
 	wroteHeader bool
@@ -31,6 +33,17 @@ func (w *noServerHeader) Flush() {
 	}
 }
 
+// Detect HA add-on mode at startup (not per-request) so CSP can be set correctly.
+// HA sets SUPERVISOR_TOKEN or runs with bashio, and our run.sh always sets DATA_DIR=/data/babytracker.
+var isHAMode = os.Getenv("SUPERVISOR_TOKEN") != "" || os.Getenv("HASSIO_TOKEN") != ""
+
+// Strict CSP for standalone/direct access.
+const strictCSP = "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+
+// Relaxed CSP for HA ingress — no frame-ancestors (iframe), connect-src * (cross-origin proxy),
+// unsafe-inline in script-src (needed through proxy).
+const haCSP = "default-src 'self'; script-src 'self' blob: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src *; worker-src 'self' blob:; form-action 'self'; base-uri 'self'"
+
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		wrapped := &noServerHeader{ResponseWriter: w}
@@ -41,12 +54,12 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 
-		// Note: 'unsafe-inline' in style-src is required because React uses inline styles.
-		// No frame-ancestors — HA ingress embeds in an iframe and does not reliably
-		// forward X-Ingress-Path, so we can't conditionally detect ingress.
-		// HA's own proxy adds X-Frame-Options: SAMEORIGIN for framing protection.
-		// connect-src * is needed because HA ingress proxies from a different origin.
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' blob: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src *; worker-src 'self' blob:; form-action 'self'; base-uri 'self'")
+		if isHAMode {
+			w.Header().Set("Content-Security-Policy", haCSP)
+		} else {
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Content-Security-Policy", strictCSP)
+		}
 
 		next.ServeHTTP(wrapped, r)
 	})

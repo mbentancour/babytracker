@@ -255,6 +255,15 @@ func (h *GalleryHandler) TagPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Authorization: verify user has photo access to all target children
+	userID := middleware.GetUserID(r.Context())
+	for _, childID := range req.ChildIDs {
+		if models.CheckAccess(h.db, userID, childID, "photo") == "none" {
+			pagination.WriteError(w, http.StatusForbidden, "you don't have access to one or more of the selected children")
+			return
+		}
+	}
+
 	// Replace all tags for this photo
 	tx, err := h.db.Beginx()
 	if err != nil {

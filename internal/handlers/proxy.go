@@ -37,20 +37,10 @@ func NewProxyHandler(targetURL string) (*ProxyHandler, error) {
 }
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Build target URL
+	// Build target URL — ingress prefix already stripped by middleware
 	targetURL := *h.target
 	targetURL.Path = strings.TrimSuffix(targetURL.Path, "/") + r.URL.Path
 	targetURL.RawQuery = r.URL.RawQuery
-
-	// Handle X-Ingress-Path: strip it from the path before proxying
-	if ingressPath := r.Header.Get("X-Ingress-Path"); ingressPath != "" {
-		path := r.URL.Path
-		path = strings.TrimPrefix(path, ingressPath)
-		if path == "" {
-			path = "/"
-		}
-		targetURL.Path = strings.TrimSuffix(h.target.Path, "/") + path
-	}
 
 	// Create proxy request
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL.String(), r.Body)

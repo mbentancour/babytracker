@@ -129,8 +129,11 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 		h.subsMu.Unlock()
 	}()
 
-	// Send a connected event
-	w.Write([]byte("data: {\"connected\":true,\"device\":\"" + device + "\"}\n\n"))
+	// Send a connected event (use json.Marshal for safe encoding)
+	connMsg, _ := json.Marshal(map[string]any{"connected": true, "device": device})
+	w.Write([]byte("data: "))
+	w.Write(connMsg)
+	w.Write([]byte("\n\n"))
 	flusher.Flush()
 
 	for {
