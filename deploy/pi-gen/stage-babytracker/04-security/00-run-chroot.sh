@@ -20,3 +20,8 @@ EOF
 # Disable SSH by default
 systemctl disable ssh || true
 systemctl disable sshd || true
+
+# Lock the default 'pi' user account — no login possible (SSH disabled, no console usage)
+# The account exists because pi-gen requires it, but we disable password login entirely.
+passwd -l pi || true
+usermod -s /usr/sbin/nologin pi || true
