@@ -15,7 +15,9 @@ if [ ! -f /etc/ssl/certs/babytracker.crt ]; then
         -subj "/CN=babytracker.local" \
         -addext "subjectAltName=DNS:babytracker.local,DNS:babytracker,IP:192.168.4.1"
     chmod 640 /etc/ssl/private/babytracker.key
-    chgrp babytracker /etc/ssl/private/babytracker.key
+    chgrp ssl-cert /etc/ssl/private/babytracker.key
+    # /etc/ssl/private is 0710 root:ssl-cert in Debian — babytracker user needs ssl-cert membership
+    usermod -aG ssl-cert babytracker
     echo "TLS certificate generated."
 fi
 

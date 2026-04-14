@@ -15,6 +15,10 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
+# Allow binding to privileged ports (Let's Encrypt autocert uses :80 and :443)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict

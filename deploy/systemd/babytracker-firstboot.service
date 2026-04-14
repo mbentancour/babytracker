@@ -1,6 +1,7 @@
 [Unit]
 Description=BabyTracker First Boot Setup
-After=local-fs.target
+After=local-fs.target postgresql.service
+Wants=postgresql.service
 Before=babytracker-setup-ap.service
 ConditionPathExists=/var/lib/babytracker/.needs-setup
 

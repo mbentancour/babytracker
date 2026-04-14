@@ -15,6 +15,7 @@ mmdebstrap:
     - avahi-utils
     - ufw
     - openssl
+    - ssl-cert
     - network-manager
     - iptables
     - unattended-upgrades
@@ -22,18 +23,25 @@ mmdebstrap:
     - sudo
 
   customize-hooks:
+    # Copy all our files into the rootfs (cwd is SRC dir, files/ holds the tree)
+    - cp -a files/. $1/
+    # .gitkeep is only needed to preserve empty dirs in git — remove it from the image
+    - rm -f $1/var/lib/babytracker/.gitkeep
+
     # Create the babytracker system user (no home dir, no login shell)
     - chroot $1 useradd --system --no-create-home --shell /usr/sbin/nologin babytracker
 
-    # Install the cross-compiled Go binary (placed in the overlay by CI before build)
-    - install -m 755 $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
-    - rm -f $1/usr/local/bin/babytracker.bin
+    # Install the binary (mv preserves nothing, so chmod after)
+    - mv $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
+    - chmod 755 $1/usr/local/bin/babytracker
+    - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh
 
-    # Set ownership on application directories
-    - chown -R 0:0 $1/etc/babytracker $1/etc/sudoers.d/babytracker
+    # Sudoers must be 0440 root:root or sudo refuses to use it
     - chmod 440 $1/etc/sudoers.d/babytracker
-    - chmod 640 $1/etc/babytracker/babytracker.env
+
+    # Env file holds no secrets but contains paths — restrict to babytracker group
     - chroot $1 chown root:babytracker /etc/babytracker/babytracker.env
+    - chmod 640 $1/etc/babytracker/babytracker.env
 
     # Mark the device as needing first-boot setup
     - touch $1/var/lib/babytracker/.needs-setup
@@ -41,30 +49,34 @@ mmdebstrap:
     - chmod 750 $1/var/lib/babytracker
 
     # Disable services we want under our own control (started by setup-ap unit)
-    - chroot $1 systemctl disable hostapd || true
-    - chroot $1 systemctl disable dnsmasq || true
+    - chroot $1 systemctl disable hostapd
+    - chroot $1 systemctl disable dnsmasq
 
-    # Use NetworkManager (default in Trixie) — disable dhcpcd if present
-    - chroot $1 systemctl enable NetworkManager || true
+    # Use NetworkManager for Wi-Fi management (nmcli scan/connect).
+    # Trixie's systemd-networkd would conflict — disable it.
+    - chroot $1 systemctl disable systemd-networkd
+    - chroot $1 systemctl disable systemd-networkd-wait-online
+    - chroot $1 systemctl enable NetworkManager
+    # dhcpcd may not be installed in Trixie minbase — ignore "unit not found"
     - chroot $1 systemctl disable dhcpcd || true
 
     # Lock the default 'pi' user — image must not be exploitable via console/SSH
-    - chroot $1 passwd -l pi || true
-    - chroot $1 usermod -s /usr/sbin/nologin pi || true
+    - chroot $1 passwd -l pi
+    - chroot $1 usermod -s /usr/sbin/nologin pi
 
-    # Disable SSH (rootfs-overlay drops the unit but make sure)
-    - chroot $1 systemctl disable ssh || true
+    # Disable SSH — appliance is managed via the web UI only
+    - chroot $1 systemctl disable ssh
 
     # Configure UFW with the setup-mode rules. setup-wifi.sh re-resets to production rules.
     - |
       chroot $1 sh -c '
         ufw default deny incoming
         ufw default allow outgoing
-        ufw allow 53/udp comment "DNS for captive portal"
-        ufw allow 67/udp comment "DHCP for captive portal"
-        ufw allow 80/tcp comment "HTTP redirect for captive portal"
+        ufw allow 53/udp comment "DNS captive portal"
+        ufw allow 67/udp comment "DHCP captive portal"
+        ufw allow 80/tcp comment "HTTP captive portal"
         ufw allow 8099/tcp comment "BabyTracker HTTPS"
-        ufw allow 443/tcp comment "BabyTracker Let'\''s Encrypt"
+        ufw allow 443/tcp comment "BabyTracker ACME"
         ufw --force enable
       '
 
