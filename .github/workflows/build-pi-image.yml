@@ -42,10 +42,22 @@ jobs:
           cp scripts/setup-wifi.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
           cp deploy/systemd/*.service deploy/pi-gen/stage-babytracker/02-systemd-services/files/
 
-      - name: Install QEMU for cross-architecture emulation
+      - name: Install pi-gen build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support
+          sudo apt-get install -y \
+            quilt \
+            qemu-user-static \
+            binfmt-support \
+            debootstrap \
+            libarchive-tools \
+            arch-test \
+            xxd \
+            file \
+            bc \
+            zip \
+            rsync \
+            grep
           sudo update-binfmts --enable qemu-arm
           sudo update-binfmts --enable qemu-aarch64
 
@@ -61,7 +73,7 @@ jobs:
           touch /tmp/pi-gen/stage2/SKIP_IMAGES
 
       - name: Build image
-        run: cd /tmp/pi-gen && sudo ./build-docker.sh
+        run: cd /tmp/pi-gen && sudo ./build.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
