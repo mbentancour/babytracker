@@ -19,9 +19,13 @@ export function getAge(birthDate) {
 }
 
 export function formatElapsed(seconds) {
-  const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  const totalMinutes = Math.floor(seconds / 60);
+  const m = totalMinutes % 60;
+  const h = Math.floor(totalMinutes / 60);
+  const pad = (n) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
 }
 
 export function timeAgo(dateStr) {
@@ -30,9 +34,13 @@ export function timeAgo(dateStr) {
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) {
+    const remMins = mins % 60;
+    return remMins === 0 ? `${hours}h ago` : `${hours}h ${remMins}m ago`;
+  }
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  const remHours = hours % 24;
+  return remHours === 0 ? `${days}d ago` : `${days}d ${remHours}h ago`;
 }
 
 export function formatTime(dateStr) {

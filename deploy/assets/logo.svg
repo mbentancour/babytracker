@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 200" width="500" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8B7AFF"/>
+      <stop offset="100%" stop-color="#6C5CE7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Icon tile on the left -->
+  <g transform="translate(20,36)">
+    <rect x="0" y="0" width="128" height="128" rx="26" ry="26" fill="url(#bg)"/>
+    <g transform="translate(64,64)">
+      <path d="M -9 -42 Q -12 -46 -9 -48 L 9 -48 Q 12 -46 9 -42 Z" fill="#ffffff" opacity="0.95"/>
+      <rect x="-16" y="-42" width="32" height="7" rx="3" fill="#ffffff" opacity="0.95"/>
+      <rect x="-22" y="-33" width="44" height="68" rx="10" fill="#ffffff" opacity="0.95"/>
+      <g stroke="#6C5CE7" stroke-width="2.2" stroke-linecap="round">
+        <line x1="-12" y1="-20" x2="-2" y2="-20"/>
+        <line x1="-12" y1="-8"  x2="6"  y2="-8"/>
+        <line x1="-12" y1="4"   x2="-2" y2="4"/>
+        <line x1="-12" y1="16"  x2="6"  y2="16"/>
+      </g>
+      <rect x="-22" y="10" width="44" height="25" rx="10" fill="#8B7AFF" opacity="0.35"/>
+    </g>
+  </g>
+
+  <!-- Wordmark on the right -->
+  <g transform="translate(170,118)">
+    <text x="0" y="0"
+          font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+          font-weight="700"
+          font-size="46"
+          fill="#2d3436"
+          letter-spacing="-1.2">
+      BabyTracker
+    </text>
+    <text x="3" y="26"
+          font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+          font-weight="500"
+          font-size="16"
+          fill="#6C5CE7"
+          letter-spacing="0.5">
+      Self-hosted baby tracking
+    </text>
+  </g>
+</svg>

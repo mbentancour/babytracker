@@ -1,4 +1,6 @@
-export default function StatCard({ icon, label, value, sub, color, accent }) {
+import AddButton from "./AddButton";
+
+export default function StatCard({ icon, label, value, sub, color, accent, onAdd, addLabel }) {
   return (
     <div
       style={{
@@ -26,6 +28,11 @@ export default function StatCard({ icon, label, value, sub, color, accent }) {
           opacity: 0.06,
         }}
       />
+      {onAdd && (
+        <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1 }}>
+          <AddButton onClick={onAdd} color={color} label={addLabel} />
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
           style={{

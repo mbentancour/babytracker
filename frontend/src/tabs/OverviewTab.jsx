@@ -104,6 +104,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalFeeding > 0 ? `${Math.round(totalFeeding)} ${units.volume}` : `${feedings.length}`}
               sub={`${feedings.length} feeding${feedings.length !== 1 ? "s" : ""} today`}
               color={colors.feeding}
+              onAdd={canWrite("feeding") ? () => onEditEntry?.("feeding") : undefined}
+              addLabel={t("action.feeding")}
             />
           </div>
         )}
@@ -115,6 +117,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${totalSleep.toFixed(1)}h`}
               sub="Last 24 hours"
               color={colors.sleep}
+              onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
+              addLabel={t("action.sleep")}
             />
           </div>
         )}
@@ -126,6 +130,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalDiapers}
               sub={`${wetCount} wet · ${solidCount} solid · ${bothCount} both`}
               color={colors.diaper}
+              onAdd={canWrite("diaper") ? () => onEditEntry?.("diaper") : undefined}
+              addLabel={t("action.diaper")}
             />
           </div>
         )}
@@ -137,6 +143,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${Math.round(avgTummy)}m`}
               sub={`${tummyTimes.length} session${tummyTimes.length !== 1 ? "s" : ""} today`}
               color={colors.tummy}
+              onAdd={canWrite("tummy") ? () => onEditEntry?.("tummy") : undefined}
+              addLabel={t("action.tummy")}
             />
           </div>
         )}

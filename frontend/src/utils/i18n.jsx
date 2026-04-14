@@ -104,6 +104,17 @@ const en = {
 
   // Picture frame
   "pictureFrame.tapToReturn": "Tap anywhere to return",
+  "pictureFrame.timer": "Timer",
+  "pictureFrame.lastFed": "fed",
+  "pictureFrame.lastSlept": "slept",
+  "pictureFrame.lastChanged": "changed",
+  "settings.pictureFrameOverlay": "Live status overlay",
+  "settings.pictureFrameOverlayHint": "Show live information on top of the slideshow.",
+  "settings.overlayLastFeeding": "Last feeding",
+  "settings.overlayLastSleep": "Last sleep",
+  "settings.overlayLastDiaper": "Last diaper",
+  "settings.overlayTimers": "Active timers",
+  "settings.overlayCurrentTime": "Current time",
 
   // Forms
   "form.save": "Save",
@@ -518,6 +529,17 @@ const es = {
   "gallery.noPhotos": "Sin fotos aún",
   "gallery.shared": "Compartida",
   "pictureFrame.tapToReturn": "Toca en cualquier lugar para volver",
+  "pictureFrame.timer": "Cronómetro",
+  "pictureFrame.lastFed": "comió",
+  "pictureFrame.lastSlept": "durmió",
+  "pictureFrame.lastChanged": "cambiado",
+  "settings.pictureFrameOverlay": "Información en vivo",
+  "settings.pictureFrameOverlayHint": "Muestra información en vivo encima del slideshow.",
+  "settings.overlayLastFeeding": "Última alimentación",
+  "settings.overlayLastSleep": "Último sueño",
+  "settings.overlayLastDiaper": "Último pañal",
+  "settings.overlayTimers": "Cronómetros activos",
+  "settings.overlayCurrentTime": "Hora actual",
   "form.save": "Guardar",
   "form.saving": "Guardando...",
   "form.update": "Actualizar",
@@ -844,6 +866,17 @@ const da = {
 
   // Picture frame
   "pictureFrame.tapToReturn": "Tryk hvor som helst for at vende tilbage",
+  "pictureFrame.timer": "Timer",
+  "pictureFrame.lastFed": "spist",
+  "pictureFrame.lastSlept": "sovet",
+  "pictureFrame.lastChanged": "skiftet",
+  "settings.pictureFrameOverlay": "Live status overlay",
+  "settings.pictureFrameOverlayHint": "Vis live information oven på diasshowet.",
+  "settings.overlayLastFeeding": "Sidste måltid",
+  "settings.overlayLastSleep": "Sidste søvn",
+  "settings.overlayLastDiaper": "Sidste ble",
+  "settings.overlayTimers": "Aktive timere",
+  "settings.overlayCurrentTime": "Klokken nu",
 
   // Forms
   "form.save": "Gem",

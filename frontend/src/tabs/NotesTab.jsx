@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SectionCard from "../components/SectionCard";
+import AddButton from "../components/AddButton";
 import TimelineItem from "../components/TimelineItem";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
@@ -29,7 +30,12 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
     <>
       {/* Milestones */}
       {isFeatureEnabled("milestone") && <div className="fade-in fade-in-1" style={{ marginBottom: 16 }}>
-        <SectionCard title={t("journal.milestones")} icon={<Icons.TrendUp />} color="#00b894">
+        <SectionCard
+          title={t("journal.milestones")}
+          icon={<Icons.TrendUp />}
+          color="#00b894"
+          action={canWrite("milestone") ? <AddButton onClick={() => onEditEntry?.("milestone")} color="#00b894" label={t("action.milestone")} /> : null}
+        >
           {milestones.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(expandedMilestones ? milestones : milestones.slice(0, COLLAPSED_COUNT)).map((m) => (
@@ -105,7 +111,12 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
 
       {/* Medications */}
       {isFeatureEnabled("medication") && <div className="fade-in fade-in-2" style={{ marginBottom: 16 }}>
-        <SectionCard title={t("journal.medications")} icon={<Icons.Temp />} color="#e67e22">
+        <SectionCard
+          title={t("journal.medications")}
+          icon={<Icons.Temp />}
+          color="#e67e22"
+          action={canWrite("medication") ? <AddButton onClick={() => onEditEntry?.("medication")} color="#e67e22" label={t("action.medication")} /> : null}
+        >
           {medications.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(expandedMeds ? medications : medications.slice(0, COLLAPSED_COUNT)).map((m) => (
@@ -171,7 +182,12 @@ export default function NotesTab({ notes, milestones = [], medications = [], onE
 
       {/* Notes */}
       {isFeatureEnabled("note") && <div className="fade-in fade-in-3">
-        <SectionCard title={t("journal.notes")} icon={<Icons.StickyNote />} color={colors.note}>
+        <SectionCard
+          title={t("journal.notes")}
+          icon={<Icons.StickyNote />}
+          color={colors.note}
+          action={canWrite("note") ? <AddButton onClick={() => onEditEntry?.("note")} color={colors.note} label={t("action.note")} /> : null}
+        >
           {noteTimeline.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {(expandedNotes ? noteTimeline : noteTimeline.slice(0, COLLAPSED_COUNT)).map((n, i, arr) => (

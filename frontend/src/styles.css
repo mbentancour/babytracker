@@ -801,6 +801,74 @@ body {
   font-family: var(--mono);
 }
 
+/*
+ * Picture-frame status overlay
+ *
+ * Landscape: single column on the left. The right panel hides; left panel
+ *   shows all items merged (CSS pseudo-merge via :has() / fallback below).
+ *   Stays out of the typical centered subject area.
+ * Portrait: two panels — items split half-and-half, left panel hugs the
+ *   left edge, right panel hugs the right edge. Free middle area lets the
+ *   "tap to return" hint sit between them without collision.
+ */
+.picture-frame-status {
+  position: absolute;
+  top: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 10px;
+  pointer-events: none;
+  max-width: 40vw;
+}
+
+.picture-frame-status-left {
+  left: 20px;
+}
+
+.picture-frame-status-right {
+  right: 20px;
+  text-align: right;
+}
+
+/* Right-aligned panel: icon goes after the text */
+.picture-frame-status-right .picture-frame-status-item {
+  flex-direction: row-reverse;
+}
+
+/* Landscape: only show the left panel, merge all items into it. */
+@media (orientation: landscape) {
+  .picture-frame-status-right {
+    display: none;
+  }
+}
+
+.picture-frame-status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  line-height: 1.2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+
+/* Fixed-width icon column so text starts from the same place across items
+   regardless of the emoji's rendered width. */
+.picture-frame-status-icon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 20px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
 /* Settings Page */
 .settings-overlay {
   position: fixed;

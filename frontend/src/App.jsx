@@ -609,6 +609,7 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
             child={data.child}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
             onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            canWrite={canWrite}
           />
         )}
         {activeTab === "notes" && (
@@ -869,7 +870,7 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
       {showPictureFrame && galleryPhotos.length > 0 && (
         <PictureFrame
           photos={galleryPhotos}
-          childName={data.child?.first_name}
+          children={data.children}
           onWake={() => {
             setShowPictureFrame(false);
             // Remove ?slideshow=true from URL so it doesn't restart

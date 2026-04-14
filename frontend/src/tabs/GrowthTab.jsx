@@ -15,6 +15,7 @@ import CustomTooltip from "../components/CustomTooltip";
 import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
 import WHOGrowthChart from "../components/WHOGrowthChart";
+import AddButton from "../components/AddButton";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
@@ -22,7 +23,7 @@ import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailySleepTotals,
 import { usePreferences } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
-export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry }) {
+export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
   const { prefs } = usePreferences();
@@ -131,8 +132,14 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               borderRadius: 16,
               padding: "20px 22px",
               border: "1px solid var(--border)",
+              position: "relative",
             }}
           >
+            {canWrite("weight") && (
+              <div style={{ position: "absolute", top: 10, right: 10 }}>
+                <AddButton onClick={() => onEditEntry?.("weight")} color={colors.growth} label={t("growth.weight")} />
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div
                 style={{
@@ -170,8 +177,14 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               borderRadius: 16,
               padding: "20px 22px",
               border: "1px solid var(--border)",
+              position: "relative",
             }}
           >
+            {canWrite("height") && (
+              <div style={{ position: "absolute", top: 10, right: 10 }}>
+                <AddButton onClick={() => onEditEntry?.("height")} color={colors.height} label={t("growth.height")} />
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div
                 style={{
@@ -203,7 +216,12 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         <div className="fade-in fade-in-3">
-          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)" }}>
+          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)", position: "relative" }}>
+            {canWrite("headcirc") && (
+              <div style={{ position: "absolute", top: 10, right: 10 }}>
+                <AddButton onClick={() => onEditEntry?.("headcirc")} color={colors.growth} label={t("growth.headCirc")} />
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.growth}18`, color: colors.growth, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.Baby />
@@ -222,7 +240,12 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         <div className="fade-in fade-in-4">
-          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)" }}>
+          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)", position: "relative" }}>
+            {canWrite("bmi") && (
+              <div style={{ position: "absolute", top: 10, right: 10 }}>
+                <AddButton onClick={() => onEditEntry?.("bmi")} color={colors.feeding} label={t("growth.bmi")} />
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.feeding}18`, color: colors.feeding, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.TrendUp />

@@ -42,6 +42,14 @@ const DEFAULT_PREFERENCES = {
     showMedication: false,
     showNote: false,
     childIds: [], // empty = all children
+    // Live status overlay items — shown discretely at the bottom of the slideshow
+    overlay: {
+      timers: false,        // active timers (live tick)
+      lastFeeding: false,   // time since last feeding
+      lastSleep: false,     // time since last sleep
+      lastDiaper: false,    // time since last diaper change
+      currentTime: false,   // wall clock
+    },
   },
 
   // Form defaults
@@ -70,7 +78,11 @@ function loadPreferences() {
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,
-        pictureFrame: { ...DEFAULT_PREFERENCES.pictureFrame, ...parsed.pictureFrame },
+        pictureFrame: {
+          ...DEFAULT_PREFERENCES.pictureFrame,
+          ...parsed.pictureFrame,
+          overlay: { ...DEFAULT_PREFERENCES.pictureFrame.overlay, ...parsed.pictureFrame?.overlay },
+        },
         defaults: {
           feeding: { ...DEFAULT_PREFERENCES.defaults.feeding, ...parsed.defaults?.feeding },
           diaper: { ...DEFAULT_PREFERENCES.defaults.diaper, ...parsed.defaults?.diaper },

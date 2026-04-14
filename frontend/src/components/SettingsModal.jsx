@@ -199,6 +199,37 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                         </label>
                       ))}
                     </div>
+
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                        {t("settings.pictureFrameOverlay")}
+                      </div>
+                      <p className="settings-hint" style={{ marginBottom: 8 }}>
+                        {t("settings.pictureFrameOverlayHint")}
+                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                        {[
+                          { key: "lastFeeding", labelKey: "settings.overlayLastFeeding" },
+                          { key: "lastSleep", labelKey: "settings.overlayLastSleep" },
+                          { key: "lastDiaper", labelKey: "settings.overlayLastDiaper" },
+                          { key: "timers", labelKey: "settings.overlayTimers" },
+                          { key: "currentTime", labelKey: "settings.overlayCurrentTime" },
+                        ].map(({ key, labelKey }) => (
+                          <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 4px", cursor: "pointer", fontSize: 12, color: "var(--text-muted)" }}>
+                            <input
+                              type="checkbox"
+                              checked={!!prefs.pictureFrame.overlay?.[key]}
+                              onChange={(e) => setPref("pictureFrame", {
+                                ...prefs.pictureFrame,
+                                overlay: { ...prefs.pictureFrame.overlay, [key]: e.target.checked },
+                              })}
+                              style={{ width: 14, height: 14, accentColor: "#6C5CE7" }}
+                            />
+                            {t(labelKey)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
