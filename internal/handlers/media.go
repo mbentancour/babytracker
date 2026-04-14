@@ -84,11 +84,18 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := filepath.Join(h.cfg.DataDir, cleaned)
+	// PhotosDir() returns MediaPath when configured, otherwise DataDir/photos.
+	// The URL path includes "photos/" prefix, so strip it to get the filename.
+	justFilename := cleaned
+	if strings.HasPrefix(cleaned, "photos/") {
+		justFilename = strings.TrimPrefix(cleaned, "photos/")
+	}
 
-	absData, _ := filepath.Abs(h.cfg.DataDir)
+	fullPath := filepath.Join(h.cfg.PhotosDir(), justFilename)
+
+	absBase, _ := filepath.Abs(h.cfg.PhotosDir())
 	absFile, _ := filepath.Abs(fullPath)
-	if !strings.HasPrefix(absFile, absData) {
+	if !strings.HasPrefix(absFile, absBase) {
 		pagination.WriteError(w, http.StatusForbidden, "access denied")
 		return
 	}

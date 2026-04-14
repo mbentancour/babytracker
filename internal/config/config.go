@@ -80,6 +80,11 @@ func generateRandomSecret() string {
 }
 
 func (c *Config) PhotosDir() string {
+	// When HA media path is configured, store photos there so they
+	// appear in HA's media browser and are included in HA backups.
+	if c.MediaPath != "" {
+		return c.MediaPath
+	}
 	return filepath.Join(c.DataDir, "photos")
 }
 
