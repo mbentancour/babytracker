@@ -15,7 +15,9 @@ if [ ! -f /etc/ssl/certs/babytracker.crt ]; then
         -subj "/CN=babytracker.local" \
         -addext "subjectAltName=DNS:babytracker.local,DNS:babytracker,IP:192.168.4.1"
     chmod 640 /etc/ssl/private/babytracker.key
-    chgrp babytracker /etc/ssl/private/babytracker.key
+    chgrp ssl-cert /etc/ssl/private/babytracker.key
+    # /etc/ssl/private is 0710 root:ssl-cert in Debian — babytracker user needs ssl-cert membership
+    usermod -aG ssl-cert babytracker
     echo "TLS certificate generated."
 fi
 
@@ -64,5 +66,19 @@ fi
 echo "Setting hostname to babytracker..."
 hostnamectl set-hostname babytracker
 sed -i 's/127\.0\.1\.1.*/127.0.1.1\tbabytracker/' /etc/hosts || true
+
+# 5. Configure UFW with setup-mode rules (setup-wifi.sh resets to production rules after setup)
+if ! ufw status | grep -q "Status: active"; then
+    echo "Configuring firewall (setup mode)..."
+    ufw --force reset
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw allow 53/udp comment "DNS captive portal"
+    ufw allow 67/udp comment "DHCP captive portal"
+    ufw allow 80/tcp comment "HTTP captive portal"
+    ufw allow 8099/tcp comment "BabyTracker HTTPS"
+    ufw allow 443/tcp comment "BabyTracker ACME"
+    ufw --force enable
+fi
 
 echo "=== First boot setup complete ==="

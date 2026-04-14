@@ -67,18 +67,9 @@ mmdebstrap:
     # Disable SSH — appliance is managed via the web UI only
     - chroot $1 systemctl disable ssh
 
-    # Configure UFW with the setup-mode rules. setup-wifi.sh re-resets to production rules.
-    - |
-      chroot $1 sh -c '
-        ufw default deny incoming
-        ufw default allow outgoing
-        ufw allow 53/udp comment "DNS captive portal"
-        ufw allow 67/udp comment "DHCP captive portal"
-        ufw allow 80/tcp comment "HTTP captive portal"
-        ufw allow 8099/tcp comment "BabyTracker HTTPS"
-        ufw allow 443/tcp comment "BabyTracker ACME"
-        ufw --force enable
-      '
+    # UFW is configured on first boot by firstboot.sh — can't run ufw inside
+    # the chroot because it needs kernel netfilter access (unavailable in the
+    # bdebstrap unshare namespace).
 
     # Enable our systemd units. Both have ConditionPathExists guards on .needs-setup.
     - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-firstboot

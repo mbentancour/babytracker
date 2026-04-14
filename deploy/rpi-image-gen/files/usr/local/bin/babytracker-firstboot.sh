@@ -67,4 +67,18 @@ echo "Setting hostname to babytracker..."
 hostnamectl set-hostname babytracker
 sed -i 's/127\.0\.1\.1.*/127.0.1.1\tbabytracker/' /etc/hosts || true
 
+# 5. Configure UFW with setup-mode rules (setup-wifi.sh resets to production rules after setup)
+if ! ufw status | grep -q "Status: active"; then
+    echo "Configuring firewall (setup mode)..."
+    ufw --force reset
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw allow 53/udp comment "DNS captive portal"
+    ufw allow 67/udp comment "DHCP captive portal"
+    ufw allow 80/tcp comment "HTTP captive portal"
+    ufw allow 8099/tcp comment "BabyTracker HTTPS"
+    ufw allow 443/tcp comment "BabyTracker ACME"
+    ufw --force enable
+fi
+
 echo "=== First boot setup complete ==="
