@@ -1,4 +1,0 @@
-DROP TABLE IF EXISTS user_children;
-DROP TABLE IF EXISTS role_permissions;
-DROP TABLE IF EXISTS roles;
-ALTER TABLE users DROP COLUMN IF EXISTS is_admin;

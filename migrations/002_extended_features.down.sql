@@ -1,8 +1,0 @@
-DROP TABLE IF EXISTS webhooks;
-DROP TABLE IF EXISTS api_tokens;
-DROP TABLE IF EXISTS reminders;
-DROP TABLE IF EXISTS milestones;
-DROP TABLE IF EXISTS medications;
-DROP TABLE IF EXISTS entry_tags;
-DROP TABLE IF EXISTS tags;
-DROP TABLE IF EXISTS head_circumference;
