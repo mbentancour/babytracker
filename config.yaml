@@ -32,7 +32,7 @@ options:
   demo_mode: false
 schema:
   mode: "list(standalone|external)"
-  external_url: "url?"
+  external_url: "str?"
   unit_system: "list(metric|imperial)"
   backup_frequency: "list(disabled|6h|12h|daily|weekly)"
   demo_mode: bool
