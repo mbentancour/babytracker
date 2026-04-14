@@ -1,5 +1,5 @@
 name: "BabyTracker"
-version: "1.0.5"
+version: "1.0.6"
 slug: "babytracker"
 description: >-
   A modern, self-contained baby tracking application with charts, timers,
