@@ -1,5 +1,5 @@
 name: "BabyTracker"
-version: "1.0.4"
+version: "1.0.5"
 slug: "babytracker"
 description: >-
   A modern, self-contained baby tracking application with charts, timers,
@@ -25,7 +25,7 @@ map:
   - type: data
     read_only: false
   - type: media
-    read_only: true
+    read_only: false
 options:
   mode: "standalone"
   external_url: ""
