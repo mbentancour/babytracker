@@ -2,20 +2,20 @@ configuration:
   mode:
     name: Mode
     description: >- 
-      "standalone" runs BabyTracker with a built-in database (all data stored locally).
+      "local" runs BabyTracker with a built-in database (all data stored locally).
       "external" connects to an existing BabyTracker instance running elsewhere on your network.
   external_url:
     name: External BabyTracker URL
     description: >-
       Only used in "external" mode. Full URL to your BabyTracker instance
-      (e.g., http://192.168.1.100:8099). Leave empty for standalone mode.
+      (e.g., http://192.168.1.100:8099). Leave empty for local mode.
   unit_system:
     name: Unit System
     description: "Unit labels for measurements (metric: kg, cm, mL, °C — imperial: lb, in, oz, °F)"
   backup_frequency:
     name: Backup Frequency
     description: >-
-      How often to create automatic backups (standalone mode only).
+      How often to create automatic backups (local mode only).
       Set to "disabled" if Home Assistant manages backups.
   demo_mode:
     name: Demo Mode

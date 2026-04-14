@@ -53,6 +53,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
 	displayH := handlers.NewDisplayHandler(db)
+	domainH := handlers.NewDomainHandler(db)
+	systemH := handlers.NewSystemHandler()
 
 	// Auth routes (public, rate-limited)
 	r.Group(func(r chi.Router) {
@@ -66,6 +68,16 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 	// Config endpoint (public - needed before login for demo mode detection)
 	r.Get("/api/config", configH.Get)
+
+	// Setup endpoints (public during setup mode, blocked otherwise)
+	setupH := handlers.NewSetupHandler(cfg)
+	r.Get("/api/setup/status", setupH.Status)
+	r.Group(func(r chi.Router) {
+		r.Use(setupH.RequireSetupMode)
+		r.Get("/api/setup/wifi/scan", setupH.WifiScan)
+		r.Post("/api/setup/wifi/connect", setupH.WifiConnect)
+		r.Post("/api/setup/complete", setupH.Complete)
+	})
 
 	// Media serving (authenticated via JWT header OR refresh_token cookie)
 	r.Get("/api/media/*", mediaH.ServePhoto)
@@ -238,6 +250,14 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Delete("/api/roles/{id}/", usersH.DeleteRole)
 
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)
+
+		// Domain/TLS settings (admin only — handler checks is_admin)
+		r.Get("/api/settings/domain", domainH.Get)
+		r.Put("/api/settings/domain", domainH.Set)
+
+		// System controls (admin only — handler checks is_admin)
+		r.Post("/api/system/restart", systemH.Restart)
+		r.Post("/api/system/shutdown", systemH.Shutdown)
 	})
 
 	// Upload routes (auth required, NO body size limit — handlers set their own)

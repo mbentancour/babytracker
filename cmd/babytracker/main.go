@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"embed"
 	"flag"
 	"io/fs"
@@ -12,6 +13,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
@@ -37,6 +41,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	var handler http.Handler
+	var db *sqlx.DB
 
 	if cfg.IsProxyMode() {
 		// ========================================
@@ -53,9 +58,10 @@ func main() {
 
 	} else {
 		// ========================================
-		// STANDALONE MODE: full app with database
+		// LOCAL MODE: full app with database
 		// ========================================
-		db, err := database.Connect(cfg.DatabaseURL)
+		var err error
+		db, err = database.Connect(cfg.DatabaseURL)
 		if err != nil {
 			slog.Error("failed to connect to database", "error", err)
 			os.Exit(1)
@@ -119,6 +125,17 @@ func main() {
 		handler = router.New(db, cfg)
 	}
 
+	// Resolve TLS domain: env var takes precedence, then DB setting
+	tlsDomain := cfg.TLSDomain
+	if tlsDomain == "" && !cfg.IsProxyMode() && !cfg.SetupMode {
+		var savedDomain string
+		if db != nil {
+			if err := db.Get(&savedDomain, `SELECT value FROM settings WHERE key = 'tls_domain'`); err == nil {
+				tlsDomain = savedDomain
+			}
+		}
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
@@ -133,13 +150,86 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	useTLS := cfg.TLSCert != "" && cfg.TLSKey != ""
+
 	go func() {
-		slog.Info("starting server", "port", cfg.Port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("server error", "error", err)
-			os.Exit(1)
+		if useTLS {
+			slog.Info("starting HTTPS server", "port", cfg.Port)
+			if err := srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			slog.Info("starting HTTP server", "port", cfg.Port)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
+			}
 		}
 	}()
+
+	// Additional listeners based on mode
+	var httpSrv *http.Server
+	var autocertSrv *http.Server
+
+	if cfg.SetupMode {
+		// In setup mode, listen on port 80 for captive portal (HTTP, no redirect)
+		httpSrv = &http.Server{
+			Addr:              ":80",
+			Handler:           handler,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+		go func() {
+			slog.Info("starting HTTP captive portal listener", "port", 80)
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Warn("captive portal listener error", "error", err)
+			}
+		}()
+	} else if tlsDomain != "" {
+		// Let's Encrypt autocert on :443 with HTTP-01 challenge on :80
+		os.MkdirAll(cfg.CertsDir, 0700)
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(tlsDomain),
+			Cache:      autocert.DirCache(cfg.CertsDir),
+		}
+
+		autocertSrv = &http.Server{
+			Addr:    ":443",
+			Handler: handler,
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+				MinVersion:     tls.VersionTLS12,
+			},
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       5 * time.Minute,
+			WriteTimeout:      5 * time.Minute,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func() {
+			slog.Info("starting Let's Encrypt HTTPS server", "domain", tlsDomain, "port", 443)
+			if err := autocertSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				slog.Error("autocert server error", "error", err)
+			}
+		}()
+
+		// HTTP :80 handles ACME challenges and redirects everything else to HTTPS
+		httpSrv = &http.Server{
+			Addr:              ":80",
+			Handler:           certManager.HTTPHandler(http.HandlerFunc(httpToHTTPSRedirect(tlsDomain))),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+		go func() {
+			slog.Info("starting HTTP->HTTPS redirect + ACME listener", "port", 80)
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Warn("HTTP redirect listener error", "error", err)
+			}
+		}()
+	}
 
 	<-ctx.Done()
 	slog.Info("shutting down server")
@@ -147,7 +237,20 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	if httpSrv != nil {
+		httpSrv.Shutdown(shutdownCtx)
+	}
+	if autocertSrv != nil {
+		autocertSrv.Shutdown(shutdownCtx)
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)
+	}
+}
+
+func httpToHTTPSRedirect(domain string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + domain + r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	}
 }

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../api";
-import { FormField, FormInput, FormSelect } from "./Modal";
+import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
 import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { id: "users", label: "settings.users", icon: <Icons.Baby /> },
 ];
 
-export default function SettingsModal({ childId, unitSystem, children, isAdmin, onClose, onLogout, onRefetch }) {
+export default function SettingsModal({ childId, unitSystem, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("general");
   const [units, setUnits] = useState(unitSystem || "metric");
@@ -220,6 +220,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </p>
                 </div>
 
+                {onLogout && applianceMode && <DomainSection />}
+
                 {onLogout && <ChangePasswordSection />}
 
                 {onLogout && (
@@ -227,6 +229,31 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     <Icons.Logout />
                     {t("settings.signOut")}
                   </button>
+                )}
+
+                {onLogout && applianceMode && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <button
+                      className="settings-system-btn"
+                      onClick={() => {
+                        if (confirm(t("settings.restartConfirm"))) {
+                          api.restartSystem().catch(() => {});
+                        }
+                      }}
+                    >
+                      {t("settings.restart")}
+                    </button>
+                    <button
+                      className="settings-system-btn settings-system-btn-danger"
+                      onClick={() => {
+                        if (confirm(t("settings.shutdownConfirm"))) {
+                          api.shutdownSystem().catch(() => {});
+                        }
+                      }}
+                    >
+                      {t("settings.shutdown")}
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -358,6 +385,12 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
                 {/* Backups (admin only) */}
                 {isAdmin && <BackupSection />}
+
+                {/* API Tokens (admin only) */}
+                {isAdmin && <APITokensSection />}
+
+                {/* Webhooks (admin only) */}
+                {isAdmin && <WebhooksSection />}
               </div>
             )}
 
@@ -547,6 +580,62 @@ function BackupSection() {
   );
 }
 
+function DomainSection() {
+  const { t } = useI18n();
+  const [domain, setDomain] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.getDomain()
+      .then((data) => { setDomain(data.domain || ""); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const data = await api.setDomain(domain.trim());
+      setMessage({ type: "success", text: data.message || t("settings.domainSaved") });
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || t("settings.domainError") });
+    }
+    setSaving(false);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="settings-card" style={{ marginTop: 16 }}>
+      <h4 className="settings-section-subtitle">{t("settings.customDomain")}</h4>
+      <p className="settings-hint">{t("settings.customDomainHint")}</p>
+      <FormField label={t("settings.domainLabel")}>
+        <FormInput
+          type="text"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          placeholder="baby.example.com"
+        />
+      </FormField>
+      {domain.trim() && (
+        <p className="settings-hint" style={{ color: "#e17055", fontSize: 11 }}>
+          {t("settings.domainPortWarning")}
+        </p>
+      )}
+      {message && (
+        <p className="settings-hint" style={{ color: message.type === "success" ? "#00b894" : "#e74c3c" }}>
+          {message.text}
+        </p>
+      )}
+      <FormButton color="#6C5CE7" disabled={saving} onClick={handleSave}>
+        {saving ? t("form.saving") : t("settings.saveDomain")}
+      </FormButton>
+    </div>
+  );
+}
+
 function ChangePasswordSection() {
   const { t } = useI18n();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -605,6 +694,218 @@ function ChangePasswordSection() {
           {saving ? t("settings.changing") : t("settings.changePasswordBtn")}
         </button>
       </form>
+    </div>
+  );
+}
+
+function APITokensSection() {
+  const { t } = useI18n();
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [permissions, setPermissions] = useState("read");
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState(null);
+
+  const refresh = () => {
+    api.getAPITokens()
+      .then((data) => setTokens(data.results || []))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const result = await api.createAPIToken({ name, permissions });
+      setNewToken(result.token);
+      setName("");
+      setShowCreate(false);
+      refresh();
+    } catch {
+      setCreating(false);
+    }
+    setCreating(false);
+  };
+
+  return (
+    <div className="settings-card" style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h4 className="settings-card-title" style={{ margin: 0 }}>{t("settings.apiTokens")}</h4>
+        <button
+          onClick={() => { setShowCreate(!showCreate); setNewToken(null); }}
+          style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          {showCreate ? t("users.cancel") : t("settings.createToken")}
+        </button>
+      </div>
+      <p className="settings-hint">{t("settings.apiTokensHint")}</p>
+
+      {newToken && (
+        <div style={{ background: "#00b89418", border: "1px solid #00b89440", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#00b894", marginBottom: 4 }}>{t("settings.tokenCreated")}</div>
+          <code style={{ fontSize: 12, wordBreak: "break-all", color: "var(--text)" }}>{newToken}</code>
+          <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>{t("settings.tokenCopyWarning")}</div>
+        </div>
+      )}
+
+      {showCreate && (
+        <form onSubmit={handleCreate} style={{ marginBottom: 12 }}>
+          <FormField label={t("settings.tokenName")}>
+            <FormInput type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Home Assistant" />
+          </FormField>
+          <FormField label={t("settings.tokenPermissions")}>
+            <FormSelect
+              value={permissions}
+              onChange={(e) => setPermissions(e.target.value)}
+              options={[
+                { value: "read", label: t("settings.tokenRead") },
+                { value: "read_write", label: t("settings.tokenReadWrite") },
+              ]}
+            />
+          </FormField>
+          <FormButton color="#6C5CE7" disabled={creating}>
+            {creating ? t("users.creating") : t("settings.createToken")}
+          </FormButton>
+        </form>
+      )}
+
+      {loading ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("general.loading")}</div>
+      ) : tokens.length === 0 ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("settings.noTokens")}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {tokens.map((tk) => (
+            <div key={tk.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "var(--card-bg)", fontSize: 12 }}>
+              <div>
+                <span style={{ fontWeight: 600, color: "var(--text)" }}>{tk.name}</span>
+                <span style={{ color: "var(--text-dim)", marginLeft: 8 }}>{tk.permissions}</span>
+              </div>
+              <button
+                className="delete-entry-btn"
+                style={{ fontSize: 11 }}
+                onClick={async () => {
+                  if (confirm(t("settings.deleteTokenConfirm"))) {
+                    await api.deleteAPIToken(tk.id);
+                    refresh();
+                  }
+                }}
+              >
+                {t("users.revoke")}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebhooksSection() {
+  const { t } = useI18n();
+  const [webhooks, setWebhooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [events, setEvents] = useState("*");
+  const [creating, setCreating] = useState(false);
+
+  const refresh = () => {
+    api.getWebhooks()
+      .then((data) => setWebhooks(data.results || []))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      await api.createWebhook({ name, url, secret, events, active: true });
+      setName(""); setUrl(""); setSecret(""); setEvents("*");
+      setShowCreate(false);
+      refresh();
+    } catch { /* ignore */ }
+    setCreating(false);
+  };
+
+  return (
+    <div className="settings-card" style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h4 className="settings-card-title" style={{ margin: 0 }}>{t("settings.webhooks")}</h4>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          style={{ fontSize: 12, color: "#6C5CE7", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+        >
+          {showCreate ? t("users.cancel") : t("settings.addWebhook")}
+        </button>
+      </div>
+      <p className="settings-hint">{t("settings.webhooksHint")}</p>
+
+      {showCreate && (
+        <form onSubmit={handleCreate} style={{ marginBottom: 12 }}>
+          <FormField label={t("settings.webhookName")}>
+            <FormInput type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Notify on feeding" />
+          </FormField>
+          <FormField label={t("settings.webhookUrl")}>
+            <FormInput type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://example.com/webhook" />
+          </FormField>
+          <FormField label={t("settings.webhookSecret")}>
+            <FormInput type="text" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={t("form.optional")} />
+          </FormField>
+          <FormField label={t("settings.webhookEvents")}>
+            <FormInput type="text" value={events} onChange={(e) => setEvents(e.target.value)} placeholder="* (all events)" />
+          </FormField>
+          <FormButton color="#6C5CE7" disabled={creating}>
+            {creating ? t("users.creating") : t("settings.addWebhook")}
+          </FormButton>
+        </form>
+      )}
+
+      {loading ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("general.loading")}</div>
+      ) : webhooks.length === 0 ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("settings.noWebhooks")}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {webhooks.map((wh) => (
+            <div key={wh.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "var(--card-bg)", fontSize: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: "var(--text)" }}>{wh.name}</div>
+                <div style={{ color: "var(--text-dim)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{wh.url}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <span style={{
+                  fontSize: 10, padding: "2px 6px", borderRadius: 4,
+                  background: wh.active ? "#00b89418" : "#e74c3c18",
+                  color: wh.active ? "#00b894" : "#e74c3c",
+                }}>
+                  {wh.active ? t("settings.webhookActive") : t("settings.webhookInactive")}
+                </span>
+                <button
+                  className="delete-entry-btn"
+                  style={{ fontSize: 11 }}
+                  onClick={async () => {
+                    if (confirm(t("settings.deleteWebhookConfirm"))) {
+                      await api.deleteWebhook(wh.id);
+                      refresh();
+                    }
+                  }}
+                >
+                  x
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

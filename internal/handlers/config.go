@@ -20,5 +20,7 @@ func (h *ConfigHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"refresh_interval": h.cfg.RefreshInterval,
 		"demo_mode":        h.cfg.DemoMode,
 		"unit_system":      h.cfg.UnitSystem,
+		"setup_mode":       h.cfg.SetupMode,
+		"appliance_mode":   h.cfg.TLSCert != "",
 	})
 }

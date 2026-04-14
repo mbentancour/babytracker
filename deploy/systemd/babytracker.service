@@ -1,0 +1,26 @@
+[Unit]
+Description=BabyTracker Web Application
+After=network.target postgresql.service
+Requires=postgresql.service
+ConditionPathExists=!/var/lib/babytracker/.needs-setup
+
+[Service]
+Type=simple
+User=babytracker
+Group=babytracker
+EnvironmentFile=/etc/babytracker/babytracker.env
+ExecStart=/usr/local/bin/babytracker
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/babytracker
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=BabyTracker First Boot Setup
+After=local-fs.target
+Before=babytracker-setup-ap.service
+ConditionPathExists=/var/lib/babytracker/.needs-setup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/babytracker-firstboot.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

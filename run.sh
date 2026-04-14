@@ -44,9 +44,9 @@ if [ "${MODE}" = "external" ]; then
 
 else
     ##############################################
-    # STANDALONE MODE: local PostgreSQL + app
+    # LOCAL MODE: built-in PostgreSQL + app
     ##############################################
-    bashio::log.info "Starting BabyTracker in standalone mode"
+    bashio::log.info "Starting BabyTracker in local mode"
 
     # Initialize PostgreSQL if needed
     if [ ! -f "${PG_DATA}/PG_VERSION" ]; then

@@ -1,0 +1,67 @@
+name: Build Pi Image
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Copy frontend to embed directory
+        run: |
+          rm -rf internal/router/static/*
+          cp -r frontend/dist/* internal/router/static/
+
+      - name: Cross-compile binary for arm64
+        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o deploy/pi-gen/stage-babytracker/01-install-app/files/babytracker ./cmd/babytracker/
+
+      - name: Copy support files
+        run: |
+          cp scripts/firstboot.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
+          cp scripts/setup-wifi.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
+          cp deploy/systemd/*.service deploy/pi-gen/stage-babytracker/02-systemd-services/files/
+
+      - name: Clone pi-gen
+        run: git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git /tmp/pi-gen
+
+      - name: Configure pi-gen
+        run: |
+          ln -s $GITHUB_WORKSPACE/deploy/pi-gen/stage-babytracker /tmp/pi-gen/stage-babytracker
+          cp deploy/pi-gen/config /tmp/pi-gen/config
+          touch /tmp/pi-gen/stage3/SKIP /tmp/pi-gen/stage4/SKIP /tmp/pi-gen/stage5/SKIP
+          touch /tmp/pi-gen/stage3/SKIP_IMAGES /tmp/pi-gen/stage4/SKIP_IMAGES /tmp/pi-gen/stage5/SKIP_IMAGES
+          touch /tmp/pi-gen/stage2/SKIP_IMAGES
+
+      - name: Build image
+        run: cd /tmp/pi-gen && sudo ./build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: babytracker-pi-image
+          path: /tmp/pi-gen/deploy/*.img.xz
+          if-no-files-found: warn
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/pi-gen/deploy/*.img.xz

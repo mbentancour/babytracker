@@ -363,6 +363,15 @@ export const api = {
     });
   },
 
+  // Domain/TLS settings (admin)
+  getDomain: () => request("settings/domain"),
+  setDomain: (domain) =>
+    request("settings/domain", { method: "PUT", body: JSON.stringify({ domain }) }),
+
+  // System controls (admin)
+  restartSystem: () => request("system/restart", { method: "POST" }),
+  shutdownSystem: () => request("system/shutdown", { method: "POST" }),
+
   // User management (admin)
   getUsers: () => request("users/"),
   createUser: (data) =>

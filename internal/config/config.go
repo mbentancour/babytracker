@@ -19,6 +19,11 @@ type Config struct {
 	BackupFrequency string // "disabled", "6h", "12h", "daily", "weekly"
 	ProxyURL        string // If set, proxy all requests to this URL (external mode)
 	MediaPath       string // Path to scan for external photos (HA media directory)
+	TLSCert         string // Path to TLS certificate file (self-signed)
+	TLSKey          string // Path to TLS private key file (self-signed)
+	TLSDomain       string // Custom domain for Let's Encrypt autocert (empty = disabled)
+	CertsDir        string // Directory for autocert certificate cache
+	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
 }
 
 func (c *Config) IsProxyMode() bool {
@@ -44,6 +49,11 @@ func New() *Config {
 		BackupFrequency: envOrDefault("BACKUP_FREQUENCY", "daily"),
 		ProxyURL:        os.Getenv("BABYTRACKER_PROXY_URL"),
 		MediaPath:       os.Getenv("MEDIA_PATH"),
+		TLSCert:         os.Getenv("TLS_CERT"),
+		TLSKey:          os.Getenv("TLS_KEY"),
+		TLSDomain:       os.Getenv("TLS_DOMAIN"),
+		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
+		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
 	}
 }
 
@@ -97,4 +107,9 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

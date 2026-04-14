@@ -26,6 +26,7 @@ import PumpingForm from "./components/forms/PumpingForm";
 import BMIForm from "./components/forms/BMIForm";
 import TimerButton from "./components/TimerButton";
 import LoginScreen from "./components/LoginScreen";
+import SetupWizard from "./components/SetupWizard";
 import OnboardingScreen from "./components/OnboardingScreen";
 import ChildForm from "./components/forms/ChildForm";
 import EditChildForm from "./components/forms/EditChildForm";
@@ -95,6 +96,7 @@ export default function App() {
   const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup, login, authenticated
   const [demoMode, setDemoMode] = useState(false);
+  const [applianceMode, setApplianceMode] = useState(false);
 
   const handleLogout = useCallback(() => {
     setAccessToken(null);
@@ -111,6 +113,11 @@ export default function App() {
       api.getConfig().catch(() => ({ demo_mode: false })),
     ]).then(([status, config]) => {
       setDemoMode(config.demo_mode);
+      setApplianceMode(config.appliance_mode || false);
+      if (config.setup_mode) {
+        setAuthState("wifi-setup");
+        return;
+      }
       if (config.demo_mode) {
         setAuthState("authenticated");
         return;
@@ -142,6 +149,10 @@ export default function App() {
     );
   }
 
+  if (authState === "wifi-setup") {
+    return <SetupWizard />;
+  }
+
   if (authState === "setup" || authState === "login") {
     return (
       <LoginScreen
@@ -151,10 +162,10 @@ export default function App() {
     );
   }
 
-  return <Dashboard demoMode={demoMode} onLogout={handleLogout} />;
+  return <Dashboard demoMode={demoMode} applianceMode={applianceMode} onLogout={handleLogout} />;
 }
 
-function Dashboard({ demoMode, onLogout }) {
+function Dashboard({ demoMode, applianceMode, onLogout }) {
   const { t: tr } = useI18n();
   const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
   const [activeTab, setActiveTab] = useState("overview");
@@ -849,6 +860,7 @@ function Dashboard({ demoMode, onLogout }) {
           unitSystem={data.unitSystem}
           children={data.children}
           isAdmin={isAdmin}
+          applianceMode={applianceMode}
           onClose={closeModal}
           onLogout={demoMode ? undefined : onLogout}
           onRefetch={data.refetch}

@@ -1,0 +1,31 @@
+[Unit]
+Description=BabyTracker Setup Access Point and Portal
+After=babytracker-firstboot.service network.target
+Requires=babytracker-firstboot.service
+ConditionPathExists=/var/lib/babytracker/.needs-setup
+
+[Service]
+Type=simple
+
+# Start AP infrastructure before the app
+ExecStartPre=/usr/bin/ip addr add 192.168.4.1/24 dev wlan0 || true
+ExecStartPre=/usr/bin/systemctl start hostapd
+ExecStartPre=/usr/bin/systemctl start dnsmasq
+ExecStartPre=/usr/sbin/iptables -t nat -A PREROUTING -i wlan0 -p tcp --dport 80 -j REDIRECT --to-port 8099
+
+# Run the BabyTracker binary in setup mode (serves setup wizard)
+User=babytracker
+Group=babytracker
+EnvironmentFile=/etc/babytracker/babytracker.env
+ExecStart=/usr/local/bin/babytracker
+
+# Cleanup when stopped
+ExecStopPost=/usr/sbin/iptables -t nat -D PREROUTING -i wlan0 -p tcp --dport 80 -j REDIRECT --to-port 8099 || true
+ExecStopPost=/usr/bin/systemctl stop hostapd || true
+ExecStopPost=/usr/bin/systemctl stop dnsmasq || true
+ExecStopPost=/usr/bin/ip addr del 192.168.4.1/24 dev wlan0 || true
+
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

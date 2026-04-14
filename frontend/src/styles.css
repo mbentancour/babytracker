@@ -998,6 +998,32 @@ body {
   background: #e74c3c12;
 }
 
+.settings-system-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.settings-system-btn:hover {
+  background: var(--border);
+}
+
+.settings-system-btn-danger {
+  color: #e74c3c;
+  border-color: #e74c3c30;
+}
+
+.settings-system-btn-danger:hover {
+  background: #e74c3c12;
+}
+
 .settings-export-main {
   display: flex;
   align-items: center;

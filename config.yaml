@@ -4,7 +4,7 @@ slug: "babytracker"
 description: >-
   A modern, self-contained baby tracking application with charts, timers,
   photo gallery, picture frame mode, and quick-log actions.
-  Can run standalone with a built-in database or connect to an external
+  Can run locally with a built-in database or connect to an external
   BabyTracker instance.
 url: "https://github.com/mbentancour/babytracker"
 init: false
@@ -27,14 +27,14 @@ map:
   - type: media
     read_only: false
 options:
-  mode: "standalone"
+  mode: "local"
   external_url: ""
   unit_system: "metric"
   backup_frequency: "disabled"
   demo_mode: false
   media_path: ""
 schema:
-  mode: "list(standalone|external)"
+  mode: "list(local|external)"
   external_url: "str?"
   unit_system: "list(metric|imperial)"
   backup_frequency: "list(disabled|6h|12h|daily|weekly)"
