@@ -1,5 +1,5 @@
 IMG_NAME=babytracker
-RELEASE=bookworm
+RELEASE=trixie
 TARGET_HOSTNAME=babytracker
 FIRST_USER_NAME=pi
 FIRST_USER_PASS=disabled

@@ -58,6 +58,12 @@ jobs:
             zip \
             rsync \
             grep
+          # Ensure binfmt handlers are registered for ARM emulation
+          sudo systemctl restart systemd-binfmt || true
+          sudo update-binfmts --enable qemu-arm || true
+          sudo update-binfmts --enable qemu-aarch64 || true
+          # Verify QEMU can execute ARM binaries
+          ls /proc/sys/fs/binfmt_misc/ | grep -i qemu || echo "No QEMU binfmt handlers found"
 
       - name: Clone pi-gen
         run: git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git /tmp/pi-gen
