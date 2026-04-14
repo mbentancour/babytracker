@@ -1,0 +1,76 @@
+# METABEGIN
+# X-Env-Layer-Name: babytracker
+# X-Env-Layer-Desc: Self-contained baby tracking appliance
+# X-Env-Layer-Category: app
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Requires: avahi-daemon
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - postgresql
+    - postgresql-client
+    - hostapd
+    - dnsmasq
+    - avahi-daemon
+    - avahi-utils
+    - ufw
+    - openssl
+    - network-manager
+    - iptables
+    - unattended-upgrades
+    - apt-listchanges
+    - sudo
+
+  customize-hooks:
+    # Create the babytracker system user (no home dir, no login shell)
+    - chroot $1 useradd --system --no-create-home --shell /usr/sbin/nologin babytracker
+
+    # Install the cross-compiled Go binary (placed in the overlay by CI before build)
+    - install -m 755 $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
+    - rm -f $1/usr/local/bin/babytracker.bin
+
+    # Set ownership on application directories
+    - chown -R 0:0 $1/etc/babytracker $1/etc/sudoers.d/babytracker
+    - chmod 440 $1/etc/sudoers.d/babytracker
+    - chmod 640 $1/etc/babytracker/babytracker.env
+    - chroot $1 chown root:babytracker /etc/babytracker/babytracker.env
+
+    # Mark the device as needing first-boot setup
+    - touch $1/var/lib/babytracker/.needs-setup
+    - chroot $1 chown -R babytracker:babytracker /var/lib/babytracker
+    - chmod 750 $1/var/lib/babytracker
+
+    # Disable services we want under our own control (started by setup-ap unit)
+    - chroot $1 systemctl disable hostapd || true
+    - chroot $1 systemctl disable dnsmasq || true
+
+    # Use NetworkManager (default in Trixie) — disable dhcpcd if present
+    - chroot $1 systemctl enable NetworkManager || true
+    - chroot $1 systemctl disable dhcpcd || true
+
+    # Lock the default 'pi' user — image must not be exploitable via console/SSH
+    - chroot $1 passwd -l pi || true
+    - chroot $1 usermod -s /usr/sbin/nologin pi || true
+
+    # Disable SSH (rootfs-overlay drops the unit but make sure)
+    - chroot $1 systemctl disable ssh || true
+
+    # Configure UFW with the setup-mode rules. setup-wifi.sh re-resets to production rules.
+    - |
+      chroot $1 sh -c '
+        ufw default deny incoming
+        ufw default allow outgoing
+        ufw allow 53/udp comment "DNS for captive portal"
+        ufw allow 67/udp comment "DHCP for captive portal"
+        ufw allow 80/tcp comment "HTTP redirect for captive portal"
+        ufw allow 8099/tcp comment "BabyTracker HTTPS"
+        ufw allow 443/tcp comment "BabyTracker Let'\''s Encrypt"
+        ufw --force enable
+      '
+
+    # Enable our systemd units. Both have ConditionPathExists guards on .needs-setup.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-firstboot
+    - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-setup-ap
+    - $BDEBSTRAP_HOOKS/enable-units "$1" postgresql
+    - $BDEBSTRAP_HOOKS/enable-units "$1" avahi-daemon

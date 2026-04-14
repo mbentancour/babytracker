@@ -8,8 +8,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Native arm64 runner — no QEMU emulation needed.
+    # Free for public repos.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -30,64 +32,44 @@ jobs:
           rm -rf internal/router/static/*
           cp -r frontend/dist/* internal/router/static/
 
-      - name: Cross-compile binary for arm64
-        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o deploy/pi-gen/stage-babytracker/01-install-app/files/babytracker ./cmd/babytracker/
-
-      - name: Copy support files
+      - name: Build Go binary (native arm64)
         run: |
-          mkdir -p deploy/pi-gen/stage-babytracker/01-install-app/files
-          mkdir -p deploy/pi-gen/stage-babytracker/02-systemd-services/files
-          mkdir -p deploy/pi-gen/stage-babytracker/03-network-config/files
-          cp scripts/firstboot.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
-          cp scripts/setup-wifi.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
-          cp deploy/systemd/*.service deploy/pi-gen/stage-babytracker/02-systemd-services/files/
+          mkdir -p deploy/rpi-image-gen/layer/babytracker.rootfs-overlay/usr/local/bin
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+            -o deploy/rpi-image-gen/layer/babytracker.rootfs-overlay/usr/local/bin/babytracker.bin \
+            ./cmd/babytracker/
 
-      - name: Install pi-gen build dependencies
+      - name: Clone rpi-image-gen
+        run: git clone --depth 1 https://github.com/raspberrypi/rpi-image-gen.git /tmp/rpi-image-gen
+
+      - name: Install rpi-image-gen dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            quilt \
-            qemu-user-binfmt \
-            binfmt-support \
-            debootstrap \
-            libarchive-tools \
-            arch-test \
-            xxd \
-            file \
-            bc \
-            zip \
-            rsync \
-            grep
-          # Ensure binfmt handlers are registered for ARM emulation
-          sudo systemctl restart systemd-binfmt || true
-          sudo update-binfmts --enable qemu-arm || true
-          sudo update-binfmts --enable qemu-aarch64 || true
-          # Verify QEMU can execute ARM binaries
-          ls /proc/sys/fs/binfmt_misc/ | grep -i qemu || echo "No QEMU binfmt handlers found"
+          cd /tmp/rpi-image-gen && sudo ./install_deps.sh
 
-      - name: Clone pi-gen
-        run: git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git /tmp/pi-gen
-
-      - name: Configure pi-gen
+      - name: Build BabyTracker Pi image
         run: |
-          cp -r deploy/pi-gen/stage-babytracker /tmp/pi-gen/stage-babytracker
-          cp deploy/pi-gen/config /tmp/pi-gen/config
-          touch /tmp/pi-gen/stage3/SKIP /tmp/pi-gen/stage4/SKIP /tmp/pi-gen/stage5/SKIP
-          touch /tmp/pi-gen/stage3/SKIP_IMAGES /tmp/pi-gen/stage4/SKIP_IMAGES /tmp/pi-gen/stage5/SKIP_IMAGES
-          touch /tmp/pi-gen/stage2/SKIP_IMAGES
+          cd /tmp/rpi-image-gen
+          ./rpi-image-gen build \
+            -S "$GITHUB_WORKSPACE/deploy/rpi-image-gen" \
+            -c "$GITHUB_WORKSPACE/deploy/rpi-image-gen/config/babytracker.yaml"
 
-      - name: Build image
-        run: cd /tmp/pi-gen && sudo ./build.sh
+      - name: Locate output image
+        id: image
+        run: |
+          IMG=$(find /tmp/rpi-image-gen/work -type f \( -name '*.img.xz' -o -name '*.img' \) | head -n 1)
+          echo "Found image: $IMG"
+          echo "path=$IMG" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: babytracker-pi-image
-          path: /tmp/pi-gen/deploy/*.img.xz
-          if-no-files-found: warn
+          path: ${{ steps.image.outputs.path }}
+          if-no-files-found: error
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: /tmp/pi-gen/deploy/*.img.xz
+          files: ${{ steps.image.outputs.path }}

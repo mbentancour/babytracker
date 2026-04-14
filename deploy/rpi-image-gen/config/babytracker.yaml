@@ -1,0 +1,20 @@
+device:
+  layer: rpi5
+  hostname: babytracker
+  user1: pi
+  user1pass: disabled
+
+image:
+  layer: image-rpios
+  name: babytracker
+  compression: xz
+  boot_part_size: 200%
+  root_part_size: 300%
+
+layer:
+  base: trixie-minbase
+  babytracker: babytracker
+
+locale:
+  default: en_US.UTF-8
+  timezone: UTC
