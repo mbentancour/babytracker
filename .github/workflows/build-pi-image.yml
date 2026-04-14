@@ -34,9 +34,9 @@ jobs:
 
       - name: Build Go binary (native arm64)
         run: |
-          mkdir -p deploy/rpi-image-gen/layer/babytracker.rootfs-overlay/usr/local/bin
+          mkdir -p deploy/rpi-image-gen/rootfs-overlay/usr/local/bin
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
-            -o deploy/rpi-image-gen/layer/babytracker.rootfs-overlay/usr/local/bin/babytracker.bin \
+            -o deploy/rpi-image-gen/rootfs-overlay/usr/local/bin/babytracker.bin \
             ./cmd/babytracker/
 
       - name: Clone rpi-image-gen
