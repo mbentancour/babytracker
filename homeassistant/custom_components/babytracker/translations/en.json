@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to BabyTracker",
+        "description": "Enter the URL of your BabyTracker instance and an API token (Settings \u2192 Integrations \u2192 API Tokens). Use 'read' permission for read-only sensors.",
+        "data": {
+          "url": "URL",
+          "token": "API token",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "URL must include scheme and host (e.g. https://babytracker.local:8099).",
+      "invalid_auth": "The API token was rejected.",
+      "cannot_connect": "Could not reach BabyTracker. Check the URL and that the device is online."
+    },
+    "abort": {
+      "already_configured": "This BabyTracker instance is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_feeding": { "name": "Last feeding" },
+      "last_sleep": { "name": "Last sleep" },
+      "last_diaper": { "name": "Last diaper" },
+      "feedings_today": { "name": "Feedings today" },
+      "feeding_volume_today": { "name": "Feeding volume today" },
+      "sleep_hours_today": { "name": "Sleep today" },
+      "diapers_today": { "name": "Diapers today" }
+    },
+    "binary_sensor": {
+      "active_timer": { "name": "Active timer" }
+    }
+  }
+}

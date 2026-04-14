@@ -1,0 +1,13 @@
+{
+  "domain": "babytracker",
+  "name": "BabyTracker",
+  "version": "0.1.0",
+  "documentation": "https://github.com/mbentancour/babytracker",
+  "issue_tracker": "https://github.com/mbentancour/babytracker/issues",
+  "codeowners": ["@mbentancour"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "integration_type": "service",
+  "requirements": [],
+  "dependencies": []
+}
