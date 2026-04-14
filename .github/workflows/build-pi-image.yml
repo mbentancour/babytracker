@@ -42,10 +42,12 @@ jobs:
           cp scripts/setup-wifi.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
           cp deploy/systemd/*.service deploy/pi-gen/stage-babytracker/02-systemd-services/files/
 
-      - name: Set up QEMU for cross-architecture emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64,arm
+      - name: Install QEMU for cross-architecture emulation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+          sudo update-binfmts --enable qemu-arm
+          sudo update-binfmts --enable qemu-aarch64
 
       - name: Clone pi-gen
         run: git clone --depth 1 https://github.com/RPi-Distro/pi-gen.git /tmp/pi-gen
