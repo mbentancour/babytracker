@@ -17,6 +17,11 @@ type Config struct {
 	RefreshInterval int
 	DemoMode        bool
 	BackupFrequency string // "disabled", "6h", "12h", "daily", "weekly"
+	ProxyURL        string // If set, proxy all requests to this URL (external mode)
+}
+
+func (c *Config) IsProxyMode() bool {
+	return c.ProxyURL != ""
 }
 
 func New() *Config {
@@ -36,6 +41,7 @@ func New() *Config {
 		RefreshInterval: 30,
 		DemoMode:        os.Getenv("DEMO_MODE") == "true",
 		BackupFrequency: envOrDefault("BACKUP_FREQUENCY", "daily"),
+		ProxyURL:        os.Getenv("BABYTRACKER_PROXY_URL"),
 	}
 }
 

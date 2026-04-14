@@ -1,0 +1,38 @@
+name: "BabyTracker"
+version: "1.0.0"
+slug: "babytracker"
+description: >-
+  A modern, self-contained baby tracking application with charts, timers,
+  photo gallery, picture frame mode, and quick-log actions.
+  Can run standalone with a built-in database or connect to an external
+  BabyTracker instance.
+url: "https://github.com/mbentancour/babytracker"
+init: false
+homeassistant: "2025.1.0"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - i386
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: "mdi:baby-face-outline"
+panel_title: "BabyTracker"
+panel_admin: false
+map:
+  - type: data
+    read_only: false
+options:
+  mode: "standalone"
+  external_url: ""
+  unit_system: "metric"
+  backup_frequency: "daily"
+  demo_mode: false
+schema:
+  mode: "list(standalone|external)"
+  external_url: "url?"
+  unit_system: "list(metric|imperial)"
+  backup_frequency: "list(disabled|6h|12h|daily|weekly)"
+  demo_mode: bool

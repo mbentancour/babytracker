@@ -15,6 +15,7 @@ import (
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/database"
+	"github.com/mbentancour/babytracker/internal/handlers"
 	"github.com/mbentancour/babytracker/internal/router"
 )
 
@@ -34,49 +35,69 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	db, err := database.Connect(cfg.DatabaseURL)
-	if err != nil {
-		slog.Error("failed to connect to database", "error", err)
-		os.Exit(1)
-	}
-	defer db.Close()
+	var handler http.Handler
 
-	migFS, err := fs.Sub(migrationsFS, "migrations")
-	if err != nil {
-		slog.Error("failed to access embedded migrations", "error", err)
-		os.Exit(1)
-	}
-	if err := database.RunMigrations(cfg.DatabaseURL, migFS); err != nil {
-		slog.Error("failed to run migrations", "error", err)
-		os.Exit(1)
-	}
+	if cfg.IsProxyMode() {
+		// ========================================
+		// EXTERNAL MODE: reverse proxy
+		// ========================================
+		slog.Info("starting in proxy mode", "target", cfg.ProxyURL)
 
-	// Ensure data directories exist
-	for _, dir := range []string{cfg.PhotosDir(), cfg.BackupsDir()} {
-		if err := os.MkdirAll(dir, 0750); err != nil {
-			slog.Error("failed to create directory", "dir", dir, "error", err)
+		proxy, err := handlers.NewProxyHandler(cfg.ProxyURL)
+		if err != nil {
+			slog.Error("failed to create proxy", "error", err)
 			os.Exit(1)
 		}
-	}
+		handler = proxy
 
-	// Start automatic backup scheduler — DB setting overrides env var
-	backupFreq := cfg.BackupFrequency
-	var savedFreq string
-	if err := db.Get(&savedFreq, `SELECT value FROM settings WHERE key = 'backup_frequency'`); err == nil && savedFreq != "" {
-		backupFreq = savedFreq
-	}
-	backup.StartScheduler(cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), backupFreq)
+	} else {
+		// ========================================
+		// STANDALONE MODE: full app with database
+		// ========================================
+		db, err := database.Connect(cfg.DatabaseURL)
+		if err != nil {
+			slog.Error("failed to connect to database", "error", err)
+			os.Exit(1)
+		}
+		defer db.Close()
 
-	r := router.New(db, cfg)
+		migFS, err := fs.Sub(migrationsFS, "migrations")
+		if err != nil {
+			slog.Error("failed to access embedded migrations", "error", err)
+			os.Exit(1)
+		}
+		if err := database.RunMigrations(cfg.DatabaseURL, migFS); err != nil {
+			slog.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
+
+		// Ensure data directories exist
+		for _, dir := range []string{cfg.PhotosDir(), cfg.BackupsDir()} {
+			if err := os.MkdirAll(dir, 0750); err != nil {
+				slog.Error("failed to create directory", "dir", dir, "error", err)
+				os.Exit(1)
+			}
+		}
+
+		// Start automatic backup scheduler
+		backupFreq := cfg.BackupFrequency
+		var savedFreq string
+		if err := db.Get(&savedFreq, `SELECT value FROM settings WHERE key = 'backup_frequency'`); err == nil && savedFreq != "" {
+			backupFreq = savedFreq
+		}
+		backup.StartScheduler(cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), backupFreq)
+
+		handler = router.New(db, cfg)
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           r,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       5 * time.Minute,
 		WriteTimeout:      5 * time.Minute,
 		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1MB
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	// Graceful shutdown

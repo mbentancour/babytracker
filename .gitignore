@@ -1,6 +1,6 @@
 # Go
 /babytracker
-/babytracker-importlet
+/babytracker-import
 *.exe
 *.test
 *.out
