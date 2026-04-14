@@ -559,7 +559,7 @@ function Dashboard({ demoMode, onLogout }) {
           />
         )}
         {activeTab === "gallery" && (
-          <GalleryTab childId={data.child?.id} canWrite={canWrite("photo")} />
+          <GalleryTab childId={data.child?.id} children={data.children} canWrite={canWrite("photo")} />
         )}
       </main>
 

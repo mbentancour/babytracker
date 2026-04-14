@@ -53,7 +53,7 @@ const TYPE_API_PATH = {
   note: "notes",
 };
 
-export default function GalleryTab({ childId, canWrite = false }) {
+export default function GalleryTab({ childId, children = [], canWrite = false }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -297,25 +297,39 @@ export default function GalleryTab({ childId, canWrite = false }) {
                         {item.detail}
                       </div>
                     )}
-                    {item.entity_type === "shared" && childId && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            await api.assignSharedPhoto(childId, item.photo);
-                            setRefreshKey((k) => k + 1);
-                          } catch { /* ignore */ }
-                        }}
-                        style={{
-                          marginTop: 4, fontSize: 10, fontWeight: 600,
-                          color: "#0984e3", background: "#0984e318",
-                          border: "none", borderRadius: 4,
-                          padding: "3px 8px", cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        Assign to child
-                      </button>
+                    {(item.entity_type === "shared" || item.entity_type === "photo") && children.length > 0 && canWrite && (
+                      <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
+                        {children.map((c) => {
+                          const isTagged = (item.tagged_children || []).includes(c.id);
+                          return (
+                            <button
+                              key={c.id}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const current = item.tagged_children || [];
+                                const next = isTagged
+                                  ? current.filter((id) => id !== c.id)
+                                  : [...current, c.id];
+                                try {
+                                  await api.tagPhoto(item.photo, next);
+                                  setRefreshKey((k) => k + 1);
+                                } catch { /* ignore */ }
+                              }}
+                              style={{
+                                fontSize: 9, fontWeight: 600,
+                                color: isTagged ? "white" : "var(--text-dim)",
+                                background: isTagged ? "#0984e3" : "var(--bg)",
+                                border: `1px solid ${isTagged ? "#0984e3" : "var(--border)"}`,
+                                borderRadius: 4,
+                                padding: "2px 6px", cursor: "pointer",
+                                fontFamily: "inherit",
+                              }}
+                            >
+                              {c.first_name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>

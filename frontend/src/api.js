@@ -320,8 +320,8 @@ export const api = {
 
   // Gallery
   getGallery: (params) => request(`gallery/${qs(params)}`),
-  assignSharedPhoto: (childId, filename) =>
-    request("gallery/assign", { method: "POST", body: JSON.stringify({ child: childId, filename }) }),
+  tagPhoto: (filename, childIds) =>
+    request("gallery/tag", { method: "POST", body: JSON.stringify({ filename, child_ids: childIds }) }),
 
   // Baby Buddy import (admin)
   importFromBabyBuddy: (url, token) =>

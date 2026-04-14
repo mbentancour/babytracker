@@ -29,12 +29,13 @@ func NewGalleryHandler(db *sqlx.DB, cfg *config.Config) *GalleryHandler {
 }
 
 type GalleryItem struct {
-	ID         int     `db:"id" json:"id"`
-	EntityType string  `db:"entity_type" json:"entity_type"`
-	Photo      string  `db:"photo" json:"photo"`
-	Date       string  `db:"date" json:"date"`
-	Label      string  `db:"label" json:"label"`
-	Detail     *string `db:"detail" json:"detail"`
+	ID             int     `db:"id" json:"id"`
+	EntityType     string  `db:"entity_type" json:"entity_type"`
+	Photo          string  `db:"photo" json:"photo"`
+	Date           string  `db:"date" json:"date"`
+	Label          string  `db:"label" json:"label"`
+	Detail         *string `db:"detail" json:"detail"`
+	TaggedChildren []int   `json:"tagged_children,omitempty"`
 }
 
 func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -122,19 +123,16 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Scan PhotosDir for files not tracked in any database table.
-	// These are "shared" photos added directly to the folder (e.g., via HA media browser).
-	// Build a set of all tracked filenames across all tables.
+	// These are "shared" photos — visible to all children until tagged.
 	var allTrackedFiles []string
 	for _, table := range []string{"feedings", "sleep", "changes", "tummy_times", "temperature", "weight", "height", "head_circumference", "pumping", "medications", "milestones", "notes", "bmi"} {
 		var files []string
 		h.db.Select(&files, "SELECT photo FROM "+table+" WHERE photo != ''")
 		allTrackedFiles = append(allTrackedFiles, files...)
 	}
-	// Standalone photos table
 	var photoFiles []string
 	h.db.Select(&photoFiles, "SELECT filename FROM photos")
 	allTrackedFiles = append(allTrackedFiles, photoFiles...)
-	// Child profile pictures
 	var profileFiles []string
 	h.db.Select(&profileFiles, "SELECT picture FROM children WHERE picture != ''")
 	allTrackedFiles = append(allTrackedFiles, profileFiles...)
@@ -142,6 +140,18 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 	tracked := make(map[string]bool, len(allTrackedFiles))
 	for _, f := range allTrackedFiles {
 		tracked[f] = true
+	}
+
+	// Build a map of photo_filename -> tagged child IDs
+	type photoTag struct {
+		Filename string `db:"photo_filename"`
+		ChildID  int    `db:"child_id"`
+	}
+	var tags []photoTag
+	h.db.Select(&tags, "SELECT photo_filename, child_id FROM photo_children")
+	tagMap := make(map[string][]int)
+	for _, t := range tags {
+		tagMap[t.Filename] = append(tagMap[t.Filename], t.ChildID)
 	}
 
 	photosDir := h.cfg.PhotosDir()
@@ -161,14 +171,40 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
+			taggedChildren := tagMap[entry.Name()]
+			// If tagged with specific children, only show for the requested child
+			if len(taggedChildren) > 0 {
+				found := false
+				for _, cid := range taggedChildren {
+					if cid == childID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+			}
+			entityType := "shared"
+			if len(taggedChildren) > 0 {
+				entityType = "photo"
+			}
 			items = append(items, GalleryItem{
-				ID:         0,
-				EntityType: "shared",
-				Photo:      entry.Name(),
-				Date:       info.ModTime().Format("2006-01-02"),
-				Label:      "Shared Photo",
-				Detail:     nil,
+				ID:             0,
+				EntityType:     entityType,
+				Photo:          entry.Name(),
+				Date:           info.ModTime().Format("2006-01-02"),
+				Label:          "Photo",
+				Detail:         nil,
+				TaggedChildren: taggedChildren,
 			})
+		}
+	}
+
+	// Also enrich DB-sourced items with their tags
+	for i := range items {
+		if tc, ok := tagMap[items[i].Photo]; ok && len(items[i].TaggedChildren) == 0 {
+			items[i].TaggedChildren = tc
 		}
 	}
 
@@ -178,22 +214,22 @@ func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Assign claims a shared (untracked) photo by creating a photos table entry for it.
-func (h *GalleryHandler) Assign(w http.ResponseWriter, r *http.Request) {
+// TagPhoto adds or removes child tags on a photo.
+// POST /api/gallery/tag
+func (h *GalleryHandler) TagPhoto(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Child    int    `json:"child"`
 		Filename string `json:"filename"`
+		ChildIDs []int  `json:"child_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Child == 0 || req.Filename == "" {
-		pagination.WriteError(w, http.StatusBadRequest, "child and filename are required")
+	if req.Filename == "" {
+		pagination.WriteError(w, http.StatusBadRequest, "filename is required")
 		return
 	}
 
-	// Validate filename — no path traversal
 	cleaned := filepath.Clean(req.Filename)
 	if strings.Contains(cleaned, "..") || strings.Contains(cleaned, "/") {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid filename")
@@ -201,24 +237,31 @@ func (h *GalleryHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify file exists
-	fullPath := filepath.Join(h.cfg.PhotosDir(), cleaned)
-	info, err := os.Stat(fullPath)
-	if os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(h.cfg.PhotosDir(), cleaned)); os.IsNotExist(err) {
 		pagination.WriteError(w, http.StatusNotFound, "file not found")
 		return
 	}
 
-	// Create a photos table entry
-	date := info.ModTime().Format("2006-01-02")
-	var photo models.Photo
-	err = h.db.QueryRowx(
-		`INSERT INTO photos (child_id, filename, caption, date) VALUES ($1, $2, '', $3) RETURNING *`,
-		req.Child, cleaned, date,
-	).StructScan(&photo)
+	// Replace all tags for this photo
+	tx, err := h.db.Beginx()
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to assign photo")
+		pagination.WriteError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer tx.Rollback()
+
+	tx.Exec("DELETE FROM photo_children WHERE photo_filename = $1", cleaned)
+	for _, childID := range req.ChildIDs {
+		tx.Exec("INSERT INTO photo_children (photo_filename, child_id) VALUES ($1, $2)", cleaned, childID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to update tags")
 		return
 	}
 
-	pagination.WriteJSON(w, http.StatusCreated, photo)
+	pagination.WriteJSON(w, http.StatusOK, map[string]any{
+		"filename":  cleaned,
+		"child_ids": req.ChildIDs,
+	})
 }

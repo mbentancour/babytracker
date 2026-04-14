@@ -204,7 +204,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 		// Photo gallery (aggregates all photos)
 		r.Get("/api/gallery/", galleryH.List)
-		r.Post("/api/gallery/assign", galleryH.Assign)
+		r.Post("/api/gallery/tag", galleryH.TagPhoto)
 
 		// Display control (for Home Assistant / external automation)
 		r.Get("/api/display", displayH.GetState)
