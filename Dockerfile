@@ -40,6 +40,7 @@ RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY migrations/ ./migrations/
+# cache-bust: v1.0.1
 RUN cp -r /tmp/frontend/dist/ ./internal/router/static/ && \
     CGO_ENABLED=0 go build -o /usr/local/bin/babytracker ./cmd/babytracker/
 
