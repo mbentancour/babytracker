@@ -3,7 +3,6 @@
 # X-Env-Layer-Desc: Self-contained baby tracking appliance
 # X-Env-Layer-Category: app
 # X-Env-Layer-Version: 1.0.0
-# X-Env-Layer-Requires: avahi-daemon
 # METAEND
 ---
 mmdebstrap:
