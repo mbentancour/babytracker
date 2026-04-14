@@ -2,7 +2,7 @@ device:
   layer: rpi5
   hostname: babytracker
   user1: pi
-  user1pass: disabled
+  user1passhash: "*"
 
 image:
   layer: image-rpios
