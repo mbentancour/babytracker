@@ -105,7 +105,7 @@ Timers make logging faster and more accurate.
 ## Photos
 
 - **Attach photos to entries.** When logging a feeding, milestone, measurement, or any other activity, you can attach a photo.
-- **Upload standalone photos.** Go to the Photos tab and upload photos directly.
+- **Upload photos directly.** Go to the Photos tab to upload photos without attaching them to a specific entry.
 - **Profile pictures.** Set a profile picture for each child.
 - **Tag photos with children.** Photos can be tagged with one or more children so they appear in the right gallery.
 - Untagged photos are treated as shared and will appear in every child's gallery.

@@ -28,6 +28,7 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o "${STAGE_DIR}/01-install-app/f
 
 # Step 4: Copy scripts and service files into the stage
 echo "[4/5] Copying support files..."
+mkdir -p "${STAGE_DIR}/01-install-app/files" "${STAGE_DIR}/02-systemd-services/files" "${STAGE_DIR}/03-network-config/files"
 cp "${REPO_ROOT}/scripts/firstboot.sh" "${STAGE_DIR}/01-install-app/files/"
 cp "${REPO_ROOT}/scripts/setup-wifi.sh" "${STAGE_DIR}/01-install-app/files/"
 cp "${REPO_ROOT}/deploy/systemd/"*.service "${STAGE_DIR}/02-systemd-services/files/"

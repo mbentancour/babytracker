@@ -35,6 +35,9 @@ jobs:
 
       - name: Copy support files
         run: |
+          mkdir -p deploy/pi-gen/stage-babytracker/01-install-app/files
+          mkdir -p deploy/pi-gen/stage-babytracker/02-systemd-services/files
+          mkdir -p deploy/pi-gen/stage-babytracker/03-network-config/files
           cp scripts/firstboot.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
           cp scripts/setup-wifi.sh deploy/pi-gen/stage-babytracker/01-install-app/files/
           cp deploy/systemd/*.service deploy/pi-gen/stage-babytracker/02-systemd-services/files/
