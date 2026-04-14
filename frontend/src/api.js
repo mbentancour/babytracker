@@ -320,9 +320,8 @@ export const api = {
 
   // Gallery
   getGallery: (params) => request(`gallery/${qs(params)}`),
-
-  // HA Media scan (external photos from HA media directory)
-  getMediaScan: () => request("media-scan/"),
+  assignSharedPhoto: (childId, filename) =>
+    request("gallery/assign", { method: "POST", body: JSON.stringify({ child: childId, filename }) }),
 
   // Baby Buddy import (admin)
   importFromBabyBuddy: (url, token) =>

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"syscall"
 	"time"
@@ -76,6 +77,34 @@ func main() {
 			if err := os.MkdirAll(dir, 0750); err != nil {
 				slog.Error("failed to create directory", "dir", dir, "error", err)
 				os.Exit(1)
+			}
+		}
+
+		// Migrate photos from old location to MediaPath if configured
+		if cfg.MediaPath != "" {
+			oldPhotosDir := filepath.Join(cfg.DataDir, "photos")
+			if entries, err := os.ReadDir(oldPhotosDir); err == nil && len(entries) > 0 {
+				slog.Info("migrating photos to media path", "from", oldPhotosDir, "to", cfg.MediaPath)
+				for _, entry := range entries {
+					if entry.IsDir() {
+						continue
+					}
+					oldPath := filepath.Join(oldPhotosDir, entry.Name())
+					newPath := filepath.Join(cfg.MediaPath, entry.Name())
+					// Don't overwrite if already exists in destination
+					if _, err := os.Stat(newPath); err == nil {
+						continue
+					}
+					if err := os.Rename(oldPath, newPath); err != nil {
+						// Rename fails across filesystems, fall back to copy+delete
+						if data, err := os.ReadFile(oldPath); err == nil {
+							if os.WriteFile(newPath, data, 0644) == nil {
+								os.Remove(oldPath)
+							}
+						}
+					}
+				}
+				slog.Info("photo migration complete")
 			}
 		}
 

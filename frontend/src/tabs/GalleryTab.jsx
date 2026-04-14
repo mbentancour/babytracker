@@ -4,7 +4,7 @@ import SectionCard from "../components/SectionCard";
 import { Icons } from "../components/Icons";
 
 const TYPE_LABELS = {
-  media: "HA Media",
+  shared: "Shared",
   photo: "Photo",
   profile: "Profile",
   weight: "Weight",
@@ -21,7 +21,7 @@ const TYPE_LABELS = {
 };
 
 const TYPE_COLORS = {
-  media: "#0984e3",
+  shared: "#0984e3",
   photo: "#636e72",
   profile: "#2d3436",
   weight: "#6C5CE7",
@@ -67,24 +67,9 @@ export default function GalleryTab({ childId, canWrite = false }) {
     if (!childId) return;
     if (!hasLoaded.current) setLoading(true);
 
-    // Fetch both BabyTracker gallery and HA media scan photos
-    Promise.all([
-      api.getGallery({ child: childId }).catch(() => ({ results: [] })),
-      api.getMediaScan().catch(() => ({ results: [] })),
-    ])
-      .then(([galleryRes, mediaRes]) => {
-        const galleryItems = galleryRes.results || [];
-        // Convert media scan items to gallery format
-        const mediaItems = (mediaRes.results || []).map((m) => ({
-          id: m.filename,
-          entity_type: "media",
-          photo: m.filename,
-          date: m.date,
-          label: m.filename.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
-          detail: "Home Assistant Media",
-        }));
-        setItems([...galleryItems, ...mediaItems]);
-      })
+    api.getGallery({ child: childId })
+      .then((res) => setItems(res.results || []))
+      .catch(() => setItems([]))
       .finally(() => {
         setLoading(false);
         hasLoaded.current = true;
@@ -253,7 +238,7 @@ export default function GalleryTab({ childId, canWrite = false }) {
                     position: "relative",
                   }}
                 >
-                  {canWrite && item.entity_type !== "media" && (
+                  {canWrite && (
                     <button
                       className="delete-entry-btn"
                       onClick={() => handleDeletePhoto(item)}
@@ -278,7 +263,7 @@ export default function GalleryTab({ childId, canWrite = false }) {
                     </button>
                   )}
                   <img
-                    src={item.entity_type === "media" ? `./api/media-scan/${item.photo}` : `./api/media/photos/${item.photo}`}
+                    src={`./api/media/photos/${item.photo}`}
                     alt={item.label}
                     style={{
                       width: "100%",

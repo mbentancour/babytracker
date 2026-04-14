@@ -44,7 +44,7 @@ export default function PictureFrame({ photos, childName, onWake }) {
       <div
         className={`picture-frame-image ${fading ? "picture-frame-fade" : ""}`}
         style={{
-          backgroundImage: `url(${current.entity_type === "media" ? `./api/media-scan/${current.photo}` : `./api/media/photos/${current.photo}`})`,
+          backgroundImage: `url(./api/media/photos/${current.photo})`,
         }}
       />
       <div className="picture-frame-overlay">

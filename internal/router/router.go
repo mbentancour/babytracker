@@ -47,13 +47,12 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	webhooksH := handlers.NewWebhooksHandler(db)
 	bmiH := handlers.NewBMIHandler(db)
 	exportH := handlers.NewExportHandler(db)
-	galleryH := handlers.NewGalleryHandler(db)
+	galleryH := handlers.NewGalleryHandler(db, cfg)
 	photosH := handlers.NewPhotosHandler(db, cfg)
 	usersH := handlers.NewUsersHandler(db)
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
 	displayH := handlers.NewDisplayHandler(db)
-	mediaScanH := handlers.NewMediaScanHandler(cfg)
 
 	// Auth routes (public, rate-limited)
 	r.Group(func(r chi.Router) {
@@ -205,10 +204,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 		// Photo gallery (aggregates all photos)
 		r.Get("/api/gallery/", galleryH.List)
-
-		// HA media scan (external photos from HA media directory)
-		r.Get("/api/media-scan/", mediaScanH.List)
-		r.Get("/api/media-scan/{filename}", mediaScanH.Serve)
+		r.Post("/api/gallery/assign", galleryH.Assign)
 
 		// Display control (for Home Assistant / external automation)
 		r.Get("/api/display", displayH.GetState)
