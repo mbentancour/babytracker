@@ -47,14 +47,14 @@ jobs:
 
       - name: Configure pi-gen
         run: |
-          ln -s $GITHUB_WORKSPACE/deploy/pi-gen/stage-babytracker /tmp/pi-gen/stage-babytracker
+          cp -r deploy/pi-gen/stage-babytracker /tmp/pi-gen/stage-babytracker
           cp deploy/pi-gen/config /tmp/pi-gen/config
           touch /tmp/pi-gen/stage3/SKIP /tmp/pi-gen/stage4/SKIP /tmp/pi-gen/stage5/SKIP
           touch /tmp/pi-gen/stage3/SKIP_IMAGES /tmp/pi-gen/stage4/SKIP_IMAGES /tmp/pi-gen/stage5/SKIP_IMAGES
           touch /tmp/pi-gen/stage2/SKIP_IMAGES
 
       - name: Build image
-        run: cd /tmp/pi-gen && sudo ./build.sh
+        run: cd /tmp/pi-gen && sudo ./build-docker.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
