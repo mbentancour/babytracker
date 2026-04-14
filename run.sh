@@ -13,7 +13,11 @@ export DEMO_MODE
 export DATA_DIR="/data/babytracker"
 export PORT=8099
 
-mkdir -p "${DATA_DIR}/photos" "${DATA_DIR}/backups"
+# All persistent data goes in /data/ which HA maps as a persistent volume
+PG_DATA="/data/postgresql"
+
+mkdir -p "${DATA_DIR}/photos" "${DATA_DIR}/backups" "${PG_DATA}" /run/postgresql
+chown -R postgres:postgres "${PG_DATA}" /run/postgresql
 
 if [ "${MODE}" = "external" ]; then
     ##############################################
@@ -37,14 +41,14 @@ else
     bashio::log.info "Starting BabyTracker in standalone mode"
 
     # Initialize PostgreSQL if needed
-    if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+    if [ ! -f "${PG_DATA}/PG_VERSION" ]; then
         bashio::log.info "Initializing PostgreSQL database..."
-        su postgres -c "initdb -D /var/lib/postgresql/data --auth=trust --no-locale --encoding=UTF8"
+        su postgres -c "initdb -D ${PG_DATA} --auth=trust --no-locale --encoding=UTF8"
     fi
 
     # Start PostgreSQL
     bashio::log.info "Starting PostgreSQL..."
-    su postgres -c "pg_ctl start -D /var/lib/postgresql/data -l /var/lib/postgresql/data/postgresql.log -o '-k /run/postgresql'"
+    su postgres -c "pg_ctl start -D ${PG_DATA} -l ${PG_DATA}/postgresql.log -o '-k /run/postgresql'"
 
     # Wait for PostgreSQL
     for i in $(seq 1 30); do

@@ -48,9 +48,9 @@ RUN cp -r /tmp/frontend/dist/ ./internal/router/static/ && \
 RUN rm -rf /usr/local/go /tmp/frontend /tmp/build /root/go /root/.cache && \
     apk del nodejs npm wget
 
-# Setup PostgreSQL data directory
-RUN mkdir -p /run/postgresql /var/lib/postgresql/data && \
-    chown -R postgres:postgres /run/postgresql /var/lib/postgresql
+# Setup PostgreSQL runtime directory (data dir is created in /data/ at runtime for persistence)
+RUN mkdir -p /run/postgresql && \
+    chown postgres:postgres /run/postgresql
 
 # Copy run script
 COPY run.sh /run.sh
