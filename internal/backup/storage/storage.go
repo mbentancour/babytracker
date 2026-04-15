@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mbentancour/babytracker/internal/models"
@@ -47,8 +48,10 @@ type Backend interface {
 //
 // For local destinations, defaultBackupsDir is used when the configured
 // path is empty — this preserves pre-existing `{DATA_DIR}/backups` behaviour
-// while still allowing users to point at USB/NFS paths.
-func New(dest *models.BackupDestination, defaultBackupsDir string) (Backend, error) {
+// while still allowing users to point at USB/NFS paths. allowedRoots is the
+// allow-list a resolved path must be inside of; paths outside are rejected
+// to prevent an admin from pointing a destination at arbitrary directories.
+func New(dest *models.BackupDestination, defaultBackupsDir string, allowedRoots []string) (Backend, error) {
 	cfg, err := dest.Config()
 	if err != nil {
 		return nil, fmt.Errorf("decode destination config: %w", err)
@@ -64,12 +67,39 @@ func New(dest *models.BackupDestination, defaultBackupsDir string) (Backend, err
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(defaultBackupsDir, path)
 		}
-		return NewLocal(path)
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve path: %w", err)
+		}
+		if !pathAllowed(abs, allowedRoots) {
+			return nil, fmt.Errorf("path %q is outside the allowed backup roots; set BACKUP_LOCAL_ROOTS to permit additional directories", abs)
+		}
+		return NewLocal(abs)
 	case models.BackupTypeWebDAV:
-		return NewWebDAV(cfg.URL, cfg.Username, cfg.Password, cfg.Directory)
+		return NewWebDAV(cfg.URL, cfg.Username, cfg.Password, cfg.Directory, cfg.TLSMode, cfg.PinnedCertPEM)
 	default:
 		return nil, fmt.Errorf("unsupported backup destination type: %s", dest.Type)
 	}
+}
+
+// pathAllowed returns true when target is equal to, or a descendant of, any
+// root in the allow-list. Symlinks that escape the root tree are not resolved
+// here — see the comment on NewLocal for why that's the right tradeoff.
+func pathAllowed(target string, roots []string) bool {
+	for _, root := range roots {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(abs, target)
+		if err != nil {
+			continue
+		}
+		if rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsBackupFilename returns true for filenames matching our backup naming

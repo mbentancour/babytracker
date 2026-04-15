@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -63,11 +64,29 @@ func (h *APITokensHandler) Create(w http.ResponseWriter, r *http.Request) {
 		permissions = "read"
 	}
 
+	// Parse optional expiry (ISO-8601 / RFC 3339). Nil = no expiry (legacy
+	// behaviour). Tokens with an expires_at in the past are rejected up-front
+	// so the UI always gets a clear error, and the DB row never exists.
+	var expiresAt *time.Time
+	if input.ExpiresAt != "" {
+		t, err := time.Parse(time.RFC3339, input.ExpiresAt)
+		if err != nil {
+			pagination.WriteError(w, http.StatusBadRequest, "expires_at must be RFC 3339 (e.g. 2026-12-31T00:00:00Z)")
+			return
+		}
+		if t.Before(time.Now()) {
+			pagination.WriteError(w, http.StatusBadRequest, "expires_at is in the past")
+			return
+		}
+		expiresAt = &t
+	}
+
 	token := models.APIToken{
 		UserID:      userID,
 		Name:        input.Name,
 		TokenHash:   crypto.HashRefreshToken(rawToken),
 		Permissions: permissions,
+		ExpiresAt:   expiresAt,
 	}
 
 	if err := models.CreateAPIToken(h.db, &token); err != nil {

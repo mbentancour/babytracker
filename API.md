@@ -538,9 +538,11 @@ Events: `*` (all) or comma-separated list.
 
 ```
 GET    /api/tokens/            List tokens (token value is hidden)
-POST   /api/tokens/            Create: {name, permissions} — returns token once
+POST   /api/tokens/            Create: {name, permissions, expires_at?} — returns token once
 DELETE /api/tokens/{id}/       Revoke token
 ```
+
+`expires_at` is an optional RFC 3339 timestamp (e.g. `"2026-12-31T00:00:00Z"`). Omit it for a non-expiring token. Past timestamps are rejected with `400`. Expired tokens return `401` on use and are filtered from DB lookups.
 
 ---
 
@@ -594,42 +596,191 @@ Public endpoint (no auth required). Returns:
 
 ## Backups (admin only)
 
-```
-GET    /api/backups/              List available backups
-POST   /api/backups/              Create a new backup
-GET    /api/backups/download?name=<filename>  Download a backup file
-DELETE /api/backups/?name=<filename>          Delete a backup
-```
+Backups are `.tar.gz` files containing a PostgreSQL dump and all photos. Encrypted backups have an additional `.enc` suffix and are AES-256-GCM streams keyed by an Argon2id-derived key from the per-destination passphrase.
 
-Backups are `.tar.gz` files containing a PostgreSQL dump and all photos.
-
-### Backup settings
+### Listing backups
 
 ```
-GET /api/backups/settings
+GET /api/backups/
 ```
 
-Response: `{"frequency": "daily"}`
+Returns one entry per unique filename, with the destinations holding a copy:
+
+```json
+{
+  "count": 2,
+  "results": [
+    {
+      "name": "backup_20260415_030000.tar.gz",
+      "size": 4823901,
+      "date": "2026-04-15 03:00:01",
+      "encrypted": false,
+      "destinations": [
+        {"id": 1, "name": "Local",     "type": "local"},
+        {"id": 2, "name": "Nextcloud", "type": "webdav"}
+      ]
+    }
+  ]
+}
+```
+
+### Creating a backup
 
 ```
-PUT /api/backups/settings
+POST /api/backups/
 Content-Type: application/json
 
-{"frequency": "daily"}
+{
+  "destination_ids": [1, 2],
+  "passphrases": {"2": "the-passphrase"}
+}
 ```
 
-Frequencies: `disabled`, `6h`, `12h`, `daily`, `weekly`
+Both fields are optional. Empty `destination_ids` targets every enabled destination. `passphrases` is keyed by destination ID and only required for encrypted destinations whose passphrase isn't stored on the server.
+
+The response reports per-destination success/failure:
+
+```json
+{
+  "results": [
+    {"destination_id": 1, "destination": "Local",     "filename": "backup_20260415_103015.tar.gz"},
+    {"destination_id": 2, "destination": "Nextcloud", "filename": "backup_20260415_103015.tar.gz.enc"}
+  ]
+}
+```
+
+### Download / delete
+
+```
+GET    /api/backups/download?name=<file>&destination_id=<id>
+DELETE /api/backups/?name=<file>&destination_id=<id>
+```
+
+`destination_id` is required: a backup file may exist at multiple destinations and each is independent.
 
 ### Restore
 
 ```
 POST /api/backups/restore
 Content-Type: multipart/form-data
-
-backup=@babytracker-backup-2026-04-14.tar.gz
 ```
 
-Replaces the entire database and photos directory. Use with caution.
+Two modes:
+
+| Field | Mode |
+|-------|------|
+| `backup=<file>` | Upload a `.tar.gz` (or `.tar.gz.enc`) directly. |
+| `destination_id=<id>` + `name=<file>` | Pull from a configured destination. |
+
+Optional fields (both modes):
+
+- `passphrase=<string>` — required for encrypted backups.
+- `wipe_photos=true` — also delete photo files in `DATA_DIR/photos` that aren't in the backup. Default is `false` (safe for shared `MEDIA_PATH` setups, e.g. Home Assistant media).
+
+Restore wipes and recreates the `public` schema before applying the dump (single transaction, `ON_ERROR_STOP=1`).
+
+### First-boot restore (no auth)
+
+```
+POST /api/auth/setup-restore
+Content-Type: multipart/form-data
+
+backup=<file>
+[passphrase=<string>]
+```
+
+Available only when no user accounts exist (returns 403 once any user is created). Used by the first-boot screen so a backup can be restored before signing in. Rate-limited to 3 requests/minute.
+
+### Backup destinations (admin only)
+
+```
+GET    /api/backups/destinations             List destinations
+POST   /api/backups/destinations             Create
+PATCH  /api/backups/destinations/{id}        Update
+DELETE /api/backups/destinations/{id}        Delete (does not touch remote files)
+POST   /api/backups/destinations/{id}/test   Connectivity test
+POST   /api/backups/destinations/inspect-cert  Fetch a server's TLS cert (pre-create)
+```
+
+A destination row:
+
+```json
+{
+  "id": 2,
+  "name": "Nextcloud",
+  "type": "webdav",
+  "config": {
+    "url": "https://cloud.example.com/remote.php/dav/files/me/",
+    "username": "me",
+    "directory": "BabyTracker/backups",
+    "password_set": true,
+    "tls": {
+      "mode": "pin",
+      "subject": "CN=cloud.example.com",
+      "fingerprint": "A3:B1:F2:...:89",
+      "not_after": "2027-04-15T00:00:00Z"
+    },
+    "encryption": {"enabled": true, "passphrase_saved": true}
+  },
+  "retention_count": 30,
+  "auto_backup": true,
+  "enabled": true,
+  "schedule": "0 3 * * *",
+  "created_at": "2026-04-15T10:00:00Z",
+  "updated_at": "2026-04-15T10:00:00Z"
+}
+```
+
+Passwords, stored passphrases, and raw pinned-certificate PEMs are never returned in `GET` responses — only the boolean `password_set` / `passphrase_saved` flags and the certificate metadata needed to display the pinned cert (fingerprint, subject, expiry).
+
+`POST` / `PATCH` request body shape:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | string | Required on create. |
+| `type` | string | `local` or `webdav`. Immutable after create. |
+| `config` | object | Type-specific. Local: `{path}`. WebDAV: `{url, username, password, directory}`. WebDAV `password` may be omitted on PATCH to keep the existing one. |
+| `retention_count` | int | ≥ 1. Older backups at this destination are pruned after each upload. |
+| `auto_backup` | bool | Whether the scheduler should fire this destination. |
+| `enabled` | bool | Disabled destinations are listed but never used. |
+| `schedule` | string | Cron expression (5 fields, server-local timezone). Empty string disables scheduling. |
+| `enable_encryption` | bool | Set with `passphrase` to turn on encryption. |
+| `passphrase` | string | New encryption passphrase. Stored as a verifier (Argon2id salt + AES-GCM-encrypted token); the raw value is only persisted when `save_passphrase=true`. |
+| `save_passphrase` | bool | Required for scheduled backups against an encrypted destination. |
+| `disable_encryption` | bool | PATCH-only. Removes encryption config from the destination. |
+| `config.tls_mode` | string | WebDAV only. `strict` (default), `pin`, or `skip`. |
+| `config.pinned_cert_pem` | string | Required when `tls_mode=pin` on create (or when rotating the pinned cert on PATCH). The PEM obtained from `inspect-cert`. |
+
+Plain-HTTP WebDAV URLs are rejected unless `tls_mode=skip` is also set.
+
+`POST /api/backups/destinations/{id}/test` returns `{"ok": true}` or `{"ok": false, "error": "..."}` (HTTP 200 either way).
+
+### Inspect a server's TLS certificate (admin only)
+
+Used by the UI when adding a WebDAV destination with a self-signed certificate. Opens a raw TLS handshake to the given URL (chain validation disabled — the whole point is to surface a cert the system doesn't yet trust) and returns its metadata so the user can verify the fingerprint against their server's admin panel before pinning it.
+
+```
+POST /api/backups/destinations/inspect-cert
+Content-Type: application/json
+
+{"url": "https://nas.home.lan/remote.php/dav/files/me/"}
+```
+
+Response:
+
+```json
+{
+  "subject": "CN=nas.home.lan",
+  "issuer": "CN=nas.home.lan",
+  "not_before": "2026-04-10T00:00:00Z",
+  "not_after": "2027-04-10T00:00:00Z",
+  "sha256_fingerprint": "A3:B1:F2:...:89",
+  "self_signed": true,
+  "pem": "-----BEGIN CERTIFICATE-----\n..."
+}
+```
+
+To pin the returned cert, send its `pem` back as `config.pinned_cert_pem` in a subsequent create or update request with `config.tls_mode=pin`.
 
 ---
 

@@ -52,7 +52,19 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-XSS-Protection", "0")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+
+		// HSTS is only meaningful (and only emitted) when the request actually
+		// arrived over TLS. Sending it over plain HTTP is ignored by browsers
+		// per RFC 6797 §7.2 and only risks confusing operators. `preload` is
+		// a long-lived commitment the operator must opt into explicitly.
+		overTLS := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+		if overTLS {
+			hsts := "max-age=31536000; includeSubDomains"
+			if os.Getenv("BABYTRACKER_HSTS_PRELOAD") == "true" {
+				hsts += "; preload"
+			}
+			w.Header().Set("Strict-Transport-Security", hsts)
+		}
 
 		if isHAMode {
 			w.Header().Set("Content-Security-Policy", haCSP)

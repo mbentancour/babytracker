@@ -156,6 +156,29 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireFreshAdmin re-checks the current user's admin status against the
+// database on every request. The JWT claim carries is_admin for the access
+// token's lifetime (15 min) so a demoted admin would otherwise retain privileges
+// until expiry — we can't afford that on destructive endpoints (restore,
+// destination CRUD, user management, shutdown). Composes on top of Auth.
+func RequireFreshAdmin(db *sqlx.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			uid := GetUserID(r.Context())
+			if uid == 0 {
+				http.Error(w, `{"error":"not authenticated"}`, http.StatusUnauthorized)
+				return
+			}
+			user, err := models.GetUserByID(db, uid)
+			if err != nil || user == nil || !user.IsAdmin {
+				http.Error(w, `{"error":"admin access required"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // getChildIDFromRequest extracts the child ID from query params or JSON body.
 func getChildIDFromRequest(r *http.Request) int {
 	// Try query parameter first

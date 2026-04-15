@@ -2,8 +2,14 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"sort"
 	"strings"
@@ -26,14 +32,59 @@ type WebDAV struct {
 
 // NewWebDAV connects to a WebDAV server. The `dir` is the path inside the
 // server where backups are stored (created if missing). Empty dir = root.
-func NewWebDAV(url, username, password, dir string) (*WebDAV, error) {
+//
+// tlsMode selects how the TLS handshake validates the server's certificate:
+//
+//	"" / "strict" — default; validate the chain against system roots.
+//	"pin"         — trust ONLY pinnedCertPEM (exact-leaf pinning).
+//	"skip"        — no validation at all (LAN / self-signed fallback).
+func NewWebDAV(url, username, password, dir, tlsMode, pinnedCertPEM string) (*WebDAV, error) {
 	if url == "" {
 		return nil, fmt.Errorf("WebDAV URL is empty")
 	}
 	client := gowebdav.NewClient(url, username, password)
-	// Set a reasonable timeout — the default is unlimited.
-	// gowebdav exposes no timeout setter; large uploads rely on the Go
-	// net/http client defaults. This is acceptable for backups.
+
+	switch tlsMode {
+	case "", "strict":
+		// Go's default transport validates — nothing to do.
+	case "skip":
+		client.SetTransport(&http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		})
+	case "pin":
+		if pinnedCertPEM == "" {
+			return nil, fmt.Errorf("TLS mode 'pin' requires a pinned certificate")
+		}
+		block, _ := pem.Decode([]byte(pinnedCertPEM))
+		if block == nil {
+			return nil, fmt.Errorf("pinned certificate is not a valid PEM block")
+		}
+		pinned, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse pinned cert: %w", err)
+		}
+		pinnedFP := sha256.Sum256(pinned.Raw)
+		client.SetTransport(&http.Transport{
+			TLSClientConfig: &tls.Config{
+				// InsecureSkipVerify is set so we can do our own check — the
+				// custom verifier below replaces the default chain validation
+				// with an exact-leaf match against the pinned fingerprint.
+				InsecureSkipVerify: true,
+				VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+					if len(rawCerts) == 0 {
+						return fmt.Errorf("server presented no certificate")
+					}
+					got := sha256.Sum256(rawCerts[0])
+					if subtle.ConstantTimeCompare(got[:], pinnedFP[:]) != 1 {
+						return fmt.Errorf("pinned certificate mismatch — the server's certificate does not match the one you trusted for this destination")
+					}
+					return nil
+				},
+			},
+		})
+	default:
+		return nil, fmt.Errorf("unknown TLS mode %q", tlsMode)
+	}
 
 	w := &WebDAV{client: client, dir: normalizeDir(dir)}
 	return w, nil

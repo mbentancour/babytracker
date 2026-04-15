@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +30,38 @@ import (
 	"github.com/mbentancour/babytracker/internal/backup/storage"
 	"github.com/mbentancour/babytracker/internal/models"
 )
+
+// pgEnv translates a PostgreSQL connection URL into the environment
+// variables libpq consumes, so we can avoid putting the password on the
+// argv of pg_dump / psql. /proc/<pid>/cmdline is world-readable on Linux,
+// while /proc/<pid>/environ is restricted to the process's own UID —
+// passing credentials via env keeps them out of view of other local users.
+func pgEnv(databaseURL string) ([]string, error) {
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
+	}
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+		return nil, fmt.Errorf("unsupported DATABASE_URL scheme: %s", u.Scheme)
+	}
+	host, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		host, port = u.Host, "5432"
+	}
+	env := append(os.Environ(),
+		"PGHOST="+host,
+		"PGPORT="+port,
+		"PGUSER="+u.User.Username(),
+		"PGDATABASE="+strings.TrimPrefix(u.Path, "/"),
+	)
+	if pw, ok := u.User.Password(); ok {
+		env = append(env, "PGPASSWORD="+pw)
+	}
+	if sm := u.Query().Get("sslmode"); sm != "" {
+		env = append(env, "PGSSLMODE="+sm)
+	}
+	return env, nil
+}
 
 // DestinationHandle pairs a storage Backend with its configuration — ready
 // to receive a backup archive.
@@ -80,7 +114,13 @@ func BuildArchive(databaseURL, dataDir string) (string, error) {
 	// CREATE so restoring overwrites the current schema instead of merging
 	// (which produces PK conflicts and orphan rows). --no-owner --no-privileges
 	// keeps the dump portable across role names.
-	cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges", databaseURL)
+	env, err := pgEnv(databaseURL)
+	if err != nil {
+		tmpSQL.Close()
+		return cleanup(err)
+	}
+	cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges")
+	cmd.Env = env
 	cmd.Stdout = tmpSQL
 	if err := cmd.Run(); err != nil {
 		tmpSQL.Close()
@@ -243,7 +283,7 @@ func RunBackup(ctx context.Context, databaseURL, dataDir string, dests []Destina
 //   - Use the passphrase from the map if present and non-empty.
 //   - Otherwise fall back to a stored passphrase, if one is configured.
 //   - Otherwise return an error for that destination — caller reports it.
-func ResolveByIDs(db *sqlx.DB, defaultBackupsDir string, ids []int, passphrases map[int]string) ([]DestinationHandle, []error) {
+func ResolveByIDs(db *sqlx.DB, defaultBackupsDir string, allowedRoots []string, ids []int, passphrases map[int]string) ([]DestinationHandle, []error) {
 	var handles []DestinationHandle
 	var errs []error
 	for _, id := range ids {
@@ -256,7 +296,7 @@ func ResolveByIDs(db *sqlx.DB, defaultBackupsDir string, ids []int, passphrases 
 			errs = append(errs, fmt.Errorf("destination %q is disabled", d.Name))
 			continue
 		}
-		h, err := resolveOne(d, defaultBackupsDir, passphrases[id])
+		h, err := resolveOne(d, defaultBackupsDir, allowedRoots, passphrases[id])
 		if err != nil {
 			errs = append(errs, fmt.Errorf("destination %q: %w", d.Name, err))
 			continue
@@ -270,7 +310,7 @@ func ResolveByIDs(db *sqlx.DB, defaultBackupsDir string, ids []int, passphrases 
 // enabled=true, auto_backup=true, and (if encrypted) has a stored passphrase.
 // Destinations that require a passphrase but don't have one stored are skipped
 // silently — the UI warns the user at configuration time.
-func ResolveForAuto(db *sqlx.DB, defaultBackupsDir string) ([]DestinationHandle, error) {
+func ResolveForAuto(db *sqlx.DB, defaultBackupsDir string, allowedRoots []string) ([]DestinationHandle, error) {
 	dests, err := models.ListBackupDestinations(db)
 	if err != nil {
 		return nil, err
@@ -296,7 +336,7 @@ func ResolveForAuto(db *sqlx.DB, defaultBackupsDir string) ([]DestinationHandle,
 			slog.Info("skipping encrypted destination without stored passphrase", "name", d.Name)
 			continue
 		}
-		h, err := resolveOne(d, defaultBackupsDir, storedPass)
+		h, err := resolveOne(d, defaultBackupsDir, allowedRoots, storedPass)
 		if err != nil {
 			slog.Warn("destination resolve failed", "name", d.Name, "error", err)
 			continue
@@ -306,13 +346,13 @@ func ResolveForAuto(db *sqlx.DB, defaultBackupsDir string) ([]DestinationHandle,
 	return handles, nil
 }
 
-func resolveOne(d *models.BackupDestination, defaultBackupsDir, providedPassphrase string) (DestinationHandle, error) {
+func resolveOne(d *models.BackupDestination, defaultBackupsDir string, allowedRoots []string, providedPassphrase string) (DestinationHandle, error) {
 	cfg, err := d.Config()
 	if err != nil {
 		return DestinationHandle{}, fmt.Errorf("decode config: %w", err)
 	}
 
-	backend, err := storage.New(d, defaultBackupsDir)
+	backend, err := storage.New(d, defaultBackupsDir, allowedRoots)
 	if err != nil {
 		return DestinationHandle{}, err
 	}
@@ -344,8 +384,8 @@ func resolveOne(d *models.BackupDestination, defaultBackupsDir, providedPassphra
 
 // Restore downloads a backup from the given destination, decrypts it if
 // needed, and restores the database + photos.
-func Restore(ctx context.Context, dest *models.BackupDestination, filename, passphrase, databaseURL, dataDir, defaultBackupsDir string, wipePhotos bool) error {
-	backend, err := storage.New(dest, defaultBackupsDir)
+func Restore(ctx context.Context, dest *models.BackupDestination, filename, passphrase, databaseURL, dataDir, defaultBackupsDir string, allowedRoots []string, wipePhotos bool) error {
+	backend, err := storage.New(dest, defaultBackupsDir, allowedRoots)
 	if err != nil {
 		return err
 	}
@@ -460,13 +500,18 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 		}
 
 		if header.Name == "database.sql" {
+			env, err := pgEnv(databaseURL)
+			if err != nil {
+				return err
+			}
 			// Wipe the public schema first so the restore is deterministic.
 			// pg_dump --clean emits per-table DROPs, but those can fail (FK
 			// dependencies, race with active connections) and psql by default
 			// continues past errors, leaving a half-merged DB. Dropping and
 			// recreating the schema in one shot guarantees a clean slate.
-			reset := exec.Command("psql", "-v", "ON_ERROR_STOP=1", databaseURL,
+			reset := exec.Command("psql", "-v", "ON_ERROR_STOP=1",
 				"-c", "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
+			reset.Env = env
 			reset.Stderr = os.Stderr
 			if err := reset.Run(); err != nil {
 				return fmt.Errorf("schema reset: %w", err)
@@ -476,7 +521,8 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			// dump is filtered first to drop SET commands for parameters that
 			// don't exist on the running server (e.g. when pg_dump and the
 			// server are on different major versions).
-			cmd := exec.Command("psql", "-v", "ON_ERROR_STOP=1", "--single-transaction", databaseURL)
+			cmd := exec.Command("psql", "-v", "ON_ERROR_STOP=1", "--single-transaction")
+			cmd.Env = env
 			cmd.Stdin = filterIncompatibleSQL(tr)
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
@@ -594,6 +640,7 @@ type Scheduler struct {
 	databaseURL       string
 	dataDir           string
 	defaultBackupsDir string
+	allowedRoots      []string
 }
 
 var globalScheduler *Scheduler
@@ -601,7 +648,7 @@ var globalScheduler *Scheduler
 // StartScheduler spins up the cron scheduler and loads destinations from DB.
 // Call ReloadScheduler() after any destination create/update/delete to pick
 // up the new set of schedules.
-func StartScheduler(db *sqlx.DB, databaseURL, dataDir, defaultBackupsDir string) {
+func StartScheduler(db *sqlx.DB, databaseURL, dataDir, defaultBackupsDir string, allowedRoots []string) {
 	s := &Scheduler{
 		cron:              cron.New(), // local timezone, 5-field expressions
 		entries:           map[int]cron.EntryID{},
@@ -609,6 +656,7 @@ func StartScheduler(db *sqlx.DB, databaseURL, dataDir, defaultBackupsDir string)
 		databaseURL:       databaseURL,
 		dataDir:           dataDir,
 		defaultBackupsDir: defaultBackupsDir,
+		allowedRoots:      allowedRoots,
 	}
 	s.cron.Start()
 	globalScheduler = s
@@ -692,7 +740,7 @@ func (s *Scheduler) runOne(destID int) {
 		slog.Info("scheduled backup: skipping encrypted destination without stored passphrase", "name", d.Name)
 		return
 	}
-	h, err := resolveOne(d, s.defaultBackupsDir, storedPass)
+	h, err := resolveOne(d, s.defaultBackupsDir, s.allowedRoots, storedPass)
 	if err != nil {
 		slog.Error("scheduled backup: destination resolve failed", "name", d.Name, "error", err)
 		return

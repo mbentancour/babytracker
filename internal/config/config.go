@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -24,6 +25,12 @@ type Config struct {
 	TLSDomain       string // Custom domain for Let's Encrypt autocert (empty = disabled)
 	CertsDir        string // Directory for autocert certificate cache
 	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
+
+	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
+	// destination's path may resolve into. Defaults to {DataDir}/backups plus
+	// any colon-separated value of BACKUP_LOCAL_ROOTS. Prevents an admin from
+	// accidentally (or maliciously) pointing a destination at /etc or /var/log.
+	BackupLocalRoots []string
 }
 
 func (c *Config) IsProxyMode() bool {
@@ -54,7 +61,24 @@ func New() *Config {
 		TLSDomain:       os.Getenv("TLS_DOMAIN"),
 		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
 		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
+		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}
+}
+
+// parseBackupLocalRoots returns the allow-list of filesystem roots a Local
+// destination may point into. The default backups directory is always
+// included; BACKUP_LOCAL_ROOTS (colon-separated) appends extras — typically
+// an operator would set it to something like "/mnt/usb:/mnt/nas".
+func parseBackupLocalRoots(dataDir, extra string) []string {
+	roots := []string{filepath.Join(dataDir, "backups")}
+	for _, p := range strings.Split(extra, ":") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		roots = append(roots, p)
+	}
+	return roots
 }
 
 // loadOrCreateSecret reads the JWT secret from a file in the data directory.

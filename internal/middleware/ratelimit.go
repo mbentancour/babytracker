@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -74,7 +75,13 @@ func RateLimit(maxRequests int, window time.Duration) func(http.Handler) http.Ha
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Use RemoteAddr only — X-Forwarded-For is user-controlled and spoofable.
 			// If behind a trusted reverse proxy, configure it to set RemoteAddr.
-			ip := r.RemoteAddr
+			// Strip the source port so successive connections from the same
+			// client share a rate-limit bucket (previously each new TCP
+			// connection got a fresh quota).
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
 
 			if !rl.allow(ip) {
 				w.Header().Set("Retry-After", "60")

@@ -500,6 +500,98 @@ function describeSchedule(expr, t) {
   return t("settings.schedCustomDesc").replace("{expr}", normalized);
 }
 
+// TLSVerificationField lets the user pick between strict chain validation
+// (default), pinning a specific certificate (fetched live from the server so
+// the user doesn't have to know how to export a PEM), and skipping
+// verification entirely (LAN-only fallback).
+function TLSVerificationField({ url, mode, setMode, pinnedMeta, setPinnedCertPEM, setPinnedMeta, fetching, setFetching }) {
+  const { t } = useI18n();
+
+  const handleFetch = async () => {
+    if (!url || !url.startsWith("https://")) {
+      alert(t("settings.tlsFetchNeedsHTTPS"));
+      return;
+    }
+    setFetching(true);
+    try {
+      const info = await api.inspectDestinationCert(url);
+      // Show a confirmation with the fingerprint/subject/expiry and let the
+      // user accept or abort. The server-stored config will only receive the
+      // PEM if they click "trust".
+      const msg = t("settings.tlsConfirmTrust")
+        .replace("{subject}", info.subject)
+        .replace("{issuer}", info.issuer)
+        .replace("{notAfter}", new Date(info.not_after).toLocaleDateString())
+        .replace("{fingerprint}", info.sha256_fingerprint);
+      if (confirm(msg)) {
+        setPinnedCertPEM(info.pem);
+        setPinnedMeta({
+          mode: "pin",
+          subject: info.subject,
+          fingerprint: info.sha256_fingerprint,
+          not_after: info.not_after,
+        });
+        setMode("pin");
+      }
+    } catch (e) {
+      alert(t("settings.tlsFetchFailed") + "\n" + (e?.error || e?.message || ""));
+    }
+    setFetching(false);
+  };
+
+  return (
+    <FormField label={t("settings.destTLSVerification")}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--text)" }}>
+          <input type="radio" name="tls-mode" checked={mode === "strict"} onChange={() => setMode("strict")} style={{ marginTop: 3 }} />
+          <span>
+            <strong>{t("settings.tlsStrict")}</strong>
+            <div style={{ color: "var(--text-dim)", fontSize: 12, marginTop: 2 }}>{t("settings.tlsStrictHint")}</div>
+          </span>
+        </label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--text)" }}>
+          <input type="radio" name="tls-mode" checked={mode === "pin"} onChange={() => setMode("pin")} style={{ marginTop: 3 }} />
+          <span style={{ flex: 1 }}>
+            <strong>{t("settings.tlsPin")}</strong>
+            <div style={{ color: "var(--text-dim)", fontSize: 12, marginTop: 2 }}>{t("settings.tlsPinHint")}</div>
+            {mode === "pin" && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleFetch}
+                  disabled={fetching}
+                  className="settings-export-item"
+                  style={{ padding: "4px 10px", fontSize: 12 }}
+                >
+                  {fetching ? "..." : t("settings.tlsFetchCert")}
+                </button>
+                {pinnedMeta && (
+                  <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}>
+                    <div style={{ fontWeight: 500 }}>{pinnedMeta.subject}</div>
+                    <div style={{ color: "var(--text-dim)", marginTop: 2 }}>
+                      {t("settings.tlsExpires")}: {pinnedMeta.not_after ? new Date(pinnedMeta.not_after).toLocaleDateString() : "—"}
+                    </div>
+                    <div style={{ fontFamily: "var(--mono, monospace)", fontSize: 10, color: "var(--text-dim)", marginTop: 2, wordBreak: "break-all" }}>
+                      {pinnedMeta.fingerprint}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </span>
+        </label>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--text)" }}>
+          <input type="radio" name="tls-mode" checked={mode === "skip"} onChange={() => setMode("skip")} style={{ marginTop: 3 }} />
+          <span>
+            <strong>{t("settings.tlsSkip")}</strong>
+            <div style={{ color: "var(--warning, #b58a00)", fontSize: 12, marginTop: 2 }}>⚠ {t("settings.tlsSkipHint")}</div>
+          </span>
+        </label>
+      </div>
+    </FormField>
+  );
+}
+
 // ScheduleField presents the cron value as a friendly preset picker. The raw
 // cron string is only exposed when the user picks "Custom" — that way
 // non-technical users never see cron syntax, but power users still have a
@@ -708,6 +800,12 @@ function DestinationEditor({ destination, onClose, onSaved }) {
   const [username, setUsername] = useState(destination?.config?.username || "");
   const [password, setPassword] = useState("");
   const [directory, setDirectory] = useState(destination?.config?.directory || "");
+  // TLS verification: "strict" (valid chain) | "pin" (trust a specific cert) | "skip" (no validation).
+  // Pin mode carries a PEM that was obtained via the inspect-cert endpoint.
+  const [tlsMode, setTlsMode] = useState(destination?.config?.tls?.mode || "strict");
+  const [pinnedCertPEM, setPinnedCertPEM] = useState("");
+  const [pinnedCertMeta, setPinnedCertMeta] = useState(destination?.config?.tls?.mode === "pin" ? destination.config.tls : null);
+  const [fetchingCert, setFetchingCert] = useState(false);
   const [retention, setRetention] = useState(destination?.retention_count ?? 7);
   const [autoBackup, setAutoBackup] = useState(destination?.auto_backup ?? true);
   const [enabled, setEnabled] = useState(destination?.enabled ?? true);
@@ -732,7 +830,16 @@ function DestinationEditor({ destination, onClose, onSaved }) {
 
     const config = type === "local"
       ? { path: path.trim() }
-      : { url: url.trim(), username: username.trim(), directory: directory.trim(), ...(password ? { password } : {}) };
+      : {
+          url: url.trim(),
+          username: username.trim(),
+          directory: directory.trim(),
+          ...(password ? { password } : {}),
+          tls_mode: tlsMode,
+          // Only send the PEM when (re-)pinning in this save — the server
+          // keeps the existing pinned cert if tls_mode isn't touched.
+          ...(tlsMode === "pin" && pinnedCertPEM ? { pinned_cert_pem: pinnedCertPEM } : {}),
+        };
 
     const payload = {
       name: name.trim(),
@@ -816,6 +923,17 @@ function DestinationEditor({ destination, onClose, onSaved }) {
               <FormField label={t("settings.destDirectory")}>
                 <FormInput value={directory} onChange={(e) => setDirectory(e.target.value)} placeholder="BabyTracker/backups" />
               </FormField>
+
+              <TLSVerificationField
+                url={url}
+                mode={tlsMode}
+                setMode={setTlsMode}
+                pinnedMeta={pinnedCertMeta}
+                setPinnedCertPEM={setPinnedCertPEM}
+                setPinnedMeta={setPinnedCertMeta}
+                fetching={fetchingCert}
+                setFetching={setFetchingCert}
+              />
             </>
           )}
 

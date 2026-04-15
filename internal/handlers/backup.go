@@ -137,7 +137,7 @@ func (h *BackupHandler) List(w http.ResponseWriter, r *http.Request) {
 		if !d.Enabled {
 			continue
 		}
-		be, err := storage.New(d, h.cfg.BackupsDir())
+		be, err := storage.New(d, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 		if err != nil {
 			// Skip destinations that can't be constructed; don't fail the list.
 			continue
@@ -215,7 +215,7 @@ func (h *BackupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handles, resolveErrs := backup.ResolveByIDs(h.db, h.cfg.BackupsDir(), req.DestinationIDs, req.Passphrases)
+	handles, resolveErrs := backup.ResolveByIDs(h.db, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots, req.DestinationIDs, req.Passphrases)
 	if len(handles) == 0 {
 		msg := "no usable destinations"
 		if len(resolveErrs) > 0 {
@@ -291,7 +291,7 @@ func (h *BackupHandler) Download(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusNotFound, "destination not found")
 		return
 	}
-	be, err := storage.New(dest, h.cfg.BackupsDir())
+	be, err := storage.New(dest, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -330,7 +330,7 @@ func (h *BackupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusNotFound, "destination not found")
 		return
 	}
-	be, err := storage.New(dest, h.cfg.BackupsDir())
+	be, err := storage.New(dest, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -376,7 +376,7 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
-		if err := backup.Restore(ctx, dest, name, passphrase, h.cfg.DatabaseURL, h.cfg.DataDir, h.cfg.BackupsDir(), wipePhotos); err != nil {
+		if err := backup.Restore(ctx, dest, name, passphrase, h.cfg.DatabaseURL, h.cfg.DataDir, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots, wipePhotos); err != nil {
 			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -664,6 +664,13 @@ func (h *BackupHandler) UpdateDestination(w http.ResponseWriter, r *http.Request
 			cfg.Username = newCfg.Username
 			cfg.Password = newCfg.Password
 			cfg.Directory = newCfg.Directory
+			// TLS fields: preserve existing values when the PATCH didn't
+			// mention them (tls_mode key absent in payload). buildConfigFromPayload
+			// leaves them zero-valued in that case, so we carry the old ones forward.
+			if _, sent := p.Config["tls_mode"]; sent {
+				cfg.TLSMode = newCfg.TLSMode
+				cfg.PinnedCertPEM = newCfg.PinnedCertPEM
+			}
 		}
 	}
 
@@ -743,6 +750,32 @@ func (h *BackupHandler) DeleteDestination(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// InspectCert opens a one-shot TLS handshake to the URL in the request body
+// and returns the leaf certificate's metadata + PEM. Used by the UI when a
+// user adds a WebDAV destination on a LAN server with a self-signed cert —
+// they fetch, verify the fingerprint against the server's admin panel, and
+// then pin it.
+func (h *BackupHandler) InspectCert(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		pagination.WriteError(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	info, err := storage.FetchServerCert(ctx, req.URL)
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	pagination.WriteJSON(w, http.StatusOK, info)
+}
+
 func (h *BackupHandler) TestDestination(w http.ResponseWriter, r *http.Request) {
 	if !h.requireAdmin(w, r) {
 		return
@@ -757,7 +790,7 @@ func (h *BackupHandler) TestDestination(w http.ResponseWriter, r *http.Request) 
 		pagination.WriteError(w, http.StatusNotFound, "destination not found")
 		return
 	}
-	be, err := storage.New(d, h.cfg.BackupsDir())
+	be, err := storage.New(d, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -800,6 +833,30 @@ func buildConfigFromPayload(destType string, raw map[string]any) (models.BackupD
 		}
 		if cfg.URL == "" {
 			return cfg, fmt.Errorf("webdav destinations require a url")
+		}
+		// TLS verification mode + pinned cert. "strict" is the default and
+		// requires no additional fields; "pin" requires a PEM; "skip" has
+		// only UX warnings to worry about. We validate here so bad payloads
+		// surface before we try to open a connection.
+		if v, ok := raw["tls_mode"].(string); ok {
+			switch v {
+			case "", "strict", "skip":
+				cfg.TLSMode = v
+			case "pin":
+				cfg.TLSMode = v
+				pem, _ := raw["pinned_cert_pem"].(string)
+				if pem == "" {
+					return cfg, fmt.Errorf("tls_mode=pin requires a pinned_cert_pem")
+				}
+				cfg.PinnedCertPEM = pem
+			default:
+				return cfg, fmt.Errorf("unknown tls_mode %q (use strict, pin, or skip)", v)
+			}
+		}
+		// Require HTTPS unless the user explicitly opted into skip. Pin
+		// doesn't make sense over HTTP either (no cert to pin).
+		if !strings.HasPrefix(cfg.URL, "https://") && cfg.TLSMode != "skip" {
+			return cfg, fmt.Errorf("plain-HTTP WebDAV requires tls_mode=skip")
 		}
 	default:
 		return cfg, fmt.Errorf("unsupported destination type: %s", destType)

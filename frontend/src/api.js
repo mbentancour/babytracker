@@ -400,6 +400,11 @@ export const api = {
     request(`backups/destinations/${id}`, { method: "DELETE" }),
   testBackupDestination: (id) =>
     request(`backups/destinations/${id}/test`, { method: "POST" }),
+  inspectDestinationCert: (url) =>
+    request("backups/destinations/inspect-cert", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
 
   // Domain/TLS settings (admin)
   getDomain: () => request("settings/domain"),

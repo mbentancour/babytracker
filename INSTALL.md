@@ -45,9 +45,10 @@ Data is persisted in the `/data/` volume managed by Home Assistant.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `unit_system` | `metric` | `metric` or `imperial` |
-| `backup_frequency` | `daily` | `disabled`, `6h`, `12h`, `daily`, `weekly` |
 | `demo_mode` | `false` | Skip authentication (for demos) |
 | `media_path` | (empty) | Path to HA media directory for photos |
+
+> Backup schedules are now configured per-destination from the UI (Settings → Data → Backup destinations), not via add-on options.
 
 ### External (proxy to existing instance)
 
@@ -154,7 +155,6 @@ All configuration is done through environment variables.
 | `DATABASE_URL` | `postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=disable` | PostgreSQL connection string |
 | `JWT_SECRET` | (auto-generated) | Session signing key. If not set, auto-created and persisted in `DATA_DIR/.jwt_secret` |
 | `UNIT_SYSTEM` | `metric` | `metric` or `imperial` |
-| `BACKUP_FREQUENCY` | `daily` | `disabled`, `6h`, `12h`, `daily`, `weekly` |
 | `DEMO_MODE` | `false` | Skip authentication (for demos) |
 | `TLS_CERT` | (empty) | Path to TLS certificate file |
 | `TLS_KEY` | (empty) | Path to TLS private key file |
@@ -162,6 +162,8 @@ All configuration is done through environment variables.
 | `CERTS_DIR` | `{DATA_DIR}/certs` | Autocert cache directory |
 | `MEDIA_PATH` | (empty) | External photo directory (used with HA media) |
 | `BABYTRACKER_PROXY_URL` | (empty) | Proxy mode: forward all requests to this URL |
+| `BACKUP_LOCAL_ROOTS` | (empty) | Colon-separated list of extra filesystem roots a Local backup destination may resolve into. `{DATA_DIR}/backups` is always allowed. Example: `/mnt/usb:/mnt/nas`. |
+| `BABYTRACKER_HSTS_PRELOAD` | `false` | When `true` and the request arrived over TLS, append `preload` to the HSTS header. Only enable if you've registered the domain at [hstspreload.org](https://hstspreload.org) — it's a long-lived commitment. |
 
 ---
 
@@ -184,10 +186,17 @@ docker compose -f deploy/docker/docker-compose.yml up -d
 
 ## 7. Backups
 
-- Configure automatic backups in **Settings > Data** within the BabyTracker UI.
-- Trigger manual backup or restore from the same settings page.
-- Backups include a full database dump and all photos, packaged as a `.tar.gz` file.
-- Backup files are stored in `{DATA_DIR}/backups/`.
+Backups are configured per-destination from **Settings > Data > Backup destinations** in the BabyTracker UI. Each destination has its own cron schedule, retention count, and optional AES-256-GCM encryption.
+
+- A fresh install ships with a default **Local** destination at `{DATA_DIR}/backups/` running daily at 03:00, keeping the last 7.
+- Add additional destinations for redundancy: another local path (USB, NFS mount), or a WebDAV server (Nextcloud, ownCloud, Synology, Infomaniak kDrive, etc.).
+- Backups include a full database dump and all photos, packaged as a `.tar.gz` (or `.tar.gz.enc` when encrypted).
+- The dump uses `pg_dump --clean --if-exists --no-owner --no-privileges`, so restores reliably overwrite the existing schema. Restores wipe and recreate the `public` schema before applying the dump (run inside `psql --single-transaction` with `ON_ERROR_STOP=1`), guaranteeing a clean target state.
+- Restore options: from any configured destination, by uploading a file in the UI, or — on a brand-new install — from the first-boot screen (no admin account needed beforehand; sign in with the credentials from the backup).
+- WebDAV note for Nextcloud: use `https://your-nextcloud/remote.php/dav/files/USERNAME/` and a Nextcloud **app password**, not your login password (Settings → Personal → Security → Devices & sessions). 2FA-enabled accounts will not authenticate with the login password at all.
+- `pg_dump` and `psql` major versions should match the running PostgreSQL server. Mismatches (e.g. PG 17 client tools against a PG 16 server) can emit `SET` statements the server doesn't know — the restorer transparently filters known-incompatible ones, but matching versions avoids the issue entirely.
+- Database credentials are passed to `pg_dump` / `psql` via the `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`/`PGSSLMODE` environment variables (parsed once from `DATABASE_URL`), **not** on the command line. This keeps the password out of `/proc/<pid>/cmdline`, which is world-readable on Linux.
+- The on-disk format for encrypted backups is versioned at `0x02`. The format includes per-chunk ordering and end-of-stream binding in the AES-GCM AAD so truncation and reordering attacks against stored archives are detected on restore. There is no backwards-compatibility path: if you have archives from an older build, decrypt them on that build and re-encrypt once upgraded.
 
 ---
 

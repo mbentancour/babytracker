@@ -230,49 +230,63 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/display", displayH.GetState)
 		r.Put("/api/display", displayH.SetState)
 
-		// Backups (admin only — handler checks is_admin)
-		r.Get("/api/backups/", backupH.List)
-		r.Post("/api/backups/", backupH.Create)
-		r.Get("/api/backups/download", backupH.Download)
-		r.Delete("/api/backups/", backupH.Delete)
-		r.Get("/api/backups/settings", backupH.GetSettings)
-		r.Put("/api/backups/settings", backupH.UpdateSettings)
+		// Admin-only routes get a defence-in-depth fresh-admin check so a
+		// demoted admin can't exercise their access token's remaining TTL
+		// against destructive endpoints. Handlers still call requireAdmin for
+		// belt-and-braces.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireFreshAdmin(db))
 
-		// Backup destinations (admin only — handler checks is_admin)
-		r.Get("/api/backups/destinations", backupH.ListDestinations)
-		r.Post("/api/backups/destinations", backupH.CreateDestination)
-		r.Patch("/api/backups/destinations/{id}", backupH.UpdateDestination)
-		r.Delete("/api/backups/destinations/{id}", backupH.DeleteDestination)
-		r.Post("/api/backups/destinations/{id}/test", backupH.TestDestination)
+			// Backups
+			r.Get("/api/backups/", backupH.List)
+			r.Post("/api/backups/", backupH.Create)
+			r.Get("/api/backups/download", backupH.Download)
+			r.Delete("/api/backups/", backupH.Delete)
+			r.Get("/api/backups/settings", backupH.GetSettings)
+			r.Put("/api/backups/settings", backupH.UpdateSettings)
 
-		// Baby Buddy import (admin only — handler checks is_admin)
-		r.Post("/api/import/babybuddy", bbImportH.Import)
+			// Backup destinations
+			r.Get("/api/backups/destinations", backupH.ListDestinations)
+			r.Post("/api/backups/destinations", backupH.CreateDestination)
+			r.Patch("/api/backups/destinations/{id}", backupH.UpdateDestination)
+			r.Delete("/api/backups/destinations/{id}", backupH.DeleteDestination)
+			r.Post("/api/backups/destinations/{id}/test", backupH.TestDestination)
+			r.Post("/api/backups/destinations/inspect-cert", backupH.InspectCert)
 
-		// User management (admin only — handler checks is_admin)
-		r.Get("/api/users/", usersH.List)
-		r.Post("/api/users/", usersH.Create)
-		r.Delete("/api/users/{id}/", usersH.Delete)
-		r.Post("/api/users/{id}/access", usersH.GrantAccess)
-		r.Delete("/api/users/{userId}/access/{childId}", usersH.RevokeAccess)
+			// Baby Buddy import
+			r.Post("/api/import/babybuddy", bbImportH.Import)
+
+			// User management (me/password routes are NOT admin-only — handled below)
+			r.Get("/api/users/", usersH.List)
+			r.Post("/api/users/", usersH.Create)
+			r.Delete("/api/users/{id}/", usersH.Delete)
+			r.Post("/api/users/{id}/access", usersH.GrantAccess)
+			r.Delete("/api/users/{userId}/access/{childId}", usersH.RevokeAccess)
+			r.Put("/api/users/{id}/password", usersH.ResetPassword)
+
+			// Roles
+			r.Get("/api/roles/", usersH.ListRoles)
+			r.Post("/api/roles/", usersH.CreateRole)
+			r.Put("/api/roles/{id}/permissions", usersH.UpdateRolePermissions)
+			r.Delete("/api/roles/{id}/", usersH.DeleteRole)
+
+			// Domain/TLS settings
+			r.Get("/api/settings/domain", domainH.Get)
+			r.Put("/api/settings/domain", domainH.Set)
+		})
+
+		// Non-admin user-management self-service endpoints
 		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
 		r.Put("/api/users/me/password", usersH.ChangeOwnPassword)
-		r.Put("/api/users/{id}/password", usersH.ResetPassword)
-
-		// Roles
-		r.Get("/api/roles/", usersH.ListRoles)
-		r.Post("/api/roles/", usersH.CreateRole)
-		r.Put("/api/roles/{id}/permissions", usersH.UpdateRolePermissions)
-		r.Delete("/api/roles/{id}/", usersH.DeleteRole)
 
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)
 
-		// Domain/TLS settings (admin only — handler checks is_admin)
-		r.Get("/api/settings/domain", domainH.Get)
-		r.Put("/api/settings/domain", domainH.Set)
-
-		// System controls (admin only — handler checks is_admin)
-		r.Post("/api/system/restart", systemH.Restart)
-		r.Post("/api/system/shutdown", systemH.Shutdown)
+		// System controls (admin only — fresh DB check + handler check)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireFreshAdmin(db))
+			r.Post("/api/system/restart", systemH.Restart)
+			r.Post("/api/system/shutdown", systemH.Shutdown)
+		})
 	})
 
 	// Upload routes (auth required, NO body size limit — handlers set their own)
@@ -283,7 +297,13 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/children/{id}/photo", mediaH.UploadChildPhoto)
 		r.Post("/api/milestones/{id}/photo", mediaH.UploadMilestonePhoto)
 		r.Post("/api/{entityType}/{id}/photo", mediaH.UploadEntryPhoto)
-		r.Post("/api/backups/restore", backupH.Restore)
+
+		// Restore is the single most destructive endpoint — drop+recreate
+		// schema. Re-check admin status from the DB.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireFreshAdmin(db))
+			r.Post("/api/backups/restore", backupH.Restore)
+		})
 	})
 
 	// SPA serving - serve frontend static files

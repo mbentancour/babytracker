@@ -117,7 +117,7 @@ func main() {
 		// Start automatic backup scheduler. Schedules are per-destination
 		// (cron expressions on backup_destinations.schedule); the old global
 		// backup_frequency setting is ignored by the new scheduler.
-		backup.StartScheduler(db, cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir())
+		backup.StartScheduler(db, cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), cfg.BackupLocalRoots)
 
 		handler = router.New(db, cfg)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/crypto"
@@ -52,6 +53,13 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 				apiToken, err := models.GetAPITokenByHash(db, tokenHash)
 				if err != nil {
 					http.Error(w, `{"error":"invalid API token"}`, http.StatusUnauthorized)
+					return
+				}
+				// Defence-in-depth expiry check — GetAPITokenByHash already
+				// filters expired rows, but re-checking here keeps the contract
+				// explicit if that query ever changes.
+				if apiToken.ExpiresAt != nil && time.Now().After(*apiToken.ExpiresAt) {
+					http.Error(w, `{"error":"API token expired"}`, http.StatusUnauthorized)
 					return
 				}
 

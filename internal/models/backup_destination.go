@@ -1,7 +1,12 @@
 package models
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -43,6 +48,13 @@ type BackupDestinationConfig struct {
 	Username  string `json:"username,omitempty"`
 	Password  string `json:"password,omitempty"`
 	Directory string `json:"directory,omitempty"`
+
+	// TLS verification mode for WebDAV. One of:
+	//   ""        = default (strict chain validation against system roots)
+	//   "pin"     = pin to PinnedCertPEM; reject any other cert
+	//   "skip"    = no verification (LAN / self-signed fallback)
+	TLSMode       string `json:"tls_mode,omitempty"`
+	PinnedCertPEM string `json:"pinned_cert_pem,omitempty"`
 
 	// Shared — encryption parameters. Absent = not encrypted.
 	Encryption *EncryptionConfig `json:"encryption,omitempty"`
@@ -92,6 +104,23 @@ func (d *BackupDestination) PublicConfig() (map[string]any, error) {
 		pub["username"] = c.Username
 		pub["directory"] = c.Directory
 		pub["password_set"] = c.Password != ""
+		// Expose the TLS mode and — when a cert is pinned — enough metadata
+		// to render in the UI without shipping the full PEM. Fingerprint
+		// lets the user sanity-check which cert is pinned; NotAfter drives
+		// the "expiring soon" banner in the destinations list.
+		mode := c.TLSMode
+		if mode == "" {
+			mode = "strict"
+		}
+		tls := map[string]any{"mode": mode}
+		if c.TLSMode == "pin" && c.PinnedCertPEM != "" {
+			if fp, notAfter, subject, err := parsePinnedCert(c.PinnedCertPEM); err == nil {
+				tls["fingerprint"] = fp
+				tls["not_after"] = notAfter
+				tls["subject"] = subject
+			}
+		}
+		pub["tls"] = tls
 	}
 	if c.Encryption != nil {
 		pub["encryption"] = map[string]any{
@@ -103,6 +132,34 @@ func (d *BackupDestination) PublicConfig() (map[string]any, error) {
 	}
 	return pub, nil
 }
+
+// parsePinnedCert extracts the display metadata for a PEM-encoded certificate.
+// Used by the public config serializer to show fingerprint + expiry without
+// shipping the raw PEM to the client.
+func parsePinnedCert(pemStr string) (fingerprint, notAfter, subject string, err error) {
+	block, _ := pem.Decode([]byte(pemStr))
+	if block == nil {
+		return "", "", "", pemDecodeErr
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", "", "", err
+	}
+	sum := sha256.Sum256(cert.Raw)
+	fp := hex.EncodeToString(sum[:])
+	// Colon-separate for readability: "AB:CD:EF:…".
+	pairs := make([]string, 0, len(sum))
+	for i := 0; i < len(sum); i++ {
+		pairs = append(pairs, fp[i*2:i*2+2])
+	}
+	return strings.ToUpper(strings.Join(pairs, ":")), cert.NotAfter.UTC().Format(time.RFC3339), cert.Subject.String(), nil
+}
+
+var pemDecodeErr = &pemError{"not a valid PEM block"}
+
+type pemError struct{ msg string }
+
+func (e *pemError) Error() string { return e.msg }
 
 func ListBackupDestinations(db *sqlx.DB) ([]BackupDestination, error) {
 	var rows []BackupDestination
