@@ -433,7 +433,12 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 </div>
 
                 {/* Backups (admin only) */}
-                {isAdmin && <BackupSection />}
+                {isAdmin && (
+                  <>
+                    <BackupDestinationsSection />
+                    <BackupSection />
+                  </>
+                )}
               </div>
             )}
 
@@ -474,101 +479,469 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
   );
 }
 
+// Preset cron expressions we surface as one-click buttons. The raw field is
+// still editable for power users — cron validation happens server-side.
+const SCHEDULE_PRESETS = [
+  { value: "",              labelKey: "settings.schedOff" },
+  { value: "0 * * * *",     labelKey: "settings.schedHourly" },
+  { value: "0 */6 * * *",   labelKey: "settings.sched6h" },
+  { value: "0 */12 * * *",  labelKey: "settings.sched12h" },
+  { value: "0 3 * * *",     labelKey: "settings.schedDaily" },
+  { value: "0 3 * * 0",     labelKey: "settings.schedWeekly" },
+];
+
+// describeSchedule renders a short natural-language description for common
+// cron patterns. Unknown patterns fall through to the raw expression so users
+// still see something meaningful.
+function describeSchedule(expr, t) {
+  const normalized = expr.trim().replace(/\s+/g, " ");
+  const match = SCHEDULE_PRESETS.find((p) => p.value === normalized);
+  if (match && match.value) return t(match.labelKey + "Desc");
+  return t("settings.schedCustomDesc").replace("{expr}", normalized);
+}
+
+// ScheduleField presents the cron value as a friendly preset picker. The raw
+// cron string is only exposed when the user picks "Custom" — that way
+// non-technical users never see cron syntax, but power users still have a
+// way to enter anything the backend accepts.
+function ScheduleField({ value, onChange }) {
+  const { t } = useI18n();
+  const normalized = (value || "").trim().replace(/\s+/g, " ");
+  const matchedPreset = SCHEDULE_PRESETS.find((p) => p.value === normalized);
+  // Treat unrecognised expressions as "custom" so the cron input shows for editing.
+  const [showCustom, setShowCustom] = useState(!matchedPreset);
+
+  const pickPreset = (presetValue) => {
+    setShowCustom(false);
+    onChange(presetValue);
+  };
+
+  const pickCustom = () => {
+    setShowCustom(true);
+    // Keep whatever was there; if it was a preset, the user can edit from it.
+    if (!normalized) onChange("0 3 * * *");
+  };
+
+  const isActive = (v) => !showCustom && normalized === v;
+
+  return (
+    <FormField label={t("settings.destSchedule")}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 6 }}>
+        {SCHEDULE_PRESETS.map((p) => (
+          <button
+            key={p.value || "off"}
+            type="button"
+            onClick={() => pickPreset(p.value)}
+            style={{
+              padding: "10px 12px", borderRadius: 8,
+              border: `1px solid ${isActive(p.value) ? "var(--accent, #6366f1)" : "var(--border)"}`,
+              background: isActive(p.value) ? "var(--accent, #6366f1)" : "var(--bg)",
+              color: isActive(p.value) ? "white" : "var(--text)",
+              cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
+              textAlign: "center",
+            }}
+          >
+            {t(p.labelKey)}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={pickCustom}
+          style={{
+            padding: "10px 12px", borderRadius: 8,
+            border: `1px solid ${showCustom ? "var(--accent, #6366f1)" : "var(--border)"}`,
+            background: showCustom ? "var(--accent, #6366f1)" : "var(--bg)",
+            color: showCustom ? "white" : "var(--text)",
+            cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 500,
+            textAlign: "center",
+          }}
+        >
+          {t("settings.schedCustom")}
+        </button>
+      </div>
+
+      {showCustom && (
+        <div style={{ marginTop: 8 }}>
+          <FormInput
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="0 3 * * *"
+            style={{ fontFamily: "var(--mono, monospace)", fontSize: 13 }}
+          />
+          <p className="settings-hint">{t("settings.destScheduleHint")}</p>
+        </div>
+      )}
+
+      <p className="settings-hint" style={{ marginTop: showCustom ? 6 : 8, fontWeight: 500 }}>
+        {normalized === "" ? t("settings.destScheduleDisabled") : describeSchedule(normalized, t)}
+      </p>
+    </FormField>
+  );
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function BackupDestinationsSection() {
+  const { t } = useI18n();
+  const [destinations, setDestinations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null | "new" | destObject
+  const [testingId, setTestingId] = useState(null);
+
+  const refresh = () => {
+    setLoading(true);
+    api.listBackupDestinations()
+      .then((res) => setDestinations(res.results || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const handleTest = async (id) => {
+    setTestingId(id);
+    try {
+      const res = await api.testBackupDestination(id);
+      if (res.ok) alert(t("settings.destTestOk"));
+      else alert(t("settings.destTestFail") + "\n" + (res.error || ""));
+    } catch (e) {
+      alert(t("settings.destTestFail") + "\n" + (e.message || ""));
+    }
+    setTestingId(null);
+  };
+
+  const handleDelete = async (d) => {
+    if (!confirm(t("settings.destDeleteConfirm").replace("{name}", d.name))) return;
+    try {
+      await api.deleteBackupDestination(d.id);
+      refresh();
+    } catch {
+      alert(t("settings.destDeleteFailed"));
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <h4 className="settings-card-title">{t("settings.backupDestinations")}</h4>
+      <p className="settings-hint">{t("settings.backupDestinationsHint")}</p>
+
+      {loading ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("general.loading")}</div>
+      ) : destinations.length === 0 ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>{t("settings.noDestinations")}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+          {destinations.map((d) => (
+            <div
+              key={d.id}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                fontSize: 13,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, color: "var(--text)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span>{d.name}</span>
+                    <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--border)", color: "var(--text-dim)", textTransform: "uppercase" }}>{d.type}</span>
+                    {!d.enabled && <span style={{ fontSize: 10, color: "var(--text-dim)" }}>({t("settings.destDisabled")})</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>
+                    {t("settings.destKeepN").replace("{n}", d.retention_count)}
+                    {" · "}
+                    {d.auto_backup && d.schedule
+                      ? describeSchedule(d.schedule, t)
+                      : t("settings.destAutoOff")}
+                    {" · "}
+                    {d.config?.encryption?.enabled
+                      ? (d.config.encryption.passphrase_saved
+                          ? t("settings.destEncStored")
+                          : t("settings.destEncManual"))
+                      : t("settings.destEncOff")}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button className="settings-export-item" style={{ padding: "4px 8px" }} onClick={() => handleTest(d.id)} disabled={testingId === d.id}>
+                    {testingId === d.id ? "..." : t("settings.destTest")}
+                  </button>
+                  <button className="settings-export-item" style={{ padding: "4px 8px" }} onClick={() => setEditing(d)}>
+                    {t("general.edit")}
+                  </button>
+                  <button className="delete-entry-btn" onClick={() => handleDelete(d)}>x</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button className="settings-export-main" onClick={() => setEditing("new")} style={{ width: "100%" }}>
+        {t("settings.addDestination")}
+      </button>
+
+      {editing && (
+        <DestinationEditor
+          destination={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DestinationEditor({ destination, onClose, onSaved }) {
+  const { t } = useI18n();
+  const isNew = !destination;
+  const [name, setName] = useState(destination?.name || "");
+  const [type, setType] = useState(destination?.type || "local");
+  const [path, setPath] = useState(destination?.config?.path || "");
+  const [url, setUrl] = useState(destination?.config?.url || "");
+  const [username, setUsername] = useState(destination?.config?.username || "");
+  const [password, setPassword] = useState("");
+  const [directory, setDirectory] = useState(destination?.config?.directory || "");
+  const [retention, setRetention] = useState(destination?.retention_count ?? 7);
+  const [autoBackup, setAutoBackup] = useState(destination?.auto_backup ?? true);
+  const [enabled, setEnabled] = useState(destination?.enabled ?? true);
+  const [schedule, setSchedule] = useState(destination?.schedule ?? "0 3 * * *");
+  const encInitiallyOn = !!destination?.config?.encryption?.enabled;
+  const passInitiallySaved = !!destination?.config?.encryption?.passphrase_saved;
+  const [encEnabled, setEncEnabled] = useState(encInitiallyOn);
+  const [passphrase, setPassphrase] = useState("");
+  const [passphraseConfirm, setPassphraseConfirm] = useState("");
+  const [savePassphrase, setSavePassphrase] = useState(passInitiallySaved);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) { alert(t("settings.destNameRequired")); return; }
+    if (type === "webdav" && !url.trim()) { alert(t("settings.destUrlRequired")); return; }
+    // Passphrase must be provided AND confirmed whenever we're about to store
+    // a new one — either first-time enable, or re-keying an encrypted dest.
+    const isNewPassphrase = encEnabled && (!encInitiallyOn || passphrase);
+    if (encEnabled && !encInitiallyOn && !passphrase) { alert(t("settings.destPassRequired")); return; }
+    if (isNewPassphrase && passphrase !== passphraseConfirm) { alert(t("settings.destPassMismatch")); return; }
+    if (encEnabled && !encInitiallyOn && !confirm(t("settings.destEncWarn"))) return;
+
+    const config = type === "local"
+      ? { path: path.trim() }
+      : { url: url.trim(), username: username.trim(), directory: directory.trim(), ...(password ? { password } : {}) };
+
+    const payload = {
+      name: name.trim(),
+      type,
+      config,
+      retention_count: parseInt(retention, 10) || 7,
+      auto_backup: autoBackup,
+      enabled,
+      schedule: schedule.trim(),
+    };
+
+    // Encryption transitions
+    if (!encEnabled && encInitiallyOn) {
+      payload.disable_encryption = true;
+    } else if (encEnabled && !encInitiallyOn) {
+      payload.enable_encryption = true;
+      payload.passphrase = passphrase;
+      payload.save_passphrase = savePassphrase;
+    } else if (encEnabled && encInitiallyOn && passphrase) {
+      // Re-key with a new passphrase
+      payload.enable_encryption = true;
+      payload.passphrase = passphrase;
+      payload.save_passphrase = savePassphrase;
+    }
+
+    setSaving(true);
+    try {
+      if (isNew) await api.createBackupDestination(payload);
+      else await api.updateBackupDestination(destination.id, payload);
+      onSaved();
+    } catch (e) {
+      alert((e && e.error) || t("settings.destSaveFailed"));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="settings-overlay" style={{ zIndex: 1100 }}>
+      <div className="settings-page" style={{ maxWidth: 520, width: "100%" }}>
+        <div className="settings-header">
+          <h2>{isNew ? t("settings.addDestination") : t("settings.editDestination")}</h2>
+          <button className="settings-close" onClick={onClose}>×</button>
+        </div>
+        <div className="settings-content" style={{ padding: 16, overflowY: "auto" }}>
+          <FormField label={t("settings.destName")}>
+            <FormInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Nextcloud" />
+          </FormField>
+          {isNew && (
+            <FormField label={t("settings.destType")}>
+              <FormSelect
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                options={[
+                  { value: "local", label: t("settings.destTypeLocal") },
+                  { value: "webdav", label: t("settings.destTypeWebDAV") },
+                ]}
+              />
+            </FormField>
+          )}
+
+          {type === "local" && (
+            <FormField label={t("settings.destPath")}>
+              <FormInput value={path} onChange={(e) => setPath(e.target.value)} placeholder="/mnt/usb/babytracker" />
+              <p className="settings-hint">{t("settings.destPathHint")}</p>
+            </FormField>
+          )}
+
+          {type === "webdav" && (
+            <>
+              <FormField label={t("settings.destURL")}>
+                <FormInput value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://cloud.example.com/remote.php/dav/files/USER/" />
+                <p className="settings-hint">{t("settings.destURLHint")}</p>
+              </FormField>
+              <FormField label={t("settings.destUsername")}>
+                <FormInput value={username} onChange={(e) => setUsername(e.target.value)} />
+              </FormField>
+              <FormField label={t("settings.destPassword")}>
+                <FormInput type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  placeholder={!isNew && destination?.config?.password_set ? t("settings.destPasswordKeep") : ""} />
+              </FormField>
+              <FormField label={t("settings.destDirectory")}>
+                <FormInput value={directory} onChange={(e) => setDirectory(e.target.value)} placeholder="BabyTracker/backups" />
+              </FormField>
+            </>
+          )}
+
+          <FormField label={t("settings.destRetention")}>
+            <FormInput type="number" min="1" value={retention} onChange={(e) => setRetention(e.target.value)} />
+            <p className="settings-hint">{t("settings.destRetentionHint")}</p>
+          </FormField>
+
+          <ScheduleField value={schedule} onChange={setSchedule} />
+
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", fontSize: 14, color: "var(--text)" }}>
+            <input type="checkbox" checked={autoBackup} onChange={(e) => setAutoBackup(e.target.checked)} />
+            {t("settings.destAutoBackup")}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", fontSize: 14, color: "var(--text)" }}>
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            {t("settings.destEnabled")}
+          </label>
+
+          <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--text)" }}>
+              <input type="checkbox" checked={encEnabled} onChange={(e) => setEncEnabled(e.target.checked)} />
+              {t("settings.destEncryption")}
+            </label>
+            {encEnabled && (
+              <div style={{ marginTop: 8 }}>
+                <FormField label={encInitiallyOn ? t("settings.destNewPassphrase") : t("settings.destPassphrase")}>
+                  <FormInput type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)}
+                    placeholder={encInitiallyOn ? t("settings.destPassphraseKeep") : ""} autoComplete="new-password" />
+                </FormField>
+                {(passphrase || !encInitiallyOn) && (
+                  <FormField label={t("settings.destPassphraseConfirm")}>
+                    <FormInput type="password" value={passphraseConfirm}
+                      onChange={(e) => setPassphraseConfirm(e.target.value)} autoComplete="new-password" />
+                    {passphraseConfirm && passphrase !== passphraseConfirm && (
+                      <p className="settings-hint" style={{ color: "var(--danger, #dc2626)" }}>
+                        {t("settings.destPassMismatch")}
+                      </p>
+                    )}
+                  </FormField>
+                )}
+                <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0", fontSize: 13, color: "var(--text)" }}>
+                  <input type="checkbox" checked={savePassphrase} onChange={(e) => setSavePassphrase(e.target.checked)} />
+                  {t("settings.destSavePassphrase")}
+                </label>
+                <p className="settings-hint" style={{ color: "var(--warning, #b58a00)" }}>
+                  ⚠ {t("settings.destEncWarnInline")}
+                </p>
+                {savePassphrase && (
+                  <p className="settings-hint" style={{ color: "var(--warning, #b58a00)" }}>
+                    ⚠ {t("settings.destSavePassWarn")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: 16, borderTop: "1px solid var(--border)" }}>
+          <FormButton onClick={onClose} color="var(--border)" style={{ flex: 1 }}>{t("general.cancel")}</FormButton>
+          <FormButton onClick={handleSave} disabled={saving} style={{ flex: 1 }}>
+            {saving ? t("general.saving") : t("general.save")}
+          </FormButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BackupSection() {
   const { t } = useI18n();
   const [backups, setBackups] = useState([]);
+  const [destinations, setDestinations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [frequency, setFrequency] = useState("daily");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [restoreModal, setRestoreModal] = useState(null); // {backup, destinationId}
 
   const refresh = () => {
-    Promise.all([api.getBackups(), api.getBackupSettings()])
-      .then(([backupsRes, settingsRes]) => {
+    Promise.all([api.getBackups(), api.listBackupDestinations()])
+      .then(([backupsRes, destsRes]) => {
         setBackups(backupsRes.results || []);
-        setFrequency(settingsRes.frequency || "daily");
+        setDestinations(destsRes.results || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
 
-  useState(() => { refresh(); });
+  useEffect(() => { refresh(); }, []);
 
-  const handleFrequencyChange = async (newFreq) => {
-    setFrequency(newFreq);
-    try {
-      await api.updateBackupSettings(newFreq);
-    } catch {
-      alert("Failed to update backup frequency");
-    }
-  };
-
-  const handleCreate = async () => {
-    setCreating(true);
-    try {
-      await api.createBackup();
-      refresh();
-    } catch {
-      alert("Backup failed");
-    }
-    setCreating(false);
-  };
-
-  const handleRestore = async (e) => {
+  const handleRestoreFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm("Restoring a backup will overwrite current data. Are you sure?")) {
+    if (!confirm(t("settings.restoreConfirm"))) {
       e.target.value = "";
       return;
     }
+    let passphrase = "";
+    if (file.name.endsWith(".enc")) {
+      passphrase = prompt(t("settings.restorePassPrompt")) || "";
+      if (!passphrase) { e.target.value = ""; return; }
+    }
+    const wipePhotos = confirm(t("settings.wipePhotosPrompt"));
     setRestoring(true);
     try {
-      await api.restoreBackup(file);
-      alert("Backup restored. The page will reload.");
+      await api.restoreBackup(file, passphrase, wipePhotos);
+      alert(t("settings.restoreOk"));
       window.location.reload();
-    } catch {
-      alert("Restore failed");
+    } catch (err) {
+      alert(t("settings.restoreFailed") + (err?.error ? "\n" + err.error : ""));
     }
     setRestoring(false);
     e.target.value = "";
   };
 
-  const formatSize = (bytes) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   return (
     <div className="settings-card">
       <h4 className="settings-card-title">{t("settings.backups")}</h4>
-
-      <div style={{ marginBottom: 16 }}>
-        <FormField label={t("settings.backupFrequency")}>
-          <FormSelect
-            options={[
-              { value: "disabled", label: t("settings.disabled") },
-              { value: "6h", label: t("settings.every6h") },
-              { value: "12h", label: t("settings.every12h") },
-              { value: "daily", label: t("settings.daily") },
-              { value: "weekly", label: t("settings.weekly") },
-            ]}
-            value={frequency}
-            onChange={(e) => handleFrequencyChange(e.target.value)}
-          />
-        </FormField>
-        <p className="settings-hint">
-          {frequency === "disabled"
-            ? t("settings.backupDisabledHint")
-            : t("settings.backupEnabledHint")}
-        </p>
-      </div>
+      <p className="settings-hint" style={{ marginBottom: 16 }}>{t("settings.backupEnabledHintMulti")}</p>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button
           className="settings-export-main"
-          onClick={handleCreate}
-          disabled={creating}
+          onClick={() => setCreateOpen(true)}
+          disabled={creating || destinations.length === 0}
           style={{ flex: 1 }}
         >
           {creating ? t("settings.creating") : t("settings.createBackup")}
@@ -580,9 +953,9 @@ function BackupSection() {
           {restoring ? t("settings.restoring") : t("settings.restoreFromFile")}
           <input
             type="file"
-            accept=".gz,.tar.gz"
+            accept=".gz,.enc,application/gzip,application/octet-stream"
             style={{ display: "none" }}
-            onChange={handleRestore}
+            onChange={handleRestoreFile}
             disabled={restoring}
           />
         </label>
@@ -598,9 +971,6 @@ function BackupSection() {
             <div
               key={b.name}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
                 padding: "8px 12px",
                 borderRadius: 8,
                 background: "var(--bg)",
@@ -608,34 +978,223 @@ function BackupSection() {
                 fontSize: 13,
               }}
             >
-              <div>
-                <div style={{ fontWeight: 500, color: "var(--text)" }}>{b.date}</div>
-                <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{formatSize(b.size)}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, color: "var(--text)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span>{b.date}</span>
+                    {b.encrypted && (
+                      <span title={t("settings.encryptedBackup")} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--accent, #6366f1)", color: "white" }}>
+                        🔒 {t("settings.encrypted")}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 2 }}>
+                    {formatBytes(b.size)} · {(b.destinations || []).map((d) => d.name).join(", ")}
+                  </div>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  className="settings-export-item"
-                  style={{ padding: "4px 10px" }}
-                  onClick={() => api.downloadBackup(b.name).catch(() => alert("Download failed"))}
-                >
-                  {t("settings.download")}
-                </button>
-                <button
-                  className="delete-entry-btn"
-                  onClick={async () => {
-                    if (confirm("Delete this backup?")) {
-                      await api.deleteBackup(b.name);
-                      refresh();
-                    }
-                  }}
-                >
-                  x
-                </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                {(b.destinations || []).map((d) => (
+                  <BackupActionMenu key={d.id} backup={b} destination={d} onChange={refresh} onRestore={() => setRestoreModal({ backup: b, destinationId: d.id })} />
+                ))}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {createOpen && (
+        <CreateBackupModal
+          destinations={destinations}
+          onClose={() => setCreateOpen(false)}
+          onCreating={setCreating}
+          onCreated={() => { setCreateOpen(false); refresh(); }}
+        />
+      )}
+      {restoreModal && (
+        <RemoteRestoreModal
+          backup={restoreModal.backup}
+          destinationId={restoreModal.destinationId}
+          onClose={() => setRestoreModal(null)}
+          onRestored={() => { setRestoreModal(null); window.location.reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BackupActionMenu({ backup, destination, onChange, onRestore }) {
+  const { t } = useI18n();
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "2px 6px", border: "1px solid var(--border)", borderRadius: 6, fontSize: 11 }}>
+      <span style={{ color: "var(--text-dim)" }}>{destination.name}:</span>
+      <button
+        className="settings-export-item"
+        style={{ padding: "2px 6px", fontSize: 11 }}
+        onClick={() => api.downloadBackup(backup.name, destination.id).catch(() => alert(t("settings.downloadFailed")))}
+      >
+        {t("settings.download")}
+      </button>
+      <button
+        className="settings-export-item"
+        style={{ padding: "2px 6px", fontSize: 11 }}
+        onClick={onRestore}
+      >
+        {t("settings.restore")}
+      </button>
+      <button
+        className="delete-entry-btn"
+        style={{ padding: "2px 6px", fontSize: 11 }}
+        onClick={async () => {
+          if (!confirm(t("settings.deleteBackupConfirm"))) return;
+          try {
+            await api.deleteBackup(backup.name, destination.id);
+            onChange();
+          } catch {
+            alert(t("settings.deleteFailed"));
+          }
+        }}
+      >×</button>
+    </div>
+  );
+}
+
+function CreateBackupModal({ destinations, onClose, onCreating, onCreated }) {
+  const { t } = useI18n();
+  const remembered = (() => {
+    try { return JSON.parse(localStorage.getItem("babytracker_backup_dests") || "[]"); } catch { return []; }
+  })();
+  const initial = destinations.filter((d) => d.enabled).map((d) => d.id);
+  const startSelected = remembered.length ? remembered.filter((id) => initial.includes(id)) : initial;
+  const [selected, setSelected] = useState(new Set(startSelected.length ? startSelected : initial));
+  const [passphrases, setPassphrases] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const toggle = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const submit = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) { alert(t("settings.selectAtLeastOne")); return; }
+    // Validate passphrases needed
+    const needsPass = destinations.filter((d) => selected.has(d.id) && d.config?.encryption?.enabled && !d.config?.encryption?.passphrase_saved);
+    for (const d of needsPass) {
+      if (!passphrases[d.id]) { alert(t("settings.passphraseRequiredFor").replace("{name}", d.name)); return; }
+    }
+    setSubmitting(true);
+    onCreating(true);
+    try {
+      const payloadPass = {};
+      needsPass.forEach((d) => { payloadPass[d.id] = passphrases[d.id]; });
+      const res = await api.createBackup(ids, payloadPass);
+      localStorage.setItem("babytracker_backup_dests", JSON.stringify(ids));
+      const errors = (res.results || []).filter((r) => r.error);
+      if (errors.length) alert(t("settings.backupPartial") + "\n" + errors.map((e) => `${e.destination || "?"}: ${e.error}`).join("\n"));
+      onCreated();
+    } catch (e) {
+      alert(t("settings.backupFailed") + (e?.error ? "\n" + e.error : ""));
+      setSubmitting(false);
+    }
+    onCreating(false);
+  };
+
+  return (
+    <div className="settings-overlay" style={{ zIndex: 1100 }}>
+      <div className="settings-page" style={{ maxWidth: 480, width: "100%" }}>
+        <div className="settings-header">
+          <h2>{t("settings.createBackup")}</h2>
+          <button className="settings-close" onClick={onClose}>×</button>
+        </div>
+        <div className="settings-content" style={{ padding: 16, overflowY: "auto" }}>
+          <p className="settings-hint">{t("settings.selectDestinations")}</p>
+          {destinations.filter((d) => d.enabled).map((d) => {
+            const enc = d.config?.encryption?.enabled;
+            const stored = d.config?.encryption?.passphrase_saved;
+            const isChecked = selected.has(d.id);
+            return (
+              <div key={d.id} style={{ padding: 8, border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6 }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer", color: "var(--text)" }}>
+                  <input type="checkbox" checked={isChecked} onChange={() => toggle(d.id)} />
+                  <span style={{ fontWeight: 500 }}>{d.name}</span>
+                  <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--border)", color: "var(--text-dim)", textTransform: "uppercase" }}>{d.type}</span>
+                  {enc && <span style={{ fontSize: 10 }}>🔒</span>}
+                </label>
+                {isChecked && enc && !stored && (
+                  <FormField label={t("settings.passphrase")}>
+                    <FormInput type="password" value={passphrases[d.id] || ""}
+                      onChange={(e) => setPassphrases((p) => ({ ...p, [d.id]: e.target.value }))} />
+                  </FormField>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: 16, borderTop: "1px solid var(--border)" }}>
+          <FormButton onClick={onClose} color="var(--border)" style={{ flex: 1 }}>{t("general.cancel")}</FormButton>
+          <FormButton onClick={submit} disabled={submitting} style={{ flex: 1 }}>
+            {submitting ? t("settings.creating") : t("settings.createBackup")}
+          </FormButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RemoteRestoreModal({ backup, destinationId, onClose, onRestored }) {
+  const { t } = useI18n();
+  const [passphrase, setPassphrase] = useState("");
+  const [wipePhotos, setWipePhotos] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!confirm(t("settings.restoreConfirm"))) return;
+    if (backup.encrypted && !passphrase) { alert(t("settings.passphraseRequired")); return; }
+    setSubmitting(true);
+    try {
+      await api.restoreBackupFromDestination(destinationId, backup.name, passphrase, wipePhotos);
+      alert(t("settings.restoreOk"));
+      onRestored();
+    } catch (e) {
+      alert(t("settings.restoreFailed") + (e?.error ? "\n" + e.error : ""));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="settings-overlay" style={{ zIndex: 1100 }}>
+      <div className="settings-page" style={{ maxWidth: 420, width: "100%" }}>
+        <div className="settings-header">
+          <h2>{t("settings.restore")}</h2>
+          <button className="settings-close" onClick={onClose}>×</button>
+        </div>
+        <div className="settings-content" style={{ padding: 16 }}>
+          <p style={{ color: "var(--text)", fontSize: 14 }}>{backup.name}</p>
+          <p className="settings-hint" style={{ color: "var(--warning, #b58a00)" }}>⚠ {t("settings.restoreWarn")}</p>
+          {backup.encrypted && (
+            <FormField label={t("settings.passphrase")}>
+              <FormInput type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+            </FormField>
+          )}
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12, fontSize: 13, color: "var(--text)" }}>
+            <input type="checkbox" checked={wipePhotos} onChange={(e) => setWipePhotos(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>
+              <strong>{t("settings.wipePhotosLabel")}</strong>
+              <div style={{ color: "var(--text-dim)", fontSize: 12, marginTop: 2 }}>{t("settings.wipePhotosHint")}</div>
+            </span>
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: 16, borderTop: "1px solid var(--border)" }}>
+          <FormButton onClick={onClose} color="var(--border)" style={{ flex: 1 }}>{t("general.cancel")}</FormButton>
+          <FormButton onClick={submit} disabled={submitting} style={{ flex: 1 }}>
+            {submitting ? t("settings.restoring") : t("settings.restore")}
+          </FormButton>
+        </div>
+      </div>
     </div>
   );
 }

@@ -114,13 +114,10 @@ func main() {
 			}
 		}
 
-		// Start automatic backup scheduler
-		backupFreq := cfg.BackupFrequency
-		var savedFreq string
-		if err := db.Get(&savedFreq, `SELECT value FROM settings WHERE key = 'backup_frequency'`); err == nil && savedFreq != "" {
-			backupFreq = savedFreq
-		}
-		backup.StartScheduler(cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), backupFreq)
+		// Start automatic backup scheduler. Schedules are per-destination
+		// (cron expressions on backup_destinations.schedule); the old global
+		// backup_frequency setting is ignored by the new scheduler.
+		backup.StartScheduler(db, cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir())
 
 		handler = router.New(db, cfg)
 	}

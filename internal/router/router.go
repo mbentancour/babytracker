@@ -66,6 +66,14 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/auth/status", authH.Status)
 	})
 
+	// Setup-mode restore: pre-auth, only works when no user exists yet.
+	// Handler verifies user count internally; here we just give it a rate
+	// limiter to deter blind-upload abuse during the brief setup window.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(3, time.Minute))
+		r.Post("/api/auth/setup-restore", backupH.SetupRestore)
+	})
+
 	// Config endpoint (public - needed before login for demo mode detection)
 	r.Get("/api/config", configH.Get)
 
@@ -229,6 +237,13 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Delete("/api/backups/", backupH.Delete)
 		r.Get("/api/backups/settings", backupH.GetSettings)
 		r.Put("/api/backups/settings", backupH.UpdateSettings)
+
+		// Backup destinations (admin only — handler checks is_admin)
+		r.Get("/api/backups/destinations", backupH.ListDestinations)
+		r.Post("/api/backups/destinations", backupH.CreateDestination)
+		r.Patch("/api/backups/destinations/{id}", backupH.UpdateDestination)
+		r.Delete("/api/backups/destinations/{id}", backupH.DeleteDestination)
+		r.Post("/api/backups/destinations/{id}/test", backupH.TestDestination)
 
 		// Baby Buddy import (admin only — handler checks is_admin)
 		r.Post("/api/import/babybuddy", bbImportH.Import)

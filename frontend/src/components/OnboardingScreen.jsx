@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
 
-export default function OnboardingScreen({ onChildAdded }) {
+export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed }) {
   const { t } = useI18n();
-  const [mode, setMode] = useState(null); // null = choose, "new", "import", "restore"
+  // Map setup-choice intents ("fresh"/"import") to the internal mode names.
+  const seededMode = initialMode === "fresh" ? "new" : initialMode === "import" ? "import" : null;
+  const [mode, setMode] = useState(seededMode); // null = choose, "new", "import"
+
+  // Clear the parent's setupIntent once we've adopted it so back-navigation
+  // to the choose screen doesn't re-seed the same mode on remount.
+  useEffect(() => {
+    if (seededMode && onInitialModeConsumed) onInitialModeConsumed();
+  }, [seededMode, onInitialModeConsumed]);
 
   if (!mode) {
     return (
@@ -35,13 +43,6 @@ export default function OnboardingScreen({ onChildAdded }) {
               color="#6C5CE7"
               onClick={() => setMode("import")}
             />
-            <OnboardingOption
-              icon={<Icons.Clock />}
-              title={t("onboarding.restore")}
-              description={t("onboarding.restoreDesc")}
-              color="#00b894"
-              onClick={() => setMode("restore")}
-            />
           </div>
         </div>
       </div>
@@ -50,7 +51,6 @@ export default function OnboardingScreen({ onChildAdded }) {
 
   if (mode === "new") return <NewBabyForm onDone={onChildAdded} onBack={() => setMode(null)} />;
   if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} />;
-  if (mode === "restore") return <RestoreBackup onDone={onChildAdded} onBack={() => setMode(null)} />;
 }
 
 function OnboardingOption({ icon, title, description, color, onClick }) {
@@ -212,55 +212,3 @@ function BabyBuddyImport({ onDone, onBack }) {
   );
 }
 
-function RestoreBackup({ onDone, onBack }) {
-  const { t } = useI18n();
-  const [restoring, setRestoring] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleRestore = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError("");
-    setRestoring(true);
-    try {
-      await api.restoreBackup(file);
-      onDone();
-    } catch (err) {
-      setError(err.error || err.message || "Restore failed");
-      setRestoring(false);
-    }
-    e.target.value = "";
-  };
-
-  return (
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-header">
-          <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Clock /></div>
-          <h1 className="login-title">{t("onboarding.restore")}</h1>
-          <p className="login-subtitle">Select a BabyTracker backup file (.tar.gz)</p>
-        </div>
-        <div className="login-form">
-          {error && <div className="login-error">{error}</div>}
-          <label
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "20px", borderRadius: 12,
-              border: "2px dashed var(--border)", background: "var(--bg)",
-              color: restoring ? "var(--text-dim)" : "var(--text-muted)",
-              fontSize: 14, cursor: restoring ? "not-allowed" : "pointer",
-              fontFamily: "inherit", transition: "border-color 0.2s",
-            }}
-          >
-            <Icons.Download />
-            {restoring ? t("onboarding.restoring") : t("onboarding.chooseBackup")}
-            <input type="file" accept=".gz,.tar.gz" style={{ display: "none" }} onChange={handleRestore} disabled={restoring} />
-          </label>
-          <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 12, padding: 8, width: "100%", textAlign: "center" }}>
-            {t("form.back")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

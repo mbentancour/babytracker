@@ -28,6 +28,7 @@ import TimerButton from "./components/TimerButton";
 import LoginScreen from "./components/LoginScreen";
 import SetupWizard from "./components/SetupWizard";
 import OnboardingScreen from "./components/OnboardingScreen";
+import SetupChoiceScreen from "./components/SetupChoiceScreen";
 import ChildForm from "./components/forms/ChildForm";
 import EditChildForm from "./components/forms/EditChildForm";
 import SettingsModal from "./components/SettingsModal";
@@ -94,7 +95,11 @@ function timerNameToType(name) {
 
 export default function App() {
   const { t } = useI18n();
-  const [authState, setAuthState] = useState("loading"); // loading, setup, login, authenticated
+  const [authState, setAuthState] = useState("loading"); // loading, setup-choice, setup, login, authenticated
+  // setupIntent carries the user's first-boot choice past the register step so
+  // OnboardingScreen can skip its own "what next?" picker. null after login or
+  // on a pre-existing install.
+  const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import"
   const [demoMode, setDemoMode] = useState(false);
   const [applianceMode, setApplianceMode] = useState(false);
 
@@ -123,7 +128,7 @@ export default function App() {
         return;
       }
       if (status.setup_required) {
-        setAuthState("setup");
+        setAuthState("setup-choice");
         return;
       }
       // Try refreshing token from cookie
@@ -153,19 +158,38 @@ export default function App() {
     return <SetupWizard />;
   }
 
+  if (authState === "setup-choice") {
+    return (
+      <SetupChoiceScreen
+        onCreateAccount={() => { setSetupIntent("fresh"); setAuthState("setup"); }}
+        onImport={() => { setSetupIntent("import"); setAuthState("setup"); }}
+        onRestored={() => { setSetupIntent(null); setAuthState("login"); }}
+      />
+    );
+  }
+
   if (authState === "setup" || authState === "login") {
     return (
       <LoginScreen
         isSetup={authState === "setup"}
         onAuthenticated={() => setAuthState("authenticated")}
+        onBack={authState === "setup" ? () => setAuthState("setup-choice") : null}
       />
     );
   }
 
-  return <Dashboard demoMode={demoMode} applianceMode={applianceMode} onLogout={handleLogout} />;
+  return (
+    <Dashboard
+      demoMode={demoMode}
+      applianceMode={applianceMode}
+      onLogout={handleLogout}
+      setupIntent={setupIntent}
+      onSetupIntentConsumed={() => setSetupIntent(null)}
+    />
+  );
 }
 
-function Dashboard({ demoMode, applianceMode, onLogout }) {
+function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupIntentConsumed }) {
   const { t: tr } = useI18n();
   const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
   const [activeTab, setActiveTab] = useState("overview");
@@ -400,7 +424,7 @@ function Dashboard({ demoMode, applianceMode, onLogout }) {
 
   if (!demoMode && data.children.length === 0) {
     if (isAdmin) {
-      return <OnboardingScreen onChildAdded={data.refetch} />;
+      return <OnboardingScreen onChildAdded={data.refetch} initialMode={setupIntent} onInitialModeConsumed={onSetupIntentConsumed} />;
     }
     return (
       <div className="app-loading">

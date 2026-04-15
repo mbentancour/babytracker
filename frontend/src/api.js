@@ -329,9 +329,15 @@ export const api = {
 
   // Backups (admin)
   getBackups: () => request("backups/"),
-  createBackup: () => request("backups/", { method: "POST" }),
-  downloadBackup: async (name) => {
-    const resp = await fetch(`${API_BASE}/backups/download?name=${encodeURIComponent(name)}`, {
+  createBackup: (destinationIds, passphrases) =>
+    request("backups/", {
+      method: "POST",
+      body: JSON.stringify({ destination_ids: destinationIds || [], passphrases: passphrases || {} }),
+    }),
+  downloadBackup: async (name, destinationId) => {
+    const params = new URLSearchParams({ name });
+    if (destinationId != null) params.set("destination_id", String(destinationId));
+    const resp = await fetch(`${API_BASE}/backups/download?${params.toString()}`, {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
     });
@@ -344,14 +350,19 @@ export const api = {
     a.click();
     URL.revokeObjectURL(url);
   },
-  deleteBackup: (name) =>
-    request(`backups/?name=${encodeURIComponent(name)}`, { method: "DELETE" }),
+  deleteBackup: (name, destinationId) => {
+    const params = new URLSearchParams({ name });
+    if (destinationId != null) params.set("destination_id", String(destinationId));
+    return request(`backups/?${params.toString()}`, { method: "DELETE" });
+  },
   getBackupSettings: () => request("backups/settings"),
   updateBackupSettings: (frequency) =>
     request("backups/settings", { method: "PUT", body: JSON.stringify({ frequency }) }),
-  restoreBackup: (file) => {
+  restoreBackup: (file, passphrase, wipePhotos) => {
     const formData = new FormData();
     formData.append("backup", file);
+    if (passphrase) formData.append("passphrase", passphrase);
+    if (wipePhotos) formData.append("wipe_photos", "true");
     return fetch(`${API_BASE}/backups/restore`, {
       method: "POST",
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
@@ -362,6 +373,33 @@ export const api = {
       return r.json();
     });
   },
+  restoreBackupFromDestination: (destinationId, name, passphrase, wipePhotos) => {
+    const formData = new FormData();
+    formData.append("destination_id", String(destinationId));
+    formData.append("name", name);
+    if (passphrase) formData.append("passphrase", passphrase);
+    if (wipePhotos) formData.append("wipe_photos", "true");
+    return fetch(`${API_BASE}/backups/restore`, {
+      method: "POST",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+      body: formData,
+    }).then((r) => {
+      if (!r.ok) return r.json().then((e) => Promise.reject(e));
+      return r.json();
+    });
+  },
+
+  // Backup destinations (admin)
+  listBackupDestinations: () => request("backups/destinations"),
+  createBackupDestination: (payload) =>
+    request("backups/destinations", { method: "POST", body: JSON.stringify(payload) }),
+  updateBackupDestination: (id, payload) =>
+    request(`backups/destinations/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteBackupDestination: (id) =>
+    request(`backups/destinations/${id}`, { method: "DELETE" }),
+  testBackupDestination: (id) =>
+    request(`backups/destinations/${id}/test`, { method: "POST" }),
 
   // Domain/TLS settings (admin)
   getDomain: () => request("settings/domain"),
@@ -400,6 +438,20 @@ export const api = {
 
   // Auth
   getAuthStatus: () => fetch(`${AUTH_BASE}/status`).then((r) => r.json()),
+  setupRestore: (file, passphrase, wipePhotos) => {
+    const formData = new FormData();
+    formData.append("backup", file);
+    if (passphrase) formData.append("passphrase", passphrase);
+    if (wipePhotos) formData.append("wipe_photos", "true");
+    return fetch(`${AUTH_BASE}/setup-restore`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    }).then((r) => {
+      if (!r.ok) return r.json().then((e) => Promise.reject(e));
+      return r.json();
+    });
+  },
   register: (username, password) =>
     fetch(`${AUTH_BASE}/register`, {
       method: "POST",

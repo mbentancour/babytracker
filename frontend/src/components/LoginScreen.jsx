@@ -4,7 +4,7 @@ import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
 
-export default function LoginScreen({ isSetup, onAuthenticated }) {
+export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
   const { t } = useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -114,6 +114,21 @@ export default function LoginScreen({ isSetup, onAuthenticated }) {
                 ? t("auth.createAccount")
                 : t("auth.signIn")}
           </button>
+
+          {isSetup && onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              disabled={loading}
+              style={{
+                background: "none", border: "none", color: "var(--text-muted)",
+                fontSize: 13, cursor: loading ? "not-allowed" : "pointer",
+                fontFamily: "inherit", marginTop: 4, padding: 8,
+              }}
+            >
+              {t("form.back")}
+            </button>
+          )}
         </form>
       </div>
     </div>
