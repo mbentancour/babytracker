@@ -23,22 +23,23 @@ func Ingress(next http.Handler) http.Handler {
 			return
 		}
 		if ingressPath := r.Header.Get("X-Ingress-Path"); ingressPath != "" {
-			// Only strip if the header is a genuine prefix. Anything else is
-			// either a misconfiguration or an attempt to confuse routing.
-			if !strings.HasPrefix(r.URL.Path, ingressPath) {
-				http.Error(w, `{"error":"bad ingress prefix"}`, http.StatusBadRequest)
-				return
-			}
-			path := strings.TrimPrefix(r.URL.Path, ingressPath)
-			if path == "" || path[0] != '/' {
-				path = "/" + path
-			}
-			r.URL.Path = path
-
-			// Also fix RequestURI
-			r.RequestURI = path
-			if r.URL.RawQuery != "" {
-				r.RequestURI = path + "?" + r.URL.RawQuery
+			// HA's Supervisor ingress proxy usually strips the prefix before
+			// forwarding (so r.URL.Path is already "/", "/api/config", etc.)
+			// but always sets this header so add-ons can build absolute URLs.
+			// Only rewrite when the prefix really is present in the path —
+			// leaving it alone otherwise is the right no-op, not an error.
+			// Source trust is already enforced by the inHAIngress gate above:
+			// outside HA we never even look at this header.
+			if strings.HasPrefix(r.URL.Path, ingressPath) {
+				path := strings.TrimPrefix(r.URL.Path, ingressPath)
+				if path == "" || path[0] != '/' {
+					path = "/" + path
+				}
+				r.URL.Path = path
+				r.RequestURI = path
+				if r.URL.RawQuery != "" {
+					r.RequestURI = path + "?" + r.URL.RawQuery
+				}
 			}
 		}
 		next.ServeHTTP(w, r)
