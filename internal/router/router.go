@@ -242,8 +242,6 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			r.Post("/api/backups/", backupH.Create)
 			r.Get("/api/backups/download", backupH.Download)
 			r.Delete("/api/backups/", backupH.Delete)
-			r.Get("/api/backups/settings", backupH.GetSettings)
-			r.Put("/api/backups/settings", backupH.UpdateSettings)
 
 			// Backup destinations
 			r.Get("/api/backups/destinations", backupH.ListDestinations)

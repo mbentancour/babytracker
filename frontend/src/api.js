@@ -355,9 +355,6 @@ export const api = {
     if (destinationId != null) params.set("destination_id", String(destinationId));
     return request(`backups/?${params.toString()}`, { method: "DELETE" });
   },
-  getBackupSettings: () => request("backups/settings"),
-  updateBackupSettings: (frequency) =>
-    request("backups/settings", { method: "PUT", body: JSON.stringify({ frequency }) }),
   restoreBackup: (file, passphrase, wipePhotos) => {
     const formData = new FormData();
     formData.append("backup", file);

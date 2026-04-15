@@ -421,48 +421,6 @@ func isSafeBackupName(name string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Frequency settings (unchanged behaviour)
-// ---------------------------------------------------------------------------
-
-func (h *BackupHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
-	freq, err := models.GetSetting(h.db, "backup_frequency")
-	if err != nil {
-		freq = h.cfg.BackupFrequency
-	}
-	pagination.WriteJSON(w, http.StatusOK, map[string]string{"frequency": freq})
-}
-
-func (h *BackupHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
-	if !h.requireAdmin(w, r) {
-		return
-	}
-	var req struct {
-		Frequency string `json:"frequency"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	valid := map[string]bool{"disabled": true, "6h": true, "12h": true, "daily": true, "weekly": true}
-	if !valid[req.Frequency] {
-		pagination.WriteError(w, http.StatusBadRequest, "frequency must be: disabled, 6h, 12h, daily, or weekly")
-		return
-	}
-	if err := models.SetSetting(h.db, "backup_frequency", req.Frequency); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to save setting")
-		return
-	}
-	pagination.WriteJSON(w, http.StatusOK, map[string]any{
-		"frequency":        req.Frequency,
-		"restart_required": true,
-		"message":          "Backup frequency updated. Restart the server for the change to take effect.",
-	})
-}
-
-// ---------------------------------------------------------------------------
 // Destinations CRUD
 // ---------------------------------------------------------------------------
 

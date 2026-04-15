@@ -94,13 +94,23 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
     ? (sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length).toFixed(1)
     : 0;
 
-  const handleChartClick = (data, type) => {
-    if (!data || !data.activePayload?.[0]) return;
-    const payload = data.activePayload[0];
-    const label = data.activeLabel;
-    const value = payload.value;
-    const entry = payload.payload?.entry;
-    setSelectedBar({ type, label, value, entry });
+  // Recharts v3 removed `activePayload` from the chart click event — we have
+  // `activeLabel`, `activeTooltipIndex`/`activeIndex`, `activeDataKey` and
+  // `activeCoordinate`, but not the payload. Resolve the clicked point by
+  // indexing into the series array ourselves; the clicked row carries an
+  // `entry` pointer we need to open the edit form.
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    if (!data || !seriesData) return;
+    const idx = data.activeTooltipIndex ?? data.activeIndex;
+    if (idx == null || idx < 0 || idx >= seriesData.length) return;
+    const point = seriesData[idx];
+    if (!point) return;
+    setSelectedBar({
+      type,
+      label: data.activeLabel ?? point.timestamp ?? point.date,
+      value: point[dataKey],
+      entry: point.entry,
+    });
   };
 
   const openDayModal = (dateLabel, type) => {
@@ -127,16 +137,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       >
         <div className="fade-in fade-in-1">
           <div
+            onClick={() => latestWeight && canWrite("weight") && onEditEntry?.("weight", latestWeight)}
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
               padding: "20px 22px",
               border: "1px solid var(--border)",
               position: "relative",
+              cursor: latestWeight && canWrite("weight") ? "pointer" : "default",
             }}
           >
             {canWrite("weight") && (
-              <div style={{ position: "absolute", top: 10, right: 10 }}>
+              <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
                 <AddButton onClick={() => onEditEntry?.("weight")} color={colors.growth} label={t("growth.weight")} />
               </div>
             )}
@@ -172,16 +184,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
 
         <div className="fade-in fade-in-2">
           <div
+            onClick={() => latestHeight && canWrite("height") && onEditEntry?.("height", latestHeight)}
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
               padding: "20px 22px",
               border: "1px solid var(--border)",
               position: "relative",
+              cursor: latestHeight && canWrite("height") ? "pointer" : "default",
             }}
           >
             {canWrite("height") && (
-              <div style={{ position: "absolute", top: 10, right: 10 }}>
+              <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
                 <AddButton onClick={() => onEditEntry?.("height")} color={colors.height} label={t("growth.height")} />
               </div>
             )}
@@ -216,9 +230,19 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         <div className="fade-in fade-in-3">
-          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)", position: "relative" }}>
+          <div
+            onClick={() => latestHeadCirc && canWrite("headcirc") && onEditEntry?.("headcirc", latestHeadCirc)}
+            style={{
+              background: "var(--card-bg)",
+              borderRadius: 16,
+              padding: "20px 22px",
+              border: "1px solid var(--border)",
+              position: "relative",
+              cursor: latestHeadCirc && canWrite("headcirc") ? "pointer" : "default",
+            }}
+          >
             {canWrite("headcirc") && (
-              <div style={{ position: "absolute", top: 10, right: 10 }}>
+              <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
                 <AddButton onClick={() => onEditEntry?.("headcirc")} color={colors.growth} label={t("growth.headCirc")} />
               </div>
             )}
@@ -240,9 +264,21 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         <div className="fade-in fade-in-4">
-          <div style={{ background: "var(--card-bg)", borderRadius: 16, padding: "20px 22px", border: "1px solid var(--border)", position: "relative" }}>
+          <div
+            onClick={() => latestManualBMI && canWrite("bmi") && onEditEntry?.("bmi", latestManualBMI)}
+            style={{
+              background: "var(--card-bg)",
+              borderRadius: 16,
+              padding: "20px 22px",
+              border: "1px solid var(--border)",
+              position: "relative",
+              // Only manual BMI entries are editable — the other source is a
+              // weight/height-derived calculation with no row to edit.
+              cursor: latestManualBMI && canWrite("bmi") ? "pointer" : "default",
+            }}
+          >
             {canWrite("bmi") && (
-              <div style={{ position: "absolute", top: 10, right: 10 }}>
+              <div style={{ position: "absolute", top: 10, right: 10 }} onClick={(e) => e.stopPropagation()}>
                 <AddButton onClick={() => onEditEntry?.("bmi")} color={colors.feeding} label={t("growth.bmi")} />
               </div>
             )}
@@ -281,7 +317,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding")}>
+                    <AreaChart data={feedingSeries} onClick={(data) => handleChartClick(data, "feeding", feedingSeries, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -325,7 +361,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep")}>
+                    <AreaChart data={sleepSeries} onClick={(data) => handleChartClick(data, "sleep", sleepSeries, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
@@ -376,7 +412,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={weightSeries} onClick={(data) => handleChartClick(data, "weight")}>
+                    <LineChart data={weightSeries} onClick={(data) => handleChartClick(data, "weight", weightSeries, "weight")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -429,7 +465,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={heightSeries} onClick={(data) => handleChartClick(data, "height")}>
+                    <LineChart data={heightSeries} onClick={(data) => handleChartClick(data, "height", heightSeries, "height")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
@@ -478,17 +514,33 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             {whoView.headcirc && canShowWHO ? (
               <WHOGrowthChart metric="headcirc" sex={sex} birthDate={birthDate} entries={headCircumferences} valueField="head_circumference" unit={units.length} color={colors.growth} />
             ) : headCircSeries.length >= 2 ? (
-              <div style={{ height: 200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={headCircSeries} onClick={(data) => handleChartClick(data, "headcirc")}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
-                    <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
-                    <Tooltip content={<CustomTooltip labelFormatter={formatGrowthTick} />} />
-                    <Line type="monotone" dataKey="head_circumference" stroke={colors.growth} strokeWidth={2.5} dot={{ fill: colors.growth, r: 4, cursor: "pointer" }} activeDot={{ r: 6, cursor: "pointer" }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={headCircSeries} onClick={(data) => handleChartClick(data, "headcirc", headCircSeries, "head_circumference")}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                      <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatGrowthTick} tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
+                      <Tooltip content={<CustomTooltip labelFormatter={formatGrowthTick} />} />
+                      <Line type="monotone" dataKey="head_circumference" stroke={colors.growth} strokeWidth={2.5} dot={{ fill: colors.growth, r: 4, cursor: "pointer" }} activeDot={{ r: 6, cursor: "pointer" }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                {selectedBar?.type === "headcirc" && (
+                  <ChartDetailBar
+                    label={formatGrowthTick(selectedBar.label)}
+                    value={selectedBar.value}
+                    unit={units.length}
+                    color={colors.growth}
+                    actionLabel="Edit"
+                    onViewEntries={() => {
+                      if (selectedBar.entry) onEditEntry?.("headcirc", selectedBar.entry);
+                      setSelectedBar(null);
+                    }}
+                    onDismiss={() => setSelectedBar(null)}
+                  />
+                )}
+              </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
                 {headCircSeries.length === 1 ? t("growth.needTwoMeasurements") : t("growth.noData", { type: "head circumference" })}

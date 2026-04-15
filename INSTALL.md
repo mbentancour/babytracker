@@ -88,7 +88,7 @@ cd babytracker
 docker compose -f deploy/docker/docker-compose.yml up -d
 ```
 
-This starts two containers: the BabyTracker app and PostgreSQL 17.
+This starts two containers: the BabyTracker app and PostgreSQL 18.
 
 - Default port: **8099**
 - Database data persisted in the `pgdata` volume.
@@ -113,9 +113,9 @@ See the [Configuration Reference](#5-configuration-reference) for the full list.
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 22+
-- PostgreSQL 17
+- PostgreSQL 18
 
 ### Steps
 
@@ -194,7 +194,7 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 - The dump uses `pg_dump --clean --if-exists --no-owner --no-privileges`, so restores reliably overwrite the existing schema. Restores wipe and recreate the `public` schema before applying the dump (run inside `psql --single-transaction` with `ON_ERROR_STOP=1`), guaranteeing a clean target state.
 - Restore options: from any configured destination, by uploading a file in the UI, or — on a brand-new install — from the first-boot screen (no admin account needed beforehand; sign in with the credentials from the backup).
 - WebDAV note for Nextcloud: use `https://your-nextcloud/remote.php/dav/files/USERNAME/` and a Nextcloud **app password**, not your login password (Settings → Personal → Security → Devices & sessions). 2FA-enabled accounts will not authenticate with the login password at all.
-- `pg_dump` and `psql` major versions should match the running PostgreSQL server. Mismatches (e.g. PG 17 client tools against a PG 16 server) can emit `SET` statements the server doesn't know — the restorer transparently filters known-incompatible ones, but matching versions avoids the issue entirely.
+- `pg_dump` and `psql` major versions should match the running PostgreSQL server. Mismatches (e.g. PG 18 client tools against a PG 17 server) can emit `SET` statements the server doesn't know — the restorer transparently filters known-incompatible ones, but matching versions avoids the issue entirely.
 - Database credentials are passed to `pg_dump` / `psql` via the `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`/`PGSSLMODE` environment variables (parsed once from `DATABASE_URL`), **not** on the command line. This keeps the password out of `/proc/<pid>/cmdline`, which is world-readable on Linux.
 - The on-disk format for encrypted backups is versioned at `0x02`. The format includes per-chunk ordering and end-of-stream binding in the AES-GCM AAD so truncation and reordering attacks against stored archives are detected on restore. There is no backwards-compatibility path: if you have archives from an older build, decrypt them on that build and re-encrypt once upgraded.
 

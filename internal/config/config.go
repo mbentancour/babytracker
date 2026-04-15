@@ -17,7 +17,6 @@ type Config struct {
 	UnitSystem      string
 	RefreshInterval int
 	DemoMode        bool
-	BackupFrequency string // "disabled", "6h", "12h", "daily", "weekly"
 	ProxyURL        string // If set, proxy all requests to this URL (external mode)
 	MediaPath       string // Path to scan for external photos (HA media directory)
 	TLSCert         string // Path to TLS certificate file (self-signed)
@@ -53,7 +52,6 @@ func New() *Config {
 		UnitSystem:      envOrDefault("UNIT_SYSTEM", "metric"),
 		RefreshInterval: 30,
 		DemoMode:        os.Getenv("DEMO_MODE") == "true",
-		BackupFrequency: envOrDefault("BACKUP_FREQUENCY", "daily"),
 		ProxyURL:        os.Getenv("BABYTRACKER_PROXY_URL"),
 		MediaPath:       os.Getenv("MEDIA_PATH"),
 		TLSCert:         os.Getenv("TLS_CERT"),

@@ -65,11 +65,17 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const solidCount = changes.filter((c) => c.solid && !c.wet).length;
   const bothCount = changes.filter((c) => c.wet && c.solid).length;
 
-  const handleChartClick = (data, type) => {
-    if (!data || !data.activeLabel) return;
-    const label = data.activeLabel;
-    const value = data.activePayload?.[0]?.value;
-    setSelectedBar({ type, label, value });
+  // Recharts v3 dropped `activePayload` from chart click events, so we can't
+  // read the bar's value directly out of the event. Resolve it by indexing
+  // into the chart's data array using `activeTooltipIndex` (or the legacy
+  // `activeIndex` as a fallback).
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    if (!data || !data.activeLabel || !seriesData) return;
+    const idx = data.activeTooltipIndex ?? data.activeIndex;
+    const point = idx != null ? seriesData[idx] : undefined;
+    const value = point ? point[dataKey] : undefined;
+    if (value == null) return;
+    setSelectedBar({ type, label: data.activeLabel, value });
   };
 
   const openDayModal = (day, type) => {
@@ -189,7 +195,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <>
                 <div style={{ marginTop: 16, height: 120 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={weeklyFeedings} barSize={18} onClick={(data) => handleChartClick(data, "feeding")}>
+                    <BarChart data={weeklyFeedings} barSize={18} onClick={(data) => handleChartClick(data, "feeding", weeklyFeedings, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis hide />
@@ -244,7 +250,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <>
                 <div style={{ marginTop: 16, height: 120 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sleepByDay} barSize={18} onClick={(data) => handleChartClick(data, "sleep")}>
+                    <BarChart data={sleepByDay} barSize={18} onClick={(data) => handleChartClick(data, "sleep", sleepByDay, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis hide />
@@ -345,7 +351,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <>
                 <div style={{ height: 140 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={tummyByDay} barSize={22} onClick={(data) => handleChartClick(data, "tummy")}>
+                    <BarChart data={tummyByDay} barSize={22} onClick={(data) => handleChartClick(data, "tummy", tummyByDay, "minutes")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
                       <YAxis hide />

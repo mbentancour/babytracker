@@ -47,7 +47,7 @@ export default function WeightForm({ childId, entry, onDone, onClose, onDelete }
     <Modal title={isEdit ? t("weight.edit") : t("weight.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={`Weight (${units.weight})`}>
-          <FormInput type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="5.0" min="0" max="30" step="0.01" autoFocus required />
+          <FormInput type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="5.0" min="0" step="0.01" autoFocus required />
         </FormField>
         <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />

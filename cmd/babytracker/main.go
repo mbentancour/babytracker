@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"os/signal"
 	"syscall"
 	"time"
@@ -86,37 +85,8 @@ func main() {
 			}
 		}
 
-		// Migrate photos from old location to MediaPath if configured
-		if cfg.MediaPath != "" {
-			oldPhotosDir := filepath.Join(cfg.DataDir, "photos")
-			if entries, err := os.ReadDir(oldPhotosDir); err == nil && len(entries) > 0 {
-				slog.Info("migrating photos to media path", "from", oldPhotosDir, "to", cfg.MediaPath)
-				for _, entry := range entries {
-					if entry.IsDir() {
-						continue
-					}
-					oldPath := filepath.Join(oldPhotosDir, entry.Name())
-					newPath := filepath.Join(cfg.MediaPath, entry.Name())
-					// Don't overwrite if already exists in destination
-					if _, err := os.Stat(newPath); err == nil {
-						continue
-					}
-					if err := os.Rename(oldPath, newPath); err != nil {
-						// Rename fails across filesystems, fall back to copy+delete
-						if data, err := os.ReadFile(oldPath); err == nil {
-							if os.WriteFile(newPath, data, 0644) == nil {
-								os.Remove(oldPath)
-							}
-						}
-					}
-				}
-				slog.Info("photo migration complete")
-			}
-		}
-
 		// Start automatic backup scheduler. Schedules are per-destination
-		// (cron expressions on backup_destinations.schedule); the old global
-		// backup_frequency setting is ignored by the new scheduler.
+		// via cron expressions on backup_destinations.schedule.
 		backup.StartScheduler(db, cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), cfg.BackupLocalRoots)
 
 		handler = router.New(db, cfg)

@@ -65,12 +65,12 @@ Screenshots coming soon.
 
 | Component | Version |
 |-----------|---------|
-| Go        | 1.25    |
+| Go        | 1.26    |
 | React     | 19      |
-| PostgreSQL| 17      |
+| PostgreSQL| 18      |
 | Chi       | v5      |
-| Vite      | 6       |
-| Recharts  | latest  |
+| Vite      | 8       |
+| Recharts  | 3       |
 
 ## License
 
