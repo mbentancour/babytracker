@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 type TummyTimesHandler struct {
@@ -81,6 +82,7 @@ func (h *TummyTimesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create tummy time")
 		return
 	}
+	webhooks.Fire("tummy_time.created", t)
 	pagination.WriteJSON(w, http.StatusCreated, t)
 }
 

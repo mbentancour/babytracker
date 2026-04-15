@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 type PumpingHandler struct {
@@ -66,5 +67,6 @@ func (h *PumpingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create pumping")
 		return
 	}
+	webhooks.Fire("pumping.created", p)
 	pagination.WriteJSON(w, http.StatusCreated, p)
 }

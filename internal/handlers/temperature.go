@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 type TemperatureHandler struct {
@@ -63,6 +64,7 @@ func (h *TemperatureHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create temperature")
 		return
 	}
+	webhooks.Fire("temperature.created", temp)
 	pagination.WriteJSON(w, http.StatusCreated, temp)
 }
 

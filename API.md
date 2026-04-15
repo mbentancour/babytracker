@@ -530,7 +530,69 @@ PATCH  /api/webhooks/{id}/     Update
 DELETE /api/webhooks/{id}/     Delete
 ```
 
-Events: `*` (all) or comma-separated list.
+`events` is `*` (all) or a comma-separated list of exact event names (see below). `secret` must be ≥16 chars — it's the HMAC-SHA256 key used to sign every delivery.
+
+### Event delivery
+
+When activity occurs, BabyTracker POSTs JSON to every active webhook whose `events` filter matches. The body is:
+
+```json
+{
+  "event": "feeding.created",
+  "timestamp": "2026-04-15T14:23:15.123Z",
+  "data": { /* the row that was just written, same shape as the create-endpoint response */ }
+}
+```
+
+Request headers:
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `X-Webhook-Event` | event name (duplicated for routing-table convenience) |
+| `X-Webhook-Signature` | `sha256=<hex(hmac_sha256(secret, raw_body))>` — GitHub-style |
+| `User-Agent` | `BabyTracker-Webhook/1` |
+
+Subscribers **must** verify the signature before trusting the payload. Pseudocode:
+
+```python
+import hmac, hashlib
+expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+if not hmac.compare_digest(request.headers["X-Webhook-Signature"], expected):
+    return 401
+```
+
+### Delivery semantics
+
+- Fire-and-forget from the HTTP handler — delivery is asynchronous on a bounded in-process queue.
+- 5 second per-request timeout.
+- Retries: 3 attempts total on failure, backing off 1s / 5s / 25s.
+- After all retries exhaust, the row's `last_status_code` is updated with the last non-2xx code (or `0` on connection failure) and the event is dropped.
+- If the queue fills up (unusual — 256-slot buffer), events are dropped with a warning log rather than blocking the HTTP handler. The HA integration's polling fallback catches any missed events.
+
+### Event names (v1)
+
+Activity events fire on `POST` (or `DELETE` for timers):
+
+| Event | Fired when |
+|---|---|
+| `feeding.created` | `POST /api/feedings/` succeeds |
+| `sleep.created` | `POST /api/sleep/` |
+| `diaper.created` | `POST /api/changes/` |
+| `tummy_time.created` | `POST /api/tummy-times/` |
+| `pumping.created` | `POST /api/pumping/` |
+| `temperature.created` | `POST /api/temperature/` |
+| `medication.created` | `POST /api/medications/` |
+| `note.created` | `POST /api/notes/` |
+| `milestone.created` | `POST /api/milestones/` |
+| `weight.created` | `POST /api/weight/` |
+| `height.created` | `POST /api/height/` |
+| `head_circumference.created` | `POST /api/head-circumference/` |
+| `bmi.created` | `POST /api/bmi/` |
+| `timer.started` | `POST /api/timers/` |
+| `timer.stopped` | `DELETE /api/timers/{id}/` |
+
+`*.updated` / `*.deleted` events are not emitted in v1 — use polling (or the explicit API) to reconcile state changes.
 
 ---
 

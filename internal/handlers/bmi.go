@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 type BMIHandler struct {
@@ -56,6 +57,7 @@ func (h *BMIHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create bmi")
 		return
 	}
+	webhooks.Fire("bmi.created", b)
 	pagination.WriteJSON(w, http.StatusCreated, b)
 }
 

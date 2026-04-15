@@ -10,6 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 type TimersHandler struct {
@@ -56,6 +57,7 @@ func (h *TimersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create timer")
 		return
 	}
+	webhooks.Fire("timer.started", t)
 	pagination.WriteJSON(w, http.StatusCreated, t)
 }
 
@@ -97,9 +99,16 @@ func (h *TimersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Snapshot the timer before deleting so subscribers get the full shape
+	// (child, name, start). A raw ID would be less useful to the HA integration
+	// which resolves timers by child.
+	snapshot, _ := models.GetTimer(h.db, id)
 	if err := models.DeleteTimer(h.db, id); err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to delete timer")
 		return
+	}
+	if snapshot != nil {
+		webhooks.Fire("timer.stopped", snapshot)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

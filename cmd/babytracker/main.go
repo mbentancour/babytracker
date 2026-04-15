@@ -21,6 +21,7 @@ import (
 	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/handlers"
 	"github.com/mbentancour/babytracker/internal/router"
+	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
 //go:embed all:migrations
@@ -88,6 +89,11 @@ func main() {
 		// Start automatic backup scheduler. Schedules are per-destination
 		// via cron expressions on backup_destinations.schedule.
 		backup.StartScheduler(db, cfg.DatabaseURL, cfg.DataDir, cfg.BackupsDir(), cfg.BackupLocalRoots)
+
+		// Webhook dispatcher — handlers fire activity events and a
+		// background worker delivers them to subscribers (e.g. the HA
+		// integration) so push-based updates are possible without polling.
+		webhooks.Init(db)
 
 		handler = router.New(db, cfg)
 	}
