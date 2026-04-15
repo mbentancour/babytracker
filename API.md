@@ -31,7 +31,7 @@ Authorization: Bearer <access_token>
 
 ### API Token (for integrations)
 
-Create a token in Settings > Data > API Tokens, or via the API:
+Create a token in Settings > Integrations > API Tokens, or via the API:
 
 ```
 POST /api/tokens/
@@ -221,6 +221,20 @@ PATCH  /api/children/{id}/     Update child (admin only)
 DELETE /api/children/{id}/     Delete child (admin only)
 POST   /api/children/{id}/photo  Upload child photo
 ```
+
+Body (create/update):
+```json
+{
+  "first_name": "Lily",
+  "last_name": "",
+  "birth_date": "2024-06-01",
+  "sex": "female",
+  "picture": ""
+}
+```
+
+Fields:
+- `sex`: `"male"`, `"female"`, or `null`. Required for WHO growth percentile charts. Nullable.
 
 ### Feedings
 
@@ -445,9 +459,18 @@ GET /api/gallery/?child=1
 
 ```
 GET /api/media/photos/{filename}
+GET /api/media/photos/{filename}?size=thumb
+GET /api/media/photos/{filename}?size=medium
 ```
 
 Requires authentication via refresh token cookie or Authorization header.
+
+The optional `?size=` parameter returns a cached resized JPEG:
+- `thumb` — longest edge 300 px (used by the gallery grid)
+- `medium` — longest edge 800 px
+- omitted — original file, untouched
+
+Thumbnails are generated on first request, cached on disk, and respect EXIF orientation. Served with a 24-hour `Cache-Control` header.
 
 ---
 

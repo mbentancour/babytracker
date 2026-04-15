@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 
@@ -14,6 +15,7 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
   const isEdit = !!entry;
   const [time, setTime] = useState(entry?.time ? toLocalDatetime(new Date(entry.time)) : toLocalDatetime(new Date()));
   const [note, setNote] = useState(entry?.note || "");
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -22,11 +24,16 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
     setSaving(true);
     try {
       const data = { note: note.trim(), time: `${time}:00` };
+      let result;
       if (isEdit) {
-        await api.updateNote(entry.id, data);
+        result = await api.updateNote(entry.id, data);
       } else {
         data.child = childId;
-        await api.createNote(data);
+        result = await api.createNote(data);
+      }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        await api.uploadEntryPhoto("notes", entryId, photoFile);
       }
       onDone();
     } catch {
@@ -65,6 +72,7 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
             }}
           />
         </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.note} disabled={saving || !note.trim()}>
           {saving ? t("form.saving") : isEdit ? t("note.edit") : t("note.log")}
         </FormButton>

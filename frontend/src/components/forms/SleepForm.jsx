@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 
@@ -17,19 +18,21 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [notes, setNotes] = useState(entry?.notes || "");
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
+      let result;
       if (isEdit) {
         const data = {
           start: `${start}:00`,
           end: `${end}:00`,
         };
         if (notes.trim()) data.notes = notes.trim();
-        await api.updateSleep(entry.id, data);
+        result = await api.updateSleep(entry.id, data);
       } else {
         const data = { child: childId };
         if (notes.trim()) data.notes = notes.trim();
@@ -39,7 +42,11 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
           data.start = `${start}:00`;
           data.end = `${end}:00`;
         }
-        await api.createSleep(data);
+        result = await api.createSleep(data);
+      }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        await api.uploadEntryPhoto("sleep", entryId, photoFile);
       }
       onDone();
     } catch {
@@ -82,6 +89,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
             placeholder={t("form.optional")}
           />
         </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.sleep} disabled={saving}>
           {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>

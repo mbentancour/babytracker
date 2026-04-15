@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
+import { usePreferences } from "../../utils/preferences";
 
 function toLocalDatetime(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -19,12 +21,14 @@ const COLORS = [
 
 export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, preset }) {
   const { t } = useI18n();
+  const { getFormDefault } = usePreferences();
   const isEdit = !!entry;
   const [time, setTime] = useState(entry?.time ? toLocalDatetime(new Date(entry.time)) : toLocalDatetime(new Date()));
   const [wet, setWet] = useState(entry ? entry.wet : (preset === "wet" || preset === "both"));
   const [solid, setSolid] = useState(entry ? entry.solid : (preset === "solid" || preset === "both"));
-  const [color, setColor] = useState(entry?.color || "");
+  const [color, setColor] = useState(entry?.color ?? (isEdit ? "" : getFormDefault("diaper", "color") || ""));
   const [notes, setNotes] = useState(entry?.notes || "");
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -34,11 +38,16 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
       const data = { wet, solid, time: `${time}:00` };
       if (color) data.color = color;
       if (notes.trim()) data.notes = notes.trim();
+      let result;
       if (isEdit) {
-        await api.updateChange(entry.id, data);
+        result = await api.updateChange(entry.id, data);
       } else {
         data.child = childId;
-        await api.createChange(data);
+        result = await api.createChange(data);
+      }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        await api.uploadEntryPhoto("changes", entryId, photoFile);
       }
       onDone();
     } catch {
@@ -96,6 +105,7 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
             placeholder={t("form.optional")}
           />
         </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.diaper} disabled={saving || (!wet && !solid)}>
           {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>

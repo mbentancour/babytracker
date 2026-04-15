@@ -349,6 +349,23 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 </div>
 
                 <div className="settings-card" style={{ marginBottom: 16 }}>
+                  <h4 className="settings-card-title">{t("settings.diaperDefaults")}</h4>
+                  <FormField label={t("settings.defaultDiaperColor")}>
+                    <FormSelect
+                      options={[
+                        { value: "", label: t("settings.diaperColorNone") },
+                        { value: "black", label: t("diaper.black") },
+                        { value: "brown", label: t("diaper.brown") },
+                        { value: "green", label: t("diaper.green") },
+                        { value: "yellow", label: t("diaper.yellow") },
+                      ]}
+                      value={prefs.defaults.diaper?.color || ""}
+                      onChange={(e) => setFormDefault("diaper", "color", e.target.value)}
+                    />
+                  </FormField>
+                </div>
+
+                <div className="settings-card" style={{ marginBottom: 16 }}>
                   <h4 className="settings-card-title">{t("settings.medicationDefaults")}</h4>
                   <FormField label={t("settings.defaultDosageUnit")}>
                     <FormSelect

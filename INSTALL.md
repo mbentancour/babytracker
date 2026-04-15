@@ -58,6 +58,23 @@ Use this if you already have BabyTracker running elsewhere and want HA ingress a
 3. Set `external_url` to your existing BabyTracker instance URL (e.g., `https://192.168.1.50:8099`).
 4. Start the add-on. It proxies all requests to your external instance.
 
+### Home Assistant integration (sensors, events, services)
+
+If you want per-child sensors, event triggers (new feeding, new sleep, etc.),
+and services to log activities from automations, install the separate
+integration:
+
+- Repo: [github.com/mbentancour/babytracker-homeassistant](https://github.com/mbentancour/babytracker-homeassistant)
+- Install via HACS (Custom Repositories → Integration) or manually copy
+  `custom_components/babytracker/` to your HA `config/` directory.
+
+The integration connects to any running BabyTracker instance (add-on, Pi
+image, Docker, or remote) using an API token created in BabyTracker →
+Settings → Integrations → API Tokens.
+
+> HACS doesn't manage Home Assistant add-ons, which is why the integration
+> lives in a separate repository.
+
 ---
 
 ## 3. Docker Compose (recommended for servers)

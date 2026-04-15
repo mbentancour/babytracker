@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
@@ -38,6 +39,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [notes, setNotes] = useState(entry?.notes || "");
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -47,10 +49,11 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
       const data = { type, method };
       if (amount) data.amount = parseFloat(amount);
       if (notes.trim()) data.notes = notes.trim();
+      let result;
       if (isEdit) {
         data.start = `${start}:00`;
         data.end = `${end}:00`;
-        await api.updateFeeding(entry.id, data);
+        result = await api.updateFeeding(entry.id, data);
       } else {
         data.child = childId;
         if (timerId) {
@@ -59,7 +62,11 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
           data.start = `${start}:00`;
           data.end = `${end}:00`;
         }
-        await api.createFeeding(data);
+        result = await api.createFeeding(data);
+      }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        await api.uploadEntryPhoto("feedings", entryId, photoFile);
       }
       onDone();
     } catch {
@@ -107,6 +114,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
             placeholder={t("form.optional")}
           />
         </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.feeding} disabled={saving}>
           {saving ? t("form.saving") : isEdit ? t("form.update") + " " : t("form.save") + " "}
         </FormButton>

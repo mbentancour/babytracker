@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 
@@ -17,16 +18,18 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   const [milestone, setMilestone] = useState(entry?.milestone || "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(tenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
+  const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
+      let result;
       if (isEdit) {
         const data = { start: `${start}:00`, end: `${end}:00` };
         if (milestone.trim()) data.milestone = milestone.trim();
-        await api.updateTummyTime(entry.id, data);
+        result = await api.updateTummyTime(entry.id, data);
       } else {
         const data = { child: childId };
         if (timerId) {
@@ -36,7 +39,11 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
           data.end = `${end}:00`;
         }
         if (milestone.trim()) data.milestone = milestone.trim();
-        await api.createTummyTime(data);
+        result = await api.createTummyTime(data);
+      }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        await api.uploadEntryPhoto("tummy-times", entryId, photoFile);
       }
       onDone();
     } catch {
@@ -79,6 +86,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
             placeholder="e.g., Lifted head"
           />
         </FormField>
+        <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.tummy} disabled={saving}>
           {saving ? t("form.saving") : isEdit ? t("tummy.edit") : t("tummy.log")}
         </FormButton>

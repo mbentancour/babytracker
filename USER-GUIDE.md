@@ -7,8 +7,10 @@ A practical guide for parents using BabyTracker to track their baby's daily acti
 ## Getting Started
 
 1. **Create your account.** On first launch, you will be prompted to create an account with a username and password.
-2. **Add your baby.** Enter your baby's name and birth date.
+2. **Add your baby.** Enter your baby's first name, last name (optional), birth date, and — if you want WHO growth percentile charts — their sex.
 3. **Start tracking.** The main screen shows your baby's dashboard, where you can see today's activity at a glance and log new entries.
+
+To **add another baby** later, tap your current baby's name or photo to open the edit screen; there is an "+ Add Your Baby" button at the top right.
 
 ---
 
@@ -65,6 +67,8 @@ Record temperature readings when your baby is unwell or for routine checks.
 
 Track growth measurements over time. These are displayed as charts on the Growth tab so you can see trends.
 
+If your child's sex is set (in the edit-child screen), you can toggle **WHO** on any of the Weight/Height/Head Circumference/BMI charts to overlay the official [WHO growth percentile curves](https://www.who.int/tools/child-growth-standards). Your child's measurements appear as dots against the 3rd / 15th / 50th / 85th / 97th percentile lines. The overlay is for reference only — consult your paediatrician for medical advice.
+
 ### BMI
 
 Body mass index can be calculated automatically from weight and height, or entered manually.
@@ -108,7 +112,9 @@ Timers make logging faster and more accurate.
 - **Upload photos directly.** Go to the Photos tab to upload photos without attaching them to a specific entry.
 - **Profile pictures.** Set a profile picture for each child.
 - **Tag photos with children.** Photos can be tagged with one or more children so they appear in the right gallery.
+- **Click to enlarge.** Tap any photo in the gallery to open it full-screen. Use the left/right arrows (or keyboard arrow keys) to browse, Escape or tap outside to close.
 - Untagged photos are treated as shared and will appear in every child's gallery.
+- The gallery displays thumbnails for fast loading; full-resolution originals are used only when a photo is opened or shown in picture frame mode.
 
 ---
 
@@ -119,21 +125,51 @@ Turn a spare tablet into a digital photo frame that cycles through your baby's p
 - **Idle timeout:** In Settings, set an idle timeout so picture frame mode activates automatically after a period of inactivity.
 - **Always-on mode:** Add `?slideshow=true` to the URL to start picture frame mode immediately.
 - **Filter photos:** In Settings, choose which types of photos to include in the slideshow.
-- **Remote control:** If you have named your device in Settings, you can control picture frame mode remotely through the Display Control API -- handy for turning it on or off from another device.
+- **Live status overlay:** Optionally show small status items on top of the slideshow — time since last feeding / sleep / diaper, running timers, or the current time. Configurable per-item in Settings → General → Picture Frame → Live status overlay.
+- **Remote control:** If you have named your device in Settings, you can control picture frame mode remotely through the Display Control API -- handy for turning it on or off from another device or from Home Assistant.
 
 ---
 
 ## Settings
+
+### Per-device vs. shared settings
+
+Some settings are saved **in this device's browser only**, others are stored on the BabyTracker server and **apply to every user and device**. This is intentional — it lets you tailor each device to how it is used:
+
+- A wall-mounted tablet can run in dark theme with a long picture-frame timeout; your phone stays on light theme with no slideshow.
+- Your partner can have a different language than you without changing yours.
+- A kitchen iPad can hide features you rarely track on that device, keeping the interface simple.
+- Form defaults (your preferred feeding type, diaper color, etc.) can differ per device — useful if one device is typically used at night and another during the day.
+
+**Per-device** (saved in the browser, different on every phone/tablet/computer):
+- Unit system
+- Theme
+- Language
+- Picture frame timeout and overlay items
+- Device name
+- Feature visibility toggles
+- Form defaults (feeding type/method, diaper color, medication dosage unit, auto-calculate BMI)
+
+**Shared** (stored on the server, same for everyone):
+- Your user account and password
+- Children and all tracked data (feedings, sleep, photos, etc.)
+- Backup frequency
+- API tokens and webhooks
+- Users and roles
+- Custom domain (appliance mode)
+
+If you clear your browser data or sign in from a new device, the per-device settings reset to defaults — your tracked data is not affected.
 
 ### General
 
 - **Unit system:** Choose between metric and imperial.
 - **Theme:** Light, dark, or match your system setting.
 - **Language:** English, Spanish, or Danish.
-- **Picture frame timeout:** How long before picture frame mode activates automatically.
+- **Picture frame timeout:** How long before picture frame mode activates automatically. Also includes the live status overlay toggles (see Picture Frame Mode above).
 - **Device name:** Give this device a name for remote display control.
-- **Custom domain:** Available in appliance mode only.
+- **Custom domain:** Available in appliance mode only. Point a domain name at your device to enable Let's Encrypt HTTPS certificates.
 - **Change password:** Update your account password.
+- **Restart / Shut down:** Available in appliance mode only. Safely reboot or power down the device from the UI.
 
 ### Features
 
@@ -154,6 +190,11 @@ Save time by setting default values for things you log often:
 - **Automatic backups:** Set how often backups are created automatically.
 - **Import from Baby Buddy:** If you are migrating from Baby Buddy, you can import your existing data.
 
+### Integrations (admin only)
+
+- **API tokens:** Create tokens so external systems (Home Assistant, scripts, etc.) can read or write your data. Choose Read only or Read & Write scope.
+- **Webhooks:** Send HTTP notifications to another system whenever data changes. Useful for triggering automations outside BabyTracker.
+
 ### Users & Roles (admin only)
 
 - **Create accounts:** Add user accounts for partners, grandparents, or caregivers.
@@ -171,6 +212,18 @@ Save time by setting default values for things you log often:
 - Users can be granted access to specific children, so you can share selectively.
 
 ---
+
+## Home Assistant
+
+If you use Home Assistant, there is a dedicated integration that exposes per-child sensors, fires events when new activity is logged, and provides services to log activities from automations. See the [babytracker-homeassistant](https://github.com/mbentancour/babytracker-homeassistant) repository for installation and examples.
+
+Typical things you can do:
+
+- Show a card on your dashboard with "last feeding was 2h 15m ago"
+- Get a phone notification if temperature is above 38°C
+- Turn on a nightlight when a sleep timer is running
+- Tap a button to log a wet diaper without opening the app
+- Start the picture frame slideshow on a bedroom tablet when the lights go off
 
 ## Tips
 
