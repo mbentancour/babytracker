@@ -22,18 +22,18 @@ if [ ! -f /etc/ssl/certs/babytracker.crt ]; then
 fi
 
 # 2. Initialize PostgreSQL
-PG_CLUSTER="18/main"
+PG_CLUSTER="17/main"
 PG_DATA="/var/lib/postgresql/${PG_CLUSTER}"
 
 if [ ! -f "${PG_DATA}/PG_VERSION" ]; then
     echo "Initializing PostgreSQL cluster..."
-    pg_ctlcluster 18 main start || true
+    pg_ctlcluster 17 main start || true
     sleep 2
     su - postgres -c "createuser --no-password babytracker" 2>/dev/null || true
     su - postgres -c "createdb --owner=babytracker babytracker" 2>/dev/null || true
 else
     echo "Starting existing PostgreSQL cluster..."
-    pg_ctlcluster 18 main start || true
+    pg_ctlcluster 17 main start || true
 fi
 
 # Wait for PostgreSQL to be ready
@@ -47,7 +47,7 @@ for i in $(seq 1 30); do
 done
 
 # 3. Tune PostgreSQL for low memory (Pi Zero 2W has 512MB)
-PG_CONF="/etc/postgresql/18/main/postgresql.conf"
+PG_CONF="/etc/postgresql/17/main/postgresql.conf"
 if [ -f "${PG_CONF}" ] && ! grep -q "# BabyTracker tuning" "${PG_CONF}"; then
     echo "Tuning PostgreSQL for low memory..."
     cat >> "${PG_CONF}" << 'PGEOF'
@@ -59,7 +59,7 @@ maintenance_work_mem = 32MB
 effective_cache_size = 128MB
 max_connections = 20
 PGEOF
-    pg_ctlcluster 18 main reload || true
+    pg_ctlcluster 17 main reload || true
 fi
 
 # 4. Set hostname
