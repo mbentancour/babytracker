@@ -1,5 +1,5 @@
 name: "BabyTracker"
-version: "1.2.4"
+version: "1.2.5"
 slug: "babytracker"
 description: >-
   A modern, self-contained baby tracking application with charts, timers,
@@ -27,11 +27,14 @@ ports:
   "8099/tcp": null
 ports_description:
   "8099/tcp": BabyTracker HTTP (internal network only; no host port exposed)
-# Pin a short, stable container hostname. Without this, Supervisor derives
-# it from a SHA1 hash of the add-on repository URL (e.g. "20e180a5-babytracker"),
-# which is unpredictable for users adding the repo manually. Setting
-# `hostname:` makes the integration's default URL work out of the box.
-hostname: babytracker
+# NOTE on peer-container DNS. Supervisor assigns each add-on a container DNS
+# name of the form "<hash>-babytracker", where <hash> is an 8-char SHA1 of
+# the exact repository URL the user typed when adding the add-on repo (a
+# trailing .git or / changes the hash). There is no way to pin a predictable
+# short name — the `hostname:` add-on config field only sets the in-container
+# OS hostname, not the Docker DNS alias. The HA integration's config flow
+# asks the user to paste the exact URL, so the unpredictable hash is worked
+# around via user input rather than guessed at.
 panel_icon: "mdi:baby-face-outline"
 panel_title: "BabyTracker"
 panel_admin: false
