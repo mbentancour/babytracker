@@ -241,12 +241,18 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
     }
   }, [data.child?.id, selectedChildId]);
 
-  // Refetch data once permissions are known (so we only fetch what's allowed)
+  // Refetch data once BOTH permissions and the active child are known — the
+  // first in-flight fetch inside useBabyData was gated by a canRead() that
+  // returned false for everything (no selectedChildId yet for non-admins),
+  // so we need a do-over. Guarded by a ref so it fires exactly once: without
+  // the ref a later child switch would double-refetch.
+  const didPostPermsRefetchRef = useRef(false);
   useEffect(() => {
-    if (permissionsLoaded && data.child?.id) {
+    if (permissionsLoaded && data.child?.id && !didPostPermsRefetchRef.current) {
+      didPostPermsRefetchRef.current = true;
       data.refetch();
     }
-  }, [permissionsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [permissionsLoaded, data.child?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-select first visible tab if current tab becomes hidden
   useEffect(() => {
