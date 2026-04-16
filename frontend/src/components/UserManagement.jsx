@@ -13,15 +13,20 @@ export default function UserManagement({ children }) {
   const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showAddRole, setShowAddRole] = useState(false);
 
   const refresh = () => {
-    Promise.all([api.getUsers(), api.getRoles()])
-      .then(([u, r]) => {
+    // Fetch /users/me once per refresh too — the current user's id drives
+    // which management buttons render on each row (we hide destructive
+    // actions on your own row; everyone else gets delete + reset-password).
+    Promise.all([api.getUsers(), api.getRoles(), api.getCurrentUserAccess()])
+      .then(([u, r, me]) => {
         setUsers(u.results || []);
         setRoles(r.results || []);
+        setCurrentUserId(me?.user?.id ?? null);
       })
       .finally(() => setLoading(false));
   };
@@ -47,7 +52,14 @@ export default function UserManagement({ children }) {
         {showAddUser && <AddUserForm onDone={() => { setShowAddUser(false); refresh(); }} />}
 
         {users.map((user) => (
-          <UserCard key={user.id} user={user} roles={roles} children={children} onRefresh={refresh} />
+          <UserCard
+            key={user.id}
+            user={user}
+            roles={roles}
+            children={children}
+            isSelf={user.id === currentUserId}
+            onRefresh={refresh}
+          />
         ))}
       </div>
 
@@ -114,7 +126,7 @@ function AddUserForm({ onDone }) {
   );
 }
 
-function UserCard({ user, roles, children, onRefresh }) {
+function UserCard({ user, roles, children, isSelf, onRefresh }) {
   const { t } = useI18n();
   const [showGrant, setShowGrant] = useState(false);
   const [grantChild, setGrantChild] = useState("");
@@ -142,13 +154,17 @@ function UserCard({ user, roles, children, onRefresh }) {
             </span>
           )}
         </div>
-        {!user.is_admin && (
+        {!isSelf && (
           <button
             className="delete-entry-btn"
             onClick={async () => {
               if (confirm(`${t("users.deleteConfirm")} "${user.username}"?`)) {
-                await api.deleteUser(user.id);
-                onRefresh();
+                try {
+                  await api.deleteUser(user.id);
+                  onRefresh();
+                } catch (err) {
+                  alert(err?.error || err?.message || "Failed to delete user");
+                }
               }
             }}
           >
@@ -207,41 +223,49 @@ function UserCard({ user, roles, children, onRefresh }) {
               {t("users.grantAccess")}
             </button>
           )}
+        </>
+      )}
 
-          {/* Reset password */}
-          {showResetPw ? (
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <input
-                type="password"
-                value={newPw}
-                onChange={(e) => setNewPw(e.target.value)}
-                placeholder={t("users.newPasswordPlaceholder")}
-                style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontSize: 12, fontFamily: "inherit" }}
-              />
-              <button
-                onClick={async () => {
-                  if (newPw.length < 8) { alert(t("users.passwordMinLength")); return; }
+      {/* Reset password — available for any user except yourself, including
+          other admins. Your own password is changed via the account/profile
+          flow, not from the admin list. */}
+      {!isSelf && (
+        showResetPw ? (
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <input
+              type="password"
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              placeholder={t("users.newPasswordPlaceholder")}
+              style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontSize: 12, fontFamily: "inherit" }}
+            />
+            <button
+              onClick={async () => {
+                if (newPw.length < 8) { alert(t("users.passwordMinLength")); return; }
+                try {
                   await api.resetUserPassword(user.id, newPw);
                   setShowResetPw(false);
                   setNewPw("");
                   alert(t("users.passwordResetDone"));
-                }}
-                style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#6C5CE7", color: "white", fontSize: 11, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
-              >
-                {t("users.reset")}
-              </button>
-              <button onClick={() => { setShowResetPw(false); setNewPw(""); }}
-                style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                {t("users.cancel")}
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => setShowResetPw(true)}
-              style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>
-              {t("users.resetPassword")}
+                } catch (err) {
+                  alert(err?.error || err?.message || "Failed to reset password");
+                }
+              }}
+              style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: "#6C5CE7", color: "white", fontSize: 11, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+            >
+              {t("users.reset")}
             </button>
-          )}
-        </>
+            <button onClick={() => { setShowResetPw(false); setNewPw(""); }}
+              style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+              {t("users.cancel")}
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowResetPw(true)}
+            style={{ fontSize: 11, color: "var(--text-dim)", background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", marginTop: 6 }}>
+            {t("users.resetPassword")}
+          </button>
+        )
       )}
     </div>
   );

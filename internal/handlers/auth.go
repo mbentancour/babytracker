@@ -101,6 +101,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	h.issueTokens(w, r, user)
 }
 
+// refreshGracePeriod keeps a just-rotated refresh token valid for a short
+// window so concurrent refresh calls from the same user (multi-tab, a
+// background poll firing during idle-wake, SSE reconnect, HA restart race)
+// don't race to failure and get kicked to the login screen. Empirically,
+// 10s is comfortably longer than any realistic in-flight window.
+const refreshGracePeriod = 10 * time.Second
+
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
@@ -115,8 +122,13 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete the used refresh token (rotation)
-	_ = models.DeleteRefreshToken(h.db, tokenHash)
+	// Rotate, but keep the old token redeemable for `refreshGracePeriod`
+	// before deleting it. Idempotent: if another call already deleted it in
+	// the meantime, the DELETE is a no-op.
+	go func(hash string) {
+		time.Sleep(refreshGracePeriod)
+		_ = models.DeleteRefreshToken(h.db, hash)
+	}(tokenHash)
 
 	user, err := models.GetUserByID(h.db, rt.UserID)
 	if err != nil {
