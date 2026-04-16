@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormSelect, FormButton, FormDeleteButton } from "../Modal";
+import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { useI18n } from "../../utils/i18n";
 
@@ -23,6 +24,15 @@ export default function MilestoneForm({ childId, entry, onDone, onClose, onDelet
   const [description, setDescription] = useState(entry?.description || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tagIds, setTagIds] = useState([]);
+  // Load existing tags when editing an entry so the picker starts pre-populated.
+  useEffect(() => {
+    if (!entry?.id) return;
+    api.getEntityTags("milestone", entry.id)
+      .then((tags) => setTagIds((tags || []).map((t) => t.id)))
+      .catch(() => {});
+  }, [entry?.id]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -60,6 +70,9 @@ export default function MilestoneForm({ childId, entry, onDone, onClose, onDelet
         </FormField>
         <FormField label={t("milestone.description")}>
           <FormInput type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("form.optional")} />
+        </FormField>
+        <FormField label={t("tags.title")}>
+          <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color="#00b894" disabled={saving}>

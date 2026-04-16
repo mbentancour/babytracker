@@ -176,6 +176,9 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/tags/", tagsH.Create)
 		r.Patch("/api/tags/{id}/", tagsH.Update)
 		r.Delete("/api/tags/{id}/", tagsH.Delete)
+		// `bulk` route is registered BEFORE the {entityType} pattern so chi
+		// doesn't route "bulk" as an entity type.
+		r.Get("/api/tags/bulk", tagsH.GetEntityTagsBulk)
 		r.Get("/api/tags/{entityType}/{entityId}/", tagsH.GetEntityTags)
 		r.Put("/api/tags/{entityType}/{entityId}/", tagsH.SetEntityTags)
 

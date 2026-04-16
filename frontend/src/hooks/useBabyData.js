@@ -54,6 +54,10 @@ export function useBabyData(canReadFn) {
   const [medications, setMedications] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [bmiEntries, setBmiEntries] = useState([]);
+  // Per-entity-type tag maps: `tagMaps[entityType][entity_id] = [tag...]`.
+  // Populated from the /api/tags/bulk endpoint on every refresh so list
+  // views can render tag chips without N+1 fetches.
+  const [tagMaps, setTagMaps] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
@@ -147,6 +151,27 @@ export function useBabyData(canReadFn) {
       setMedications(medicationsRes.results || []);
       setMilestones(milestonesRes.results || []);
       setBmiEntries(bmiRes.results || []);
+
+      // Fetch tag maps for every taggable entity type in parallel. Each
+      // returns `{ "<entity_id>": [tag, tag, ...] }`; we only populate
+      // entries that actually have tags (untagged entities are absent).
+      // A failure here shouldn't break the dashboard — fall back to empty.
+      const tagTypes = [
+        "feeding", "sleep", "diaper", "tummy_time", "pumping",
+        "temperature", "medication", "note", "milestone",
+        "weight", "height", "head_circumference", "bmi",
+      ];
+      try {
+        const results = await Promise.all(
+          tagTypes.map((t) => api.getEntityTagsBulk(t).catch(() => ({}))),
+        );
+        const nextMaps = {};
+        tagTypes.forEach((t, i) => { nextMaps[t] = results[i] || {}; });
+        setTagMaps(nextMaps);
+      } catch {
+        setTagMaps({});
+      }
+
       setLastSync(new Date());
       setError(null);
     } catch (err) {
@@ -286,6 +311,7 @@ export function useBabyData(canReadFn) {
     medications,
     milestones,
     bmiEntries,
+    tagMaps,
     loading,
     error,
     lastSync,

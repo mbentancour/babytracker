@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
@@ -20,6 +21,15 @@ export default function HeightForm({ childId, entry, onDone, onClose, onDelete }
   const [date, setDate] = useState(entry?.date ? toLocalDate(entry.date) : toLocalDate(new Date()));
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tagIds, setTagIds] = useState([]);
+  // Load existing tags when editing an entry so the picker starts pre-populated.
+  useEffect(() => {
+    if (!entry?.id) return;
+    api.getEntityTags("height", entry.id)
+      .then((tags) => setTagIds((tags || []).map((t) => t.id)))
+      .catch(() => {});
+  }, [entry?.id]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,6 +61,9 @@ export default function HeightForm({ childId, entry, onDone, onClose, onDelete }
         </FormField>
         <FormField label={t("general.date")}>
           <FormInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </FormField>
+        <FormField label={t("tags.title")}>
+          <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.height} disabled={saving || !height}>

@@ -432,6 +432,9 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </div>
                 </div>
 
+                {/* Tags — available to all authenticated users */}
+                <TagsSection />
+
                 {/* Backups (admin only) */}
                 {isAdmin && (
                   <>
@@ -676,6 +679,192 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+const TAG_COLOR_PALETTE = [
+  "#e67e22", "#e74c3c", "#6C5CE7", "#3498db",
+  "#1abc9c", "#00b894", "#f1c40f", "#95a5a6",
+];
+
+function TagsSection() {
+  const { t } = useI18n();
+  const [tags, setTags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState(TAG_COLOR_PALETTE[0]);
+  const [editing, setEditing] = useState(null); // {id, name, color}
+
+  const refresh = () => {
+    setLoading(true);
+    api.getTags()
+      .then((r) => setTags(r.results || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const create = async () => {
+    if (!newName.trim()) return;
+    try {
+      await api.createTag({ name: newName.trim(), color: newColor });
+      setNewName("");
+      refresh();
+    } catch (err) {
+      alert(err?.error || t("tags.createFailed"));
+    }
+  };
+
+  const save = async () => {
+    if (!editing?.name?.trim()) return;
+    try {
+      await api.updateTag(editing.id, { name: editing.name.trim(), color: editing.color });
+      setEditing(null);
+      refresh();
+    } catch (err) {
+      alert(err?.error || t("tags.saveFailed"));
+    }
+  };
+
+  const remove = async (tag) => {
+    // Deletion cascades on the backend (entry_tags rows go with it). Warn
+    // the user before doing so — the tag disappearing from old entries is
+    // the gotcha, especially if they've been tagging meaningfully.
+    if (!confirm(t("tags.deleteConfirm").replace("{name}", tag.name))) return;
+    try {
+      await api.deleteTag(tag.id);
+      refresh();
+    } catch {
+      alert(t("tags.deleteFailed"));
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <h4 className="settings-card-title">{t("tags.title")}</h4>
+      <p className="settings-hint">{t("tags.hint")}</p>
+
+      {loading ? (
+        <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 16 }}>
+          {t("general.loading")}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+          {tags.length === 0 && (
+            <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 12 }}>
+              {t("tags.empty")}
+            </div>
+          )}
+          {tags.map((tag) => (
+            <div
+              key={tag.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              {editing?.id === tag.id ? (
+                <>
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {TAG_COLOR_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setEditing({ ...editing, color: c })}
+                        aria-label={`Pick color ${c}`}
+                        style={{
+                          width: 18, height: 18, borderRadius: "50%",
+                          background: c,
+                          border: editing.color === c ? "2px solid var(--text)" : "2px solid transparent",
+                          cursor: "pointer", padding: 0,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormInput
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                    style={{ flex: 1 }}
+                    autoFocus
+                  />
+                  <button className="settings-export-item" style={{ padding: "4px 10px" }} onClick={save}>
+                    {t("general.save")}
+                  </button>
+                  <button className="settings-export-item" style={{ padding: "4px 10px" }} onClick={() => setEditing(null)}>
+                    {t("general.cancel")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      padding: "3px 10px",
+                      borderRadius: 10,
+                      background: `${tag.color}22`,
+                      color: tag.color,
+                      fontSize: 13,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {tag.name}
+                  </span>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    className="settings-export-item"
+                    style={{ padding: "4px 10px" }}
+                    onClick={() => setEditing({ id: tag.id, name: tag.name, color: tag.color })}
+                  >
+                    {t("general.edit")}
+                  </button>
+                  <button className="delete-entry-btn" onClick={() => remove(tag)}>×</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Inline create form */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+        <div style={{ display: "flex", gap: 3 }}>
+          {TAG_COLOR_PALETTE.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setNewColor(c)}
+              aria-label={`Pick color ${c}`}
+              style={{
+                width: 18, height: 18, borderRadius: "50%",
+                background: c,
+                border: newColor === c ? "2px solid var(--text)" : "2px solid transparent",
+                cursor: "pointer", padding: 0,
+              }}
+            />
+          ))}
+        </div>
+        <FormInput
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder={t("tags.newPlaceholder")}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+          style={{ flex: 1 }}
+        />
+        <button
+          className="settings-export-main"
+          onClick={create}
+          disabled={!newName.trim()}
+          style={{ padding: "6px 14px" }}
+        >
+          {t("tags.addTag")}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function BackupDestinationsSection() {

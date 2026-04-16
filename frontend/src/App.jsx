@@ -603,6 +603,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             weeklyTummyTimes={data.weeklyTummyTimes}
             temperatures={data.temperatures}
             medications={data.medications}
+            tagMaps={data.tagMaps}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
             onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
             canWrite={canWrite}
@@ -617,6 +618,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             monthlyFeedings={data.monthlyFeedings}
             monthlySleep={data.monthlySleep}
             child={data.child}
+            tagMaps={data.tagMaps}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
             onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
             canWrite={canWrite}
@@ -627,6 +629,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             notes={data.notes}
             milestones={data.milestones}
             medications={data.medications}
+            tagMaps={data.tagMaps}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
             onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
             canWrite={canWrite}

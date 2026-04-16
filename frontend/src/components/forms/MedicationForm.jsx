@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { useI18n } from "../../utils/i18n";
 
@@ -21,6 +22,15 @@ export default function MedicationForm({ childId, entry, defaultDosageUnit, onDo
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tagIds, setTagIds] = useState([]);
+  // Load existing tags when editing an entry so the picker starts pre-populated.
+  useEffect(() => {
+    if (!entry?.id) return;
+    api.getEntityTags("medication", entry.id)
+      .then((tags) => setTagIds((tags || []).map((t) => t.id)))
+      .catch(() => {});
+  }, [entry?.id]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,6 +71,9 @@ export default function MedicationForm({ childId, entry, defaultDosageUnit, onDo
         </FormField>
         <FormField label={t("general.notes")}>
           <FormInput type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("form.optional")} />
+        </FormField>
+        <FormField label={t("tags.title")}>
+          <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color="#e67e22" disabled={saving}>

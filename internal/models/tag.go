@@ -57,6 +57,35 @@ func DeleteTag(db *sqlx.DB, id int) error {
 	return err
 }
 
+// GetTagsByEntityType returns every (entity_id → tag) association for a
+// given entity type. Used by list views so the UI can render tag chips on
+// every row without N+1 requests. Result shape is map[entity_id][]Tag.
+func GetTagsByEntityType(db *sqlx.DB, entityType string) (map[int][]Tag, error) {
+	type row struct {
+		EntityID int    `db:"entity_id"`
+		TagID    int    `db:"id"`
+		Name     string `db:"name"`
+		Color    string `db:"color"`
+	}
+	var rows []row
+	err := db.Select(&rows,
+		`SELECT et.entity_id, t.id, t.name, t.color
+		 FROM entry_tags et
+		 JOIN tags t ON t.id = et.tag_id
+		 WHERE et.entity_type = $1
+		 ORDER BY et.entity_id, t.name`,
+		entityType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int][]Tag{}
+	for _, r := range rows {
+		out[r.EntityID] = append(out[r.EntityID], Tag{ID: r.TagID, Name: r.Name, Color: r.Color})
+	}
+	return out, nil
+}
+
 func GetTagsForEntity(db *sqlx.DB, entityType string, entityID int) ([]Tag, error) {
 	var tags []Tag
 	err := db.Select(&tags,

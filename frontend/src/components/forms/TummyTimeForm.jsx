@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
@@ -20,6 +21,15 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tagIds, setTagIds] = useState([]);
+  // Load existing tags when editing an entry so the picker starts pre-populated.
+  useEffect(() => {
+    if (!entry?.id) return;
+    api.getEntityTags("tummy_time", entry.id)
+      .then((tags) => setTagIds((tags || []).map((t) => t.id)))
+      .catch(() => {});
+  }, [entry?.id]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,6 +55,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
       if (photoFile && entryId) {
         await api.uploadEntryPhoto("tummy-times", entryId, photoFile);
       }
+      if (entryId) await api.setEntityTags("tummy_time", entryId, tagIds);
       onDone();
     } catch {
       setSaving(false);
@@ -85,6 +96,9 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
             onChange={(e) => setMilestone(e.target.value)}
             placeholder="e.g., Lifted head"
           />
+        </FormField>
+        <FormField label={t("tags.title")}>
+          <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.tummy} disabled={saving}>

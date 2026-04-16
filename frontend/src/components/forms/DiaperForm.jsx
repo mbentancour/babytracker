@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
+import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
@@ -30,6 +31,15 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [tagIds, setTagIds] = useState([]);
+  // Load existing tags when editing an entry so the picker starts pre-populated.
+  useEffect(() => {
+    if (!entry?.id) return;
+    api.getEntityTags("diaper", entry.id)
+      .then((tags) => setTagIds((tags || []).map((t) => t.id)))
+      .catch(() => {});
+  }, [entry?.id]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,6 +59,7 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
       if (photoFile && entryId) {
         await api.uploadEntryPhoto("changes", entryId, photoFile);
       }
+      if (entryId) await api.setEntityTags("diaper", entryId, tagIds);
       onDone();
     } catch {
       setSaving(false);
@@ -104,6 +115,9 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
             onChange={(e) => setNotes(e.target.value)}
             placeholder={t("form.optional")}
           />
+        </FormField>
+        <FormField label={t("tags.title")}>
+          <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
         <FormButton color={colors.diaper} disabled={saving || (!wet && !solid)}>

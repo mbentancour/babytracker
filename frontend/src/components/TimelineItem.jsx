@@ -1,4 +1,4 @@
-export default function TimelineItem({ time, label, detail, color, isLast }) {
+export default function TimelineItem({ time, label, detail, color, isLast, tags }) {
   return (
     <div
       style={{
@@ -64,6 +64,26 @@ export default function TimelineItem({ time, label, detail, color, isLast }) {
           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
             {detail}
           </span>
+        )}
+        {tags && tags.length > 0 && (
+          <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 3 }}>
+            {tags.map((t) => (
+              <span
+                key={t.id}
+                style={{
+                  padding: "1px 6px",
+                  borderRadius: 8,
+                  background: `${t.color}22`,
+                  color: t.color,
+                  fontSize: 10,
+                  fontWeight: 500,
+                  lineHeight: 1.3,
+                }}
+              >
+                {t.name}
+              </span>
+            ))}
+          </div>
         )}
       </div>
     </div>

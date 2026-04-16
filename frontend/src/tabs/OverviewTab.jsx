@@ -15,6 +15,7 @@ import DiaperBadge from "../components/DiaperBadge";
 import CustomTooltip from "../components/CustomTooltip";
 import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
+import TagChips from "../components/TagChips";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import {
@@ -33,7 +34,7 @@ import { useI18n } from "../utils/i18n";
 
 const COLLAPSED_COUNT = 2;
 
-export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, temperatures, medications, onEditEntry, onDeleteEntry, canWrite = () => true }) {
+export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, temperatures, medications, tagMaps = {}, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
   const { isFeatureEnabled } = usePreferences();
@@ -177,6 +178,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                       detail={f.detail}
                       color={colors.feeding}
                       isLast={i === arr.length - 1}
+                      tags={tagMaps.feeding?.[f.entry?.id]}
                     />
                   </div>
                 ))}
@@ -232,6 +234,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                       detail={`${s.start} to ${s.end}`}
                       color={colors.sleep}
                       isLast={i === arr.length - 1}
+                      tags={tagMaps.sleep?.[s.entry?.id]}
                     />
                   </div>
                 ))}
@@ -294,9 +297,10 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                         background: i === 0 ? `${colors.diaper}08` : "transparent",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                         <DiaperBadge type={d.type} />
                         <span style={{ fontSize: 13, fontWeight: 500 }}>{d.time}</span>
+                        <TagChips tags={tagMaps.diaper?.[d.entry?.id]} size="sm" />
                       </div>
                       <span style={{ fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>
                         {d.ago}
@@ -405,13 +409,14 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.temps ? temperatures : temperatures.slice(0, 3)).map((t, i, arr) => (
                   <div key={t.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? `${colors.temp}08` : "transparent" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }} onClick={() => onEditEntry?.("temp", t)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("temp", t)}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: colors.temp }}>
                         {t.temperature.toFixed(1)}
                       </span>
                       <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
                         {new Date(t.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
+                      <TagChips tags={tagMaps.temperature?.[t.id]} size="sm" />
                     </div>
                     {canWrite("temp") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("temp", t.id)} title="Delete">x</button>}
                   </div>
@@ -433,13 +438,14 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.meds ? medications : medications.slice(0, 3)).map((m, i) => (
                   <div key={m.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? "#e67e2208" : "transparent" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1 }} onClick={() => onEditEntry?.("medication", m)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("medication", m)}>
                       <span style={{ fontSize: 14, fontWeight: 600, color: "#e67e22" }}>{m.name}</span>
                       {m.dosage && (
                         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                           {m.dosage} {m.dosage_unit}
                         </span>
                       )}
+                      <TagChips tags={tagMaps.medication?.[m.id]} size="sm" />
                       <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: "auto" }}>
                         {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>

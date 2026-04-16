@@ -98,6 +98,23 @@ func (h *TagsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetEntityTagsBulk returns { "<entity_id>": [tags...] } for every entity of
+// the given type that has at least one tag. Designed for list-view rendering
+// where fetching tags per row would cost N API calls.
+func (h *TagsHandler) GetEntityTagsBulk(w http.ResponseWriter, r *http.Request) {
+	entityType := r.URL.Query().Get("entity_type")
+	if entityType == "" {
+		pagination.WriteError(w, http.StatusBadRequest, "entity_type required")
+		return
+	}
+	m, err := models.GetTagsByEntityType(h.db, entityType)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to load tags")
+		return
+	}
+	pagination.WriteJSON(w, http.StatusOK, m)
+}
+
 func (h *TagsHandler) GetEntityTags(w http.ResponseWriter, r *http.Request) {
 	entityType := chi.URLParam(r, "entityType")
 	entityID, err := strconv.Atoi(chi.URLParam(r, "entityId"))

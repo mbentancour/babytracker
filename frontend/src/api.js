@@ -183,6 +183,10 @@ export const api = {
   getEntityTags: (entityType, entityId) => request(`tags/${entityType}/${entityId}/`),
   setEntityTags: (entityType, entityId, tagIds) =>
     request(`tags/${entityType}/${entityId}/`, { method: "PUT", body: JSON.stringify({ tag_ids: tagIds }) }),
+  // Bulk lookup used by list views: returns { "<entity_id>": [tag...] } for
+  // every entity of this type that has at least one tag. Empty keys (no tags)
+  // are omitted.
+  getEntityTagsBulk: (entityType) => request(`tags/bulk?entity_type=${encodeURIComponent(entityType)}`),
 
   // Medications
   getMedications: (params) => request(`medications/${qs(params)}`),
