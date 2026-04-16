@@ -3,12 +3,18 @@ import { api } from "../api";
 import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
 import { timeAgo, formatElapsed } from "../utils/formatters";
+import { useScreenWakeLock } from "../utils/wakeLock";
 
 export default function PictureFrame({ photos, children = [], onWake }) {
   const { t } = useI18n();
   const { prefs } = usePreferences();
   const overlay = prefs.pictureFrame?.overlay || {};
   const overlayActive = Object.values(overlay).some(Boolean);
+
+  // While the picture frame is mounted, ask the browser to keep the screen
+  // awake — a tablet sitting on a shelf as a photo frame should stay lit.
+  // No-op if the browser or context doesn't support it (e.g. plain http://).
+  useScreenWakeLock(true);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fading, setFading] = useState(false);
