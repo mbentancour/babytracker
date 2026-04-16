@@ -152,10 +152,16 @@ func (h *BackupHandler) List(w http.ResponseWriter, r *http.Request) {
 		for _, o := range objs {
 			entry, ok := agg[o.Name]
 			if !ok {
+				// RFC3339 with an explicit Z so clients know this is UTC.
+				// Previously we emitted "YYYY-MM-DD HH:MM:SS" against the
+				// server's local clock, which meant the HA coordinator +
+				// any dashboard parsing it as local drifted by the server's
+				// UTC offset. Consumers should parse with their own locale
+				// (JS: new Date(str); Python: datetime.fromisoformat).
 				entry = &backupEntry{
 					Name:      o.Name,
 					Size:      o.Size,
-					Date:      o.Modified.Format("2006-01-02 15:04:05"),
+					Date:      o.Modified.UTC().Format(time.RFC3339),
 					Encrypted: strings.HasSuffix(o.Name, ".enc"),
 				}
 				agg[o.Name] = entry

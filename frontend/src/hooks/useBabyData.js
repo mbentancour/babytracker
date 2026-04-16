@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { getMockData } from "../utils/mockData";
+import { localInputToUTC } from "../utils/datetime";
 
 function toLocalISODate(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -71,20 +72,28 @@ export function useBabyData(canReadFn) {
     try {
       const now = new Date();
 
+      // Filter bounds are built in the user's local wall-clock (what "today"
+      // means to them) but the backend's DB session runs in UTC, so every
+      // filter string is converted to its UTC-equivalent naive instant
+      // before being sent. Without this, "today 00:00 local" got read as
+      // "today 00:00 UTC" on the server and cut off entries by the user's
+      // UTC offset at the day boundaries.
       const todayStr = toLocalISODate(now);
-      const todayMin = `${todayStr}T00:00:00`;
-      const todayMax = `${todayStr}T23:59:59`;
+      const todayMin = localInputToUTC(`${todayStr}T00:00:00`);
+      const todayMax = localInputToUTC(`${todayStr}T23:59:59`);
 
       const twentyFourAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const sleepMin = `${toLocalISODate(twentyFourAgo)}T${String(twentyFourAgo.getHours()).padStart(2, "0")}:${String(twentyFourAgo.getMinutes()).padStart(2, "0")}:00`;
+      const sleepMin = localInputToUTC(
+        `${toLocalISODate(twentyFourAgo)}T${String(twentyFourAgo.getHours()).padStart(2, "0")}:${String(twentyFourAgo.getMinutes()).padStart(2, "0")}:00`,
+      );
 
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 6);
-      const weekMin = `${toLocalISODate(weekAgo)}T00:00:00`;
+      const weekMin = localInputToUTC(`${toLocalISODate(weekAgo)}T00:00:00`);
 
       const monthAgo = new Date(now);
       monthAgo.setDate(monthAgo.getDate() - 29);
-      const monthMin = `${toLocalISODate(monthAgo)}T00:00:00`;
+      const monthMin = localInputToUTC(`${toLocalISODate(monthAgo)}T00:00:00`);
 
       const c = childId || undefined;
 

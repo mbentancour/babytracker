@@ -25,6 +25,17 @@ const NAV_ITEMS = [
   { id: "users", label: "settings.users", icon: <Icons.Baby /> },
 ];
 
+// formatBackupDate renders the backup list's `date` field. The backend emits
+// RFC3339 UTC (e.g. "2026-04-16T10:35:22Z"); show it in the browser's locale.
+// Falls through on parse failure so older backend responses — which emitted
+// naive "YYYY-MM-DD HH:MM:SS" — still display as-is rather than "Invalid Date".
+function formatBackupDate(raw) {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  return d.toLocaleString();
+}
+
 export default function SettingsModal({ childId, unitSystem, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("general");
@@ -1288,7 +1299,7 @@ function BackupSection() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, color: "var(--text)", display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <span>{b.date}</span>
+                    <span>{formatBackupDate(b.date)}</span>
                     {b.encrypted && (
                       <span title={t("settings.encryptedBackup")} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--accent, #6366f1)", color: "white" }}>
                         🔒 {t("settings.encrypted")}
