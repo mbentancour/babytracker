@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -84,6 +86,75 @@ func GetTagsByEntityType(db *sqlx.DB, entityType string) (map[int][]Tag, error) 
 		out[r.EntityID] = append(out[r.EntityID], Tag{ID: r.TagID, Name: r.Name, Color: r.Color})
 	}
 	return out, nil
+}
+
+// GetTagsByEntityTypeForChildren is the tenancy-scoped variant of
+// GetTagsByEntityType. It joins entry_tags against the entity's source table
+// (via TagEntityTypeToTable) and returns only rows whose child_id is in the
+// caller's accessible set. Unknown entity types return an empty result — the
+// allow-list keeps the fmt.Sprintf safe even though the join target is
+// dynamic. Admins should pass the full accessible set from
+// GetAccessibleChildIDs; non-admins their own.
+func GetTagsByEntityTypeForChildren(db *sqlx.DB, entityType string, childIDs []int) (map[int][]Tag, error) {
+	table, ok := TagEntityTypeToTable[entityType]
+	if !ok || len(childIDs) == 0 {
+		return map[int][]Tag{}, nil
+	}
+	placeholders := make([]string, len(childIDs))
+	args := make([]any, 0, len(childIDs)+1)
+	args = append(args, entityType)
+	for i, cid := range childIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, cid)
+	}
+	type row struct {
+		EntityID int    `db:"entity_id"`
+		TagID    int    `db:"id"`
+		Name     string `db:"name"`
+		Color    string `db:"color"`
+	}
+	var rows []row
+	query := fmt.Sprintf(`
+		SELECT et.entity_id, t.id, t.name, t.color
+		FROM entry_tags et
+		JOIN tags t ON t.id = et.tag_id
+		JOIN %s src ON src.id = et.entity_id
+		WHERE et.entity_type = $1 AND src.child_id IN (%s)
+		ORDER BY et.entity_id, t.name`, table, strings.Join(placeholders, ","))
+	if err := db.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+	out := map[int][]Tag{}
+	for _, r := range rows {
+		out[r.EntityID] = append(out[r.EntityID], Tag{ID: r.TagID, Name: r.Name, Color: r.Color})
+	}
+	return out, nil
+}
+
+// EnsureEntityAccessible returns ErrForbidden unless the caller (by userID)
+// has at least read access to the child that owns the given (entityType,
+// entityID). Used by per-entity tag reads so an attacker can't enumerate tags
+// on another family's records by guessing ids. Unknown entityTypes map to
+// ErrForbidden — never "open by default".
+func EnsureEntityAccessible(db *sqlx.DB, userID int, entityType string, entityID int) error {
+	table, ok := TagEntityTypeToTable[entityType]
+	if !ok {
+		return ErrForbidden
+	}
+	feature, ok := childOwnedTables[table]
+	if !ok {
+		return ErrForbidden
+	}
+	var childID int
+	err := db.Get(&childID, fmt.Sprintf("SELECT child_id FROM %s WHERE id = $1", table), entityID)
+	if err != nil {
+		// Includes sql.ErrNoRows — don't leak existence via a distinct code.
+		return ErrForbidden
+	}
+	if CheckAccess(db, userID, childID, feature) == "none" {
+		return ErrForbidden
+	}
+	return nil
 }
 
 func GetTagsForEntity(db *sqlx.DB, entityType string, entityID int) ([]Tag, error) {

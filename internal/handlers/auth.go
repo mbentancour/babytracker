@@ -59,8 +59,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "username must be at least 3 characters")
 		return
 	}
-	if len(req.Password) < 8 {
-		pagination.WriteError(w, http.StatusBadRequest, "password must be at least 8 characters")
+	if err := crypto.ValidatePassword(req.Password); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

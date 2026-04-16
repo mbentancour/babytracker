@@ -51,7 +51,8 @@ func ParseParams(r *http.Request, entity string) Params {
 		}
 	}
 	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		// Cap offset to prevent expensive deep-paginated scans on large tables.
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 100000 {
 			p.Offset = n
 		}
 	}
@@ -78,10 +79,16 @@ func ParseParams(r *http.Request, entity string) Params {
 }
 
 type FilterConfig struct {
-	Table         string
-	ChildIDField  string // "child_id"
-	TimeFields    map[string]string // query param -> db column, e.g. "start_min" -> "start_time"
-	DateFields    map[string]string // query param -> db column, e.g. "date_min" -> "date"
+	Table        string
+	ChildIDField string            // "child_id"
+	TimeFields   map[string]string // query param -> db column, e.g. "start_min" -> "start_time"
+	DateFields   map[string]string // query param -> db column, e.g. "date_min" -> "date"
+
+	// AccessibleChildren MUST be populated by the caller with the set of
+	// child IDs the authenticated user is allowed to see. An empty slice
+	// means "no access" — the query is constrained to return zero rows.
+	// Admins should pass the full set from models.GetAccessibleChildIDs.
+	AccessibleChildren []int
 }
 
 type QueryResult struct {
@@ -96,7 +103,24 @@ func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 	var args []any
 	argIdx := 1
 
-	// Child filter
+	// Mandatory ownership scope: never return rows outside the caller's
+	// accessible child set. Empty slice = no access = match nothing.
+	if len(fc.AccessibleChildren) == 0 {
+		conditions = append(conditions, "1=0")
+	} else {
+		placeholders := make([]string, len(fc.AccessibleChildren))
+		for i, id := range fc.AccessibleChildren {
+			placeholders[i] = fmt.Sprintf("$%d", argIdx)
+			args = append(args, id)
+			argIdx++
+		}
+		conditions = append(conditions,
+			fmt.Sprintf("%s IN (%s)", fc.ChildIDField, strings.Join(placeholders, ",")))
+	}
+
+	// Optional narrower ?child=N filter — intersects with the accessible
+	// set above, so it can only ever narrow, never widen, what the user
+	// can see.
 	if v := r.URL.Query().Get("child"); v != "" {
 		if childID, err := strconv.Atoi(v); err == nil {
 			conditions = append(conditions, fmt.Sprintf("%s = $%d", fc.ChildIDField, argIdx))

@@ -22,10 +22,15 @@ func NewFeedingsHandler(db *sqlx.DB) *FeedingsHandler {
 }
 
 func (h *FeedingsHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "feedings")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "feedings",
-		ChildIDField: "child_id",
+		Table:              "feedings",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"start_min": "start_time",
 			"start_max": "start_time",
@@ -99,6 +104,9 @@ func (h *FeedingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "feedings", id) {
 		return
 	}
 

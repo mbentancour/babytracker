@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
-import SectionCard from "../components/SectionCard";
 import { Icons } from "../components/Icons";
 import { useI18n } from "../utils/i18n";
 
@@ -125,8 +124,33 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
     setUploading(false);
   };
 
-  const types = [...new Set(items.map((i) => i.entity_type))];
-  const filtered = filter === "all" ? items : items.filter((i) => i.entity_type === filter);
+  // Filter taxonomy:
+  //   all       → everything
+  //   tagged    → photos tagged to this child + their profile picture
+  //   <entry>   → entry-specific photos (feeding, sleep, height, …)
+  //   shared    → photos with no child tag
+  const currentChild = children.find((c) => c.id === childId);
+  const childName = currentChild?.first_name || "Tagged";
+
+  const isChildTaggedType = (t) => t === "photo" || t === "profile";
+  const taggedCount = items.filter((i) => isChildTaggedType(i.entity_type)).length;
+  const sharedCount = items.filter((i) => i.entity_type === "shared").length;
+  const entryTypeCounts = {};
+  for (const i of items) {
+    if (!isChildTaggedType(i.entity_type) && i.entity_type !== "shared") {
+      entryTypeCounts[i.entity_type] = (entryTypeCounts[i.entity_type] || 0) + 1;
+    }
+  }
+  const entryTypes = Object.keys(entryTypeCounts).sort();
+
+  const filtered =
+    filter === "all"
+      ? items
+      : filter === "tagged"
+      ? items.filter((i) => isChildTaggedType(i.entity_type))
+      : filter === "shared"
+      ? items.filter((i) => i.entity_type === "shared")
+      : items.filter((i) => i.entity_type === filter);
 
   // Group by date
   const grouped = {};
@@ -175,44 +199,39 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
         </label>
       </div>}
 
-      {/* Filter chips */}
-      {types.length > 1 && (
+      {/* Filter chips — ordered: All, [child], [entry types], Shared */}
+      {(taggedCount + sharedCount + entryTypes.length) > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }} className="fade-in">
-          <button
+          <FilterChip
+            active={filter === "all"}
             onClick={() => setFilter("all")}
-            style={{
-              padding: "5px 12px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              background: filter === "all" ? "var(--border)" : "none",
-              color: filter === "all" ? "var(--text)" : "var(--text-muted)",
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            All ({items.length})
-          </button>
-          {types.map((t) => (
-            <button
+            label={`All (${items.length})`}
+          />
+          {taggedCount > 0 && (
+            <FilterChip
+              active={filter === "tagged"}
+              onClick={() => setFilter("tagged")}
+              color={TYPE_COLORS.photo}
+              label={`${childName} (${taggedCount})`}
+            />
+          )}
+          {entryTypes.map((t) => (
+            <FilterChip
               key={t}
+              active={filter === t}
               onClick={() => setFilter(t)}
-              style={{
-                padding: "5px 12px",
-                borderRadius: 8,
-                border: `1px solid ${filter === t ? TYPE_COLORS[t] || "var(--border)" : "var(--border)"}`,
-                background: filter === t ? `${TYPE_COLORS[t]}18` : "none",
-                color: filter === t ? TYPE_COLORS[t] : "var(--text-muted)",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {TYPE_LABELS[t] || t} ({items.filter((i) => i.entity_type === t).length})
-            </button>
+              color={TYPE_COLORS[t]}
+              label={`${TYPE_LABELS[t] || t} (${entryTypeCounts[t]})`}
+            />
           ))}
+          {sharedCount > 0 && (
+            <FilterChip
+              active={filter === "shared"}
+              onClick={() => setFilter("shared")}
+              color={TYPE_COLORS.shared}
+              label={`Shared (${sharedCount})`}
+            />
+          )}
         </div>
       )}
 
@@ -235,7 +254,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
               {grouped[date].map((item) => (
                 <div
-                  key={`${item.entity_type}-${item.id}`}
+                  key={`${item.entity_type}-${item.id}-${item.photo}`}
                   style={{
                     borderRadius: 12,
                     overflow: "hidden",
@@ -359,6 +378,28 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
         />
       )}
     </>
+  );
+}
+
+function FilterChip({ active, onClick, label, color }) {
+  const accent = color || "var(--border)";
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "5px 12px",
+        borderRadius: 8,
+        border: `1px solid ${active ? accent : "var(--border)"}`,
+        background: active ? (color ? `${color}18` : "var(--border)") : "none",
+        color: active ? (color || "var(--text)") : "var(--text-muted)",
+        fontSize: 12,
+        fontWeight: 500,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

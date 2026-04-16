@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: babytracker
-      POSTGRES_PASSWORD: babytracker
-      POSTGRES_DB: babytracker
+      POSTGRES_USER: ${POSTGRES_USER:-babytracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — copy .env.example to .env and edit}
+      POSTGRES_DB: ${POSTGRES_DB:-babytracker}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,9 +21,13 @@ services:
     ports:
       - "8099:8099"
     environment:
-      DATABASE_URL: postgres://babytracker:babytracker@db:5432/babytracker?sslmode=disable
+      # sslmode=prefer: use TLS if the DB advertises it, fall back to plaintext
+      # on the local docker network. For remote DBs set sslmode=verify-full.
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-babytracker}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-babytracker}?sslmode=prefer}
       DATA_DIR: /var/lib/babytracker
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # JWT_SECRET is optional — the app auto-generates and persists one under
+      # DATA_DIR/.jwt_secret if unset.
+      JWT_SECRET: ${JWT_SECRET:-}
       UNIT_SYSTEM: ${UNIT_SYSTEM:-metric}
       DEMO_MODE: ${DEMO_MODE:-false}
     depends_on:

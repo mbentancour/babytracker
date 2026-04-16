@@ -21,10 +21,15 @@ func NewHeadCircumferenceHandler(db *sqlx.DB) *HeadCircumferenceHandler {
 }
 
 func (h *HeadCircumferenceHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "head_circumference")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "head_circumference",
-		ChildIDField: "child_id",
+		Table:              "head_circumference",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		DateFields: map[string]string{
 			"date_min": "date",
 			"date_max": "date",
@@ -67,6 +72,9 @@ func (h *HeadCircumferenceHandler) Update(w http.ResponseWriter, r *http.Request
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensureWritable(w, r, h.db, "head_circumference", id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -98,6 +106,9 @@ func (h *HeadCircumferenceHandler) Delete(w http.ResponseWriter, r *http.Request
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "head_circumference", id) {
 		return
 	}
 	if err := models.DeleteHeadCircumference(h.db, id); err != nil {

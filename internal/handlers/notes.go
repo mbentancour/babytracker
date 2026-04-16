@@ -22,10 +22,15 @@ func NewNotesHandler(db *sqlx.DB) *NotesHandler {
 }
 
 func (h *NotesHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "notes")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "notes",
-		ChildIDField: "child_id",
+		Table:              "notes",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"date_min": "time",
 			"date_max": "time",
@@ -71,6 +76,9 @@ func (h *NotesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "notes", id) {
 		return
 	}
 

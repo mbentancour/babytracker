@@ -21,10 +21,15 @@ func NewMilestonesHandler(db *sqlx.DB) *MilestonesHandler {
 }
 
 func (h *MilestonesHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "milestones")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "milestones",
-		ChildIDField: "child_id",
+		Table:              "milestones",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		DateFields: map[string]string{
 			"date_min": "date",
 			"date_max": "date",
@@ -72,6 +77,9 @@ func (h *MilestonesHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensureWritable(w, r, h.db, "milestones", id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -104,6 +112,9 @@ func (h *MilestonesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "milestones", id) {
 		return
 	}
 	if err := models.DeleteMilestone(h.db, id); err != nil {

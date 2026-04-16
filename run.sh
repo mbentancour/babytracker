@@ -37,7 +37,10 @@ if [ "${MODE}" = "external" ]; then
     fi
 
     bashio::log.info "Starting BabyTracker in external mode"
-    bashio::log.info "Proxying to: ${EXTERNAL_URL}"
+    # Strip user:pass@ from URL before logging so embedded credentials don't
+    # leak into HA logs.
+    REDACTED_URL=$(echo "${EXTERNAL_URL}" | sed -E 's|(://)[^@/]+@|\1***@|')
+    bashio::log.info "Proxying to: ${REDACTED_URL}"
 
     export BABYTRACKER_PROXY_URL="${EXTERNAL_URL}"
     exec /usr/local/bin/babytracker

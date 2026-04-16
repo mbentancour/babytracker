@@ -22,10 +22,15 @@ func NewTummyTimesHandler(db *sqlx.DB) *TummyTimesHandler {
 }
 
 func (h *TummyTimesHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "tummy_times")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "tummy_times",
-		ChildIDField: "child_id",
+		Table:              "tummy_times",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"start_min": "start_time",
 			"start_max": "start_time",
@@ -90,6 +95,9 @@ func (h *TummyTimesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "tummy_times", id) {
 		return
 	}
 

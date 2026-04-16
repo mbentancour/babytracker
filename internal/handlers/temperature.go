@@ -22,10 +22,15 @@ func NewTemperatureHandler(db *sqlx.DB) *TemperatureHandler {
 }
 
 func (h *TemperatureHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "temperature")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "temperature",
-		ChildIDField: "child_id",
+		Table:              "temperature",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"date_min": "time",
 			"date_max": "time",
@@ -72,6 +77,9 @@ func (h *TemperatureHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "temperature", id) {
 		return
 	}
 

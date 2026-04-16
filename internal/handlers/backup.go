@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -80,12 +81,14 @@ func (h *BackupHandler) SetupRestore(w http.ResponseWriter, r *http.Request) {
 
 	if encrypted {
 		if err := backup.RestoreEncryptedFromReader(file, passphrase, h.cfg.DatabaseURL, h.cfg.DataDir, wipePhotos); err != nil {
-			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+			slog.Error("encrypted restore failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
 	} else {
 		if err := backup.RestoreFromReader(file, h.cfg.DatabaseURL, h.cfg.DataDir, wipePhotos); err != nil {
-			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+			slog.Error("restore failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
 	}
@@ -231,7 +234,8 @@ func (h *BackupHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	results, err := backup.RunBackup(ctx, h.cfg.DatabaseURL, h.cfg.DataDir, handles)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "backup failed: "+err.Error())
+		slog.Error("backup run failed", "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "backup failed")
 		return
 	}
 
@@ -293,7 +297,8 @@ func (h *BackupHandler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 	be, err := storage.New(dest, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("storage backend init failed", "destination_id", destID, "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "destination unavailable")
 		return
 	}
 	rc, err := be.Download(r.Context(), name)
@@ -332,11 +337,13 @@ func (h *BackupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	be, err := storage.New(dest, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("storage backend init failed", "destination_id", destID, "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "destination unavailable")
 		return
 	}
 	if err := be.Delete(r.Context(), name); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("backup delete failed", "destination_id", destID, "name", name, "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "delete failed")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -377,7 +384,8 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		if err := backup.Restore(ctx, dest, name, passphrase, h.cfg.DatabaseURL, h.cfg.DataDir, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots, wipePhotos); err != nil {
-			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+			slog.Error("remote restore failed", "destination_id", destID, "name", name, "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
 		pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "restored"})
@@ -401,12 +409,14 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 
 	if encrypted {
 		if err := backup.RestoreEncryptedFromReader(file, passphrase, h.cfg.DatabaseURL, h.cfg.DataDir, wipePhotos); err != nil {
-			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+			slog.Error("encrypted restore failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
 	} else {
 		if err := backup.RestoreFromReader(file, h.cfg.DatabaseURL, h.cfg.DataDir, wipePhotos); err != nil {
-			pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+			slog.Error("restore failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
 	}

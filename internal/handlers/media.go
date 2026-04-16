@@ -275,6 +275,13 @@ func (h *MediaHandler) UploadEntryPhoto(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// RBAC middleware's /photo-suffix carve-out intentionally skips the
+	// per-record check — this handler must enforce ownership itself or a
+	// non-admin could overwrite any family's record photo.
+	if !ensureWritable(w, r, h.db, table, id) {
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
 
 	file, header, err := r.FormFile("photo")
@@ -358,6 +365,16 @@ func (h *MediaHandler) DeleteEntryPhoto(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Children are admin-only — RBAC middleware's adminWritePaths check on
+	// /api/children/ already blocked non-admins before we got here. Every
+	// other table is child-owned and needs a record-level ownership check
+	// because the /photo-suffix RBAC carve-out skipped it.
+	if table != "children" {
+		if !ensureWritable(w, r, h.db, table, id) {
+			return
+		}
+	}
+
 	// Get current photo filename
 	photoCol := "photo"
 	if table == "children" {
@@ -385,6 +402,9 @@ func (h *MediaHandler) UploadMilestonePhoto(w http.ResponseWriter, r *http.Reque
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "milestones", id) {
 		return
 	}
 

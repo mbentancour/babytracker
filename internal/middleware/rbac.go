@@ -91,11 +91,14 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			// Photo upload/delete on entities
+			// Photo upload/delete on entities: child_id is not in the URL path
+			// so we can't pre-compute the RBAC decision here. The handlers
+			// (media.go UploadEntryPhoto / DeleteEntryPhoto / UploadMilestonePhoto
+			// and photos.go Update/Delete) MUST call ensureWritable or
+			// ensurePhotoWritable to enforce per-record ownership themselves.
+			// Adding a new /photo-suffix handler without that check reopens
+			// the IDOR class fixed in 2026-04.
 			if strings.HasSuffix(path, "/photo") {
-				// These use the entity type's feature — but the child ID is tricky
-				// to extract from photo upload paths, so allow and rely on the
-				// entity's own existence check
 				next.ServeHTTP(w, r)
 				return
 			}

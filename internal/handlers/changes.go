@@ -22,10 +22,15 @@ func NewChangesHandler(db *sqlx.DB) *ChangesHandler {
 }
 
 func (h *ChangesHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "changes")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "changes",
-		ChildIDField: "child_id",
+		Table:              "changes",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"date_min": "time",
 			"date_max": "time",
@@ -75,6 +80,9 @@ func (h *ChangesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "changes", id) {
 		return
 	}
 

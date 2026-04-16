@@ -21,10 +21,15 @@ func NewHeightHandler(db *sqlx.DB) *HeightHandler {
 }
 
 func (h *HeightHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "height")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "height",
-		ChildIDField: "child_id",
+		Table:              "height",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		DateFields: map[string]string{
 			"date_min": "date",
 			"date_max": "date",
@@ -65,6 +70,9 @@ func (h *HeightHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "height", id) {
 		return
 	}
 

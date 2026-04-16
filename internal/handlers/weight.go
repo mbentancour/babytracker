@@ -21,10 +21,15 @@ func NewWeightHandler(db *sqlx.DB) *WeightHandler {
 }
 
 func (h *WeightHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "weight")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "weight",
-		ChildIDField: "child_id",
+		Table:              "weight",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		DateFields: map[string]string{
 			"date_min": "date",
 			"date_max": "date",
@@ -65,6 +70,9 @@ func (h *WeightHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "weight", id) {
 		return
 	}
 

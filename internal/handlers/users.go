@@ -79,8 +79,8 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "username must be at least 3 characters")
 		return
 	}
-	if len(req.Password) < 8 {
-		pagination.WriteError(w, http.StatusBadRequest, "password must be at least 8 characters")
+	if err := crypto.ValidatePassword(req.Password); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -139,8 +139,8 @@ func (h *UsersHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		pagination.WriteError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+	if err := crypto.ValidatePassword(req.NewPassword); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "new "+err.Error())
 		return
 	}
 
@@ -196,8 +196,8 @@ func (h *UsersHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		pagination.WriteError(w, http.StatusBadRequest, "new password must be at least 8 characters")
+	if err := crypto.ValidatePassword(req.NewPassword); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "new "+err.Error())
 		return
 	}
 

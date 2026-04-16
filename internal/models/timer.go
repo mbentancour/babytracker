@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -24,6 +26,33 @@ func ListTimers(db *sqlx.DB) ([]Timer, error) {
 	var timers []Timer
 	err := db.Select(&timers, `SELECT * FROM timers ORDER BY start_time DESC`)
 	if err != nil {
+		return nil, err
+	}
+	if timers == nil {
+		timers = []Timer{}
+	}
+	return timers, nil
+}
+
+// ListTimersForChildren returns timers whose child_id is in the supplied set.
+// Empty slice → empty result (no rows), matching the pagination filter's
+// "no access = no data" contract. Used by the handler to scope the list to
+// the caller's accessible children.
+func ListTimersForChildren(db *sqlx.DB, childIDs []int) ([]Timer, error) {
+	if len(childIDs) == 0 {
+		return []Timer{}, nil
+	}
+	placeholders := make([]string, len(childIDs))
+	args := make([]any, len(childIDs))
+	for i, id := range childIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	query := fmt.Sprintf(
+		`SELECT * FROM timers WHERE child_id IN (%s) ORDER BY start_time DESC`,
+		strings.Join(placeholders, ","))
+	var timers []Timer
+	if err := db.Select(&timers, query, args...); err != nil {
 		return nil, err
 	}
 	if timers == nil {

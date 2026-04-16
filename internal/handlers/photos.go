@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -27,11 +29,41 @@ func NewPhotosHandler(db *sqlx.DB, cfg *config.Config) *PhotosHandler {
 }
 
 func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var isAdmin bool
+	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+
 	var photos []models.Photo
-	err := h.db.Select(&photos, `SELECT * FROM photos ORDER BY date DESC`)
-	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to list photos")
-		return
+	if isAdmin {
+		// Admins see every photo, including those not yet tagged to a child.
+		if err := h.db.Select(&photos, `SELECT * FROM photos ORDER BY date DESC`); err != nil {
+			pagination.WriteError(w, http.StatusInternalServerError, "failed to list photos")
+			return
+		}
+	} else {
+		accessible, ok := accessibleChildren(w, r, h.db)
+		if !ok {
+			return
+		}
+		if len(accessible) > 0 {
+			// Non-admins see only photos tagged with at least one child they
+			// can access. Untagged photos stay admin-only.
+			placeholders := make([]string, len(accessible))
+			args := make([]any, len(accessible))
+			for i, id := range accessible {
+				placeholders[i] = fmt.Sprintf("$%d", i+1)
+				args[i] = id
+			}
+			query := fmt.Sprintf(`
+				SELECT DISTINCT p.* FROM photos p
+				JOIN photo_children pc ON pc.photo_filename = p.filename
+				WHERE pc.child_id IN (%s)
+				ORDER BY p.date DESC`, strings.Join(placeholders, ","))
+			if err := h.db.Select(&photos, query, args...); err != nil {
+				pagination.WriteError(w, http.StatusInternalServerError, "failed to list photos")
+				return
+			}
+		}
 	}
 	if photos == nil {
 		photos = []models.Photo{}
@@ -59,6 +91,17 @@ func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	childID, err := strconv.Atoi(childIDStr)
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "child is required")
+		return
+	}
+
+	// RBAC middleware reads the child from ?child= or JSON body; multipart
+	// uploads go through a different channel, so verify ownership here before
+	// tagging any photos. Without this check a user with access to child A
+	// could send ?child=A (middleware passes) with form child=B (handler
+	// writes) to plant photos in another family's gallery.
+	userID := middleware.GetUserID(r.Context())
+	if models.CheckAccess(h.db, userID, childID, "photo") != "write" {
+		pagination.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -152,6 +195,9 @@ func (h *PhotosHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensurePhotoWritable(w, r, h.db, id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -181,6 +227,9 @@ func (h *PhotosHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensurePhotoWritable(w, r, h.db, id) {
 		return
 	}
 

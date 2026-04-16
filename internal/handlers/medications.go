@@ -22,10 +22,15 @@ func NewMedicationsHandler(db *sqlx.DB) *MedicationsHandler {
 }
 
 func (h *MedicationsHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "medications")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "medications",
-		ChildIDField: "child_id",
+		Table:              "medications",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"date_min": "time",
 			"date_max": "time",
@@ -80,6 +85,9 @@ func (h *MedicationsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensureWritable(w, r, h.db, "medications", id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -113,6 +121,9 @@ func (h *MedicationsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "medications", id) {
 		return
 	}
 	if err := models.DeleteMedication(h.db, id); err != nil {

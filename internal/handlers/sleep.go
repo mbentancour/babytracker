@@ -22,10 +22,15 @@ func NewSleepHandler(db *sqlx.DB) *SleepHandler {
 }
 
 func (h *SleepHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "sleep")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "sleep",
-		ChildIDField: "child_id",
+		Table:              "sleep",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"start_min": "start_time",
 			"start_max": "start_time",
@@ -90,6 +95,9 @@ func (h *SleepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "sleep", id) {
 		return
 	}
 

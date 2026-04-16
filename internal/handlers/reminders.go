@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -28,6 +29,12 @@ func (h *RemindersHandler) List(w http.ResponseWriter, r *http.Request) {
 	childID, err := strconv.Atoi(childIDStr)
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid child id")
+		return
+	}
+
+	userID := middleware.GetUserID(r.Context())
+	if models.CheckAccess(h.db, userID, childID, "note") == "none" {
+		pagination.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -81,6 +88,9 @@ func (h *RemindersHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensureWritable(w, r, h.db, "reminders", id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -114,6 +124,9 @@ func (h *RemindersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "reminders", id) {
 		return
 	}
 	if err := models.DeleteReminder(h.db, id); err != nil {

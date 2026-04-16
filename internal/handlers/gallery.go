@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,6 +39,15 @@ type GalleryItem struct {
 	TaggedChildren []int   `json:"tagged_children,omitempty"`
 }
 
+// List returns every photo visible in one child's gallery: their entry photos
+// (feeding/sleep/height/…), their profile picture, photos tagged to them in
+// photo_children, and untagged "shared" photos.
+//
+// Deliberate constraint: a photo tagged ONLY to a different child does not
+// appear here even if the caller has access to both children. The UI's tag
+// toggles only show children the caller can write to, so to add a second
+// child's tag, open that first child's gallery (where the photo IS visible)
+// and add the second child from there. Documented in USER-GUIDE.md → Photos.
 func (h *GalleryHandler) List(w http.ResponseWriter, r *http.Request) {
 	childIDStr := r.URL.Query().Get("child")
 	if childIDStr == "" {
@@ -255,16 +265,31 @@ func (h *GalleryHandler) TagPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authorization: verify user has photo access to all target children
+	// Authorization: verify user has write access to every target child.
 	userID := middleware.GetUserID(r.Context())
 	for _, childID := range req.ChildIDs {
-		if models.CheckAccess(h.db, userID, childID, "photo") == "none" {
+		if models.CheckAccess(h.db, userID, childID, "photo") != "write" {
 			pagination.WriteError(w, http.StatusForbidden, "you don't have access to one or more of the selected children")
 			return
 		}
 	}
 
-	// Replace all tags for this photo
+	// Only remove tags the caller is authorised over. Without this filter,
+	// a caller could strip tags for children they can't access (e.g. another
+	// family's), silently orphaning the photo from those children's galleries.
+	var existingTags []int
+	if err := h.db.Select(&existingTags,
+		`SELECT child_id FROM photo_children WHERE photo_filename = $1`, cleaned); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	removable := make([]int, 0, len(existingTags))
+	for _, cid := range existingTags {
+		if models.CheckAccess(h.db, userID, cid, "photo") == "write" {
+			removable = append(removable, cid)
+		}
+	}
+
 	tx, err := h.db.Beginx()
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "database error")
@@ -272,9 +297,30 @@ func (h *GalleryHandler) TagPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	tx.Exec("DELETE FROM photo_children WHERE photo_filename = $1", cleaned)
+	// Delete only the tags the caller owns.
+	if len(removable) > 0 {
+		placeholders := make([]string, len(removable))
+		args := make([]any, 0, len(removable)+1)
+		args = append(args, cleaned)
+		for i, cid := range removable {
+			placeholders[i] = fmt.Sprintf("$%d", i+2)
+			args = append(args, cid)
+		}
+		query := fmt.Sprintf(
+			"DELETE FROM photo_children WHERE photo_filename = $1 AND child_id IN (%s)",
+			strings.Join(placeholders, ","))
+		if _, err := tx.Exec(query, args...); err != nil {
+			pagination.WriteError(w, http.StatusInternalServerError, "failed to update tags")
+			return
+		}
+	}
 	for _, childID := range req.ChildIDs {
-		tx.Exec("INSERT INTO photo_children (photo_filename, child_id) VALUES ($1, $2)", cleaned, childID)
+		if _, err := tx.Exec(
+			"INSERT INTO photo_children (photo_filename, child_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+			cleaned, childID); err != nil {
+			pagination.WriteError(w, http.StatusInternalServerError, "failed to update tags")
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

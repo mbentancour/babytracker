@@ -18,6 +18,42 @@ const (
 	saltLen      = 16
 )
 
+// ValidatePassword enforces the password policy applied to account creation,
+// admin-assigned credentials, and password changes. Rules:
+//   - at least 8 characters
+//   - must contain at least three of: lowercase, uppercase, digit, symbol
+//
+// The symbol class is "any non-alphanumeric printable character" — we allow
+// whitespace because passphrases are welcome.
+func ValidatePassword(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	var hasLower, hasUpper, hasDigit, hasSymbol bool
+	for _, r := range password {
+		switch {
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		default:
+			hasSymbol = true
+		}
+	}
+	classes := 0
+	for _, b := range []bool{hasLower, hasUpper, hasDigit, hasSymbol} {
+		if b {
+			classes++
+		}
+	}
+	if classes < 3 {
+		return fmt.Errorf("password must contain at least three of: lowercase, uppercase, digit, symbol")
+	}
+	return nil
+}
+
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {

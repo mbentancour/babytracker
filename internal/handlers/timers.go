@@ -22,7 +22,11 @@ func NewTimersHandler(db *sqlx.DB) *TimersHandler {
 }
 
 func (h *TimersHandler) List(w http.ResponseWriter, r *http.Request) {
-	timers, err := models.ListTimers(h.db)
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
+	timers, err := models.ListTimersForChildren(h.db, accessible)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to list timers")
 		return
@@ -67,6 +71,9 @@ func (h *TimersHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	if !ensureWritable(w, r, h.db, "timers", id) {
+		return
+	}
 
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -96,6 +103,9 @@ func (h *TimersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !ensureWritable(w, r, h.db, "timers", id) {
 		return
 	}
 

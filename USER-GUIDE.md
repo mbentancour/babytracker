@@ -119,6 +119,7 @@ Timers make logging faster and more accurate.
 - **Upload photos directly.** Go to the Photos tab to upload photos without attaching them to a specific entry.
 - **Profile pictures.** Set a profile picture for each child.
 - **Tag photos with children.** Photos can be tagged with one or more children so they appear in the right gallery.
+- **Cross-child tagging.** Each gallery only lists photos tagged to the child it belongs to (plus untagged shared photos). To add a second child's tag to a photo, open it in the gallery of a child it is already tagged to and tick the other child's name there — you can't add the first tag to a photo from a sibling's gallery.
 - **Click to enlarge.** Tap any photo in the gallery to open it full-screen. Use the left/right arrows (or keyboard arrow keys) to browse, Escape or tap outside to close.
 - Untagged photos are treated as shared and will appear in every child's gallery.
 - The gallery displays thumbnails for fast loading; full-resolution originals are used only when a photo is opened or shown in picture frame mode.

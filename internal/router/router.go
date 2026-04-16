@@ -56,15 +56,26 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 
-	// Auth routes (public, rate-limited)
+	// Auth routes. Split into three tiers so a user who's been kicked off
+	// and tries to log in doesn't hit a rate limit burned by their browser's
+	// background /status and /refresh calls.
+	//
+	//   Login/register — strict: the brute-force surface.
+	//   Refresh        — looser: gated by a valid refresh_token cookie already,
+	//                    only tightens if that cookie is compromised.
+	//   Logout/status  — unthrottled: logout invalidates the attacker's own
+	//                    session, status is a read-only "am I logged in".
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.RateLimit(5, time.Minute))
+		r.Use(middleware.RateLimit(10, time.Minute))
 		r.Post("/api/auth/register", authH.Register)
 		r.Post("/api/auth/login", authH.Login)
-		r.Post("/api/auth/refresh", authH.Refresh)
-		r.Post("/api/auth/logout", authH.Logout)
-		r.Get("/api/auth/status", authH.Status)
 	})
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.RateLimit(30, time.Minute))
+		r.Post("/api/auth/refresh", authH.Refresh)
+	})
+	r.Post("/api/auth/logout", authH.Logout)
+	r.Get("/api/auth/status", authH.Status)
 
 	// Setup-mode restore: pre-auth, only works when no user exists yet.
 	// Handler verifies user count internally; here we just give it a rate

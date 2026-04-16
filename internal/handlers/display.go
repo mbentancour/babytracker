@@ -8,34 +8,51 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/crypto"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
 var deviceNameRe = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
 
+// subKey namespaces display subscribers by the authenticated user's ID so
+// two users can register the same device name ("nursery-tablet") without
+// colliding, and so a non-admin can never target another user's device by
+// name alone.
+type subKey struct {
+	userID int
+	device string
+}
+
 type DisplayHandler struct {
 	db     *sqlx.DB
 	subsMu sync.Mutex
-	subs   map[string]chan DisplayCommand // keyed by device name
+	subs   map[subKey]chan DisplayCommand
 }
 
 type DisplayCommand struct {
 	PictureFrame bool   `json:"picture_frame"`
-	Device       string `json:"device,omitempty"` // empty = all devices
+	Device       string `json:"device,omitempty"` // empty = all of the caller's devices
 }
 
 func NewDisplayHandler(db *sqlx.DB) *DisplayHandler {
 	return &DisplayHandler{
 		db:   db,
-		subs: make(map[string]chan DisplayCommand),
+		subs: make(map[subKey]chan DisplayCommand),
 	}
 }
 
-// SetState sends a display command to a specific device or all devices.
+// SetState fans a display command out to the caller's own devices.
+//
+// Admin behaviour: admins are deliberately allowed to push to every connected
+// device, across every user. This preserves the operator-dashboard use case
+// (one admin UI driving displays for the whole household). If the product
+// intent changes to "admins can only manage devices they registered", this
+// is the place to add a per-device ownership check.
+//
 // PUT /api/display
-// Body: {"picture_frame": true} — targets all devices
-// Body: {"picture_frame": true, "device": "nursery-tablet"} — targets one device
+// Body: {"picture_frame": true} — targets all of the caller's devices
+// Body: {"picture_frame": true, "device": "nursery-tablet"} — one device by name
 func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 	var cmd DisplayCommand
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
@@ -43,15 +60,25 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := middleware.GetUserID(r.Context())
+	var isAdmin bool
+	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+
 	h.subsMu.Lock()
 	targeted := 0
-	for device, ch := range h.subs {
-		if cmd.Device == "" || cmd.Device == device {
-			select {
-			case ch <- cmd:
-				targeted++
-			default:
-			}
+	for key, ch := range h.subs {
+		// Non-admins can only target their own devices. Admins can target
+		// any device. The Device filter narrows further within that scope.
+		if !isAdmin && key.userID != userID {
+			continue
+		}
+		if cmd.Device != "" && cmd.Device != key.device {
+			continue
+		}
+		select {
+		case ch <- cmd:
+			targeted++
+		default:
 		}
 	}
 	h.subsMu.Unlock()
@@ -63,13 +90,20 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetState returns the list of connected devices.
-// GET /api/display
+// GetState returns the list of device names the caller owns that currently
+// have an SSE connection. Admins see every connected device across every
+// user — pair with SetState's admin-broadcast semantics.
 func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var isAdmin bool
+	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+
 	h.subsMu.Lock()
 	devices := make([]string, 0, len(h.subs))
-	for name := range h.subs {
-		devices = append(devices, name)
+	for key := range h.subs {
+		if isAdmin || key.userID == userID {
+			devices = append(devices, key.device)
+		}
 	}
 	h.subsMu.Unlock()
 
@@ -81,11 +115,16 @@ func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
 // Events is the SSE endpoint. Clients connect with ?device=name to register.
 // GET /api/display/events?device=nursery-tablet
 func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
-	// Authenticate via refresh_token cookie (EventSource can't send headers)
+	// Authenticate via refresh_token cookie (EventSource can't send headers).
+	// We need the user_id, not just "is this token valid" — the subscriber
+	// map is keyed by user so another user can't evict this device's
+	// connection by reusing its name.
+	var userID int
 	authenticated := false
 	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
 		tokenHash := crypto.HashRefreshToken(cookie.Value)
-		if _, err := models.GetRefreshTokenByHash(h.db, tokenHash); err == nil {
+		if rt, err := models.GetRefreshTokenByHash(h.db, tokenHash); err == nil {
+			userID = rt.UserID
 			authenticated = true
 		}
 	}
@@ -112,19 +151,23 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
+	key := subKey{userID: userID, device: device}
 	ch := make(chan DisplayCommand, 1)
 	h.subsMu.Lock()
-	// Close existing connection for the same device name
-	if old, exists := h.subs[device]; exists {
+	// Close the previous channel at the same (user, device) key — same user
+	// reconnecting with the same device name, e.g. after a laptop wake.
+	// Other users with a device named "nursery-tablet" are unaffected because
+	// they occupy a different key.
+	if old, exists := h.subs[key]; exists {
 		close(old)
 	}
-	h.subs[device] = ch
+	h.subs[key] = ch
 	h.subsMu.Unlock()
 
 	defer func() {
 		h.subsMu.Lock()
-		if h.subs[device] == ch {
-			delete(h.subs, device)
+		if h.subs[key] == ch {
+			delete(h.subs, key)
 		}
 		h.subsMu.Unlock()
 	}()

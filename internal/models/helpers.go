@@ -73,8 +73,22 @@ func FormatDuration(seconds int) string {
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
 }
 
-// Generic delete helper
+// deletableTables is the allow-list of tables that DeleteEntity is permitted
+// to target. Keeps the fmt.Sprintf on the table name safe even if a future
+// caller passes user-influenced input.
+var deletableTables = map[string]bool{
+	"feedings": true, "sleep": true, "changes": true, "tummy_times": true,
+	"temperature": true, "weight": true, "height": true, "head_circumference": true,
+	"pumping": true, "medications": true, "milestones": true, "notes": true,
+	"bmi": true, "children": true,
+}
+
+// Generic delete helper. The table name is interpolated, so it must come from
+// a trusted constant — enforced by an allow-list.
 func DeleteEntity(db *sqlx.DB, table string, id int) error {
+	if !deletableTables[table] {
+		return fmt.Errorf("delete not permitted on table %q", table)
+	}
 	_, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE id = $1", table), id)
 	return err
 }

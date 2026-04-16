@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -99,15 +100,20 @@ func (h *TagsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetEntityTagsBulk returns { "<entity_id>": [tags...] } for every entity of
-// the given type that has at least one tag. Designed for list-view rendering
-// where fetching tags per row would cost N API calls.
+// the given type that has at least one tag. Scoped to the caller's accessible
+// children so a non-admin can't enumerate cross-tenant tag metadata by walking
+// entity types.
 func (h *TagsHandler) GetEntityTagsBulk(w http.ResponseWriter, r *http.Request) {
 	entityType := r.URL.Query().Get("entity_type")
 	if entityType == "" {
 		pagination.WriteError(w, http.StatusBadRequest, "entity_type required")
 		return
 	}
-	m, err := models.GetTagsByEntityType(h.db, entityType)
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
+	m, err := models.GetTagsByEntityTypeForChildren(h.db, entityType, accessible)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to load tags")
 		return
@@ -120,6 +126,15 @@ func (h *TagsHandler) GetEntityTags(w http.ResponseWriter, r *http.Request) {
 	entityID, err := strconv.Atoi(chi.URLParam(r, "entityId"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid entity id")
+		return
+	}
+
+	// Require the caller to have access to the entity's owning child. Same
+	// shape as ensureWritable but demands only read-level access ("none" is
+	// the forbidden verdict).
+	userID := middleware.GetUserID(r.Context())
+	if err := models.EnsureEntityAccessible(h.db, userID, entityType, entityID); err != nil {
+		pagination.WriteError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
@@ -137,6 +152,14 @@ type setTagsRequest struct {
 
 func (h *TagsHandler) SetEntityTags(w http.ResponseWriter, r *http.Request) {
 	entityType := chi.URLParam(r, "entityType")
+	// Reject unknown entity_types at write time so they can't silently
+	// shadow-store rows the scoped readers (GetEntityTagsBulk /
+	// GetEntityTags) will then ignore. Without this, a typo like
+	// "feedings" (plural) writes to entry_tags but is invisible to reads.
+	if _, ok := models.TagEntityTypeToTable[entityType]; !ok {
+		pagination.WriteError(w, http.StatusBadRequest, "unknown entity_type")
+		return
+	}
 	entityID, err := strconv.Atoi(chi.URLParam(r, "entityId"))
 	if err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid entity id")

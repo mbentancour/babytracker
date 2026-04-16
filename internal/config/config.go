@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,10 +46,13 @@ func New() *Config {
 		jwtSecret = loadOrCreateSecret(dataDir)
 	}
 
+	databaseURL := envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=prefer")
+	warnIfInsecureDatabaseURL(databaseURL)
+
 	return &Config{
 		Port:            envOrDefault("PORT", "8099"),
 		DataDir:         dataDir,
-		DatabaseURL:     envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=disable"),
+		DatabaseURL:     databaseURL,
 		JWTSecret:       jwtSecret,
 		UnitSystem:      envOrDefault("UNIT_SYSTEM", "metric"),
 		RefreshInterval: 30,
@@ -61,6 +66,38 @@ func New() *Config {
 		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}
+}
+
+// warnIfInsecureDatabaseURL logs a warning when the DATABASE_URL points at a
+// non-loopback host with an sslmode that can fall back to plaintext (disable,
+// allow, prefer). Prefer is fine for a sibling docker container on a private
+// network but dangerous for a WAN-facing DB — the driver silently downgrades
+// when the server doesn't advertise TLS. We don't refuse to start (self-hosted
+// admins sometimes know what they're doing), but we want the warning in logs.
+func warnIfInsecureDatabaseURL(raw string) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return
+	}
+	host := u.Hostname()
+	// Unix socket DSNs put the socket path in the `host` query param rather
+	// than the URL host — always considered local.
+	if host == "" || u.Query().Get("host") != "" {
+		return
+	}
+	mode := strings.ToLower(u.Query().Get("sslmode"))
+	if mode != "disable" && mode != "allow" && mode != "prefer" && mode != "" {
+		return // require / verify-ca / verify-full
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	if host == "localhost" || host == "db" { // common docker-compose service name
+		return
+	}
+	slog.Warn("DATABASE_URL may fall back to plaintext over the network",
+		"host", host, "sslmode", mode,
+		"hint", "use sslmode=verify-full with a CA bundle for remote databases")
 }
 
 // parseBackupLocalRoots returns the allow-list of filesystem roots a Local

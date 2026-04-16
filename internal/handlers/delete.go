@@ -40,6 +40,16 @@ func (h *GenericDeleteHandler) deleteEntity(table string) http.HandlerFunc {
 			return
 		}
 
+		// Children are admin-managed — RBAC middleware already gates writes
+		// to /api/children/ to admins only. Every other table is child-owned
+		// and needs per-record ownership enforcement to close the IDOR where
+		// a non-admin could target an arbitrary record id.
+		if !isChild {
+			if !ensureWritable(w, r, h.db, table, id) {
+				return
+			}
+		}
+
 		// Clean up photo file before deleting the record
 		if hasPhoto[table] {
 			var photo string

@@ -20,10 +20,15 @@ func NewPumpingHandler(db *sqlx.DB) *PumpingHandler {
 }
 
 func (h *PumpingHandler) List(w http.ResponseWriter, r *http.Request) {
+	accessible, ok := accessibleChildren(w, r, h.db)
+	if !ok {
+		return
+	}
 	pp := pagination.ParseParams(r, "pumping")
 	qr := pagination.BuildQuery(r, pagination.FilterConfig{
-		Table:        "pumping",
-		ChildIDField: "child_id",
+		Table:              "pumping",
+		ChildIDField:       "child_id",
+		AccessibleChildren: accessible,
 		TimeFields: map[string]string{
 			"start_min": "start_time",
 			"start_max": "start_time",
