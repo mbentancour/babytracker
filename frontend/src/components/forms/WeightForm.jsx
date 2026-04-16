@@ -45,7 +45,8 @@ export default function WeightForm({ childId, entry, onDone, onClose, onDelete }
         result = await api.createWeight(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("weight", result.id, photoFile);
+        try { await api.uploadEntryPhoto("weight", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

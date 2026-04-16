@@ -53,9 +53,13 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
       }
       const entryId = result?.id || entry?.id;
       if (photoFile && entryId) {
-        await api.uploadEntryPhoto("tummy-times", entryId, photoFile);
+        try { await api.uploadEntryPhoto("tummy-times", entryId, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
-      if (entryId) await api.setEntityTags("tummy_time", entryId, tagIds);
+      if (entryId) {
+        try { await api.setEntityTags("tummy_time", entryId, tagIds); }
+        catch (err) { console.error("tag set failed", err); }
+      }
       onDone();
     } catch {
       setSaving(false);

@@ -43,7 +43,8 @@ export default function HeadCircumferenceForm({ childId, entry, onDone, onClose,
         result = await api.createHeadCircumference(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("head-circumference", result.id, photoFile);
+        try { await api.uploadEntryPhoto("head-circumference", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

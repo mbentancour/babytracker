@@ -74,6 +74,20 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 				}
 			}
 
+			// Carve-out: /api/tags/<entityType>/<entityId>/ are per-entity tag
+			// operations that use entity-level ownership (handler calls
+			// EnsureEntityAccessible / EnsureEntityWritable), not global admin
+			// rights. Tag *management* (/api/tags/ and /api/tags/{id}/) stays
+			// admin-gated by the adminWritePaths block below. Placed before
+			// adminWritePaths because /api/tags/ matches both shapes.
+			if strings.HasPrefix(path, "/api/tags/") {
+				parts := strings.Split(strings.Trim(path, "/"), "/")
+				if len(parts) >= 4 && parts[0] == "api" && parts[1] == "tags" {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			// Check admin-write paths: non-admins can GET but not POST/PATCH/DELETE
 			for awp := range adminWritePaths {
 				if path == awp || strings.HasPrefix(path, awp) {

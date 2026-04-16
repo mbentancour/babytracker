@@ -40,7 +40,8 @@ export default function BMIForm({ childId, entry, onDone, onClose, onDelete }) {
         result = await api.createBMI(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("bmi", result.id, photoFile);
+        try { await api.uploadEntryPhoto("bmi", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

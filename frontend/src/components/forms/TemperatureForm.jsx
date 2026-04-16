@@ -48,7 +48,8 @@ export default function TemperatureForm({ childId, entry, onDone, onClose, onDel
         result = await api.createTemperature(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("temperature", result.id, photoFile);
+        try { await api.uploadEntryPhoto("temperature", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

@@ -56,9 +56,13 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
       }
       const entryId = result?.id || entry?.id;
       if (photoFile && entryId) {
-        await api.uploadEntryPhoto("sleep", entryId, photoFile);
+        try { await api.uploadEntryPhoto("sleep", entryId, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
-      if (entryId) await api.setEntityTags("sleep", entryId, tagIds);
+      if (entryId) {
+        try { await api.setEntityTags("sleep", entryId, tagIds); }
+        catch (err) { console.error("tag set failed", err); }
+      }
       onDone();
     } catch {
       setSaving(false);

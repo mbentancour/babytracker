@@ -166,6 +166,16 @@ func (h *TagsHandler) SetEntityTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Non-admins need write access to the entity's owning child. Admins
+	// pass (CheckAccess returns "write" for them). This replaces the
+	// blanket admin-write gate that used to block caregivers from tagging
+	// their own entries, leaving the post-save flow stuck on a 403.
+	userID := middleware.GetUserID(r.Context())
+	if err := models.EnsureEntityWritable(h.db, userID, entityType, entityID); err != nil {
+		pagination.WriteError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
 	var req setTagsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")

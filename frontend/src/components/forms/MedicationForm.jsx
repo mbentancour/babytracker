@@ -46,7 +46,8 @@ export default function MedicationForm({ childId, entry, defaultDosageUnit, onDo
         result = await api.createMedication(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("medications", result.id, photoFile);
+        try { await api.uploadEntryPhoto("medications", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

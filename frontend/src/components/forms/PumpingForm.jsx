@@ -49,7 +49,8 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
         result = await api.createPumping(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("pumping", result.id, photoFile);
+        try { await api.uploadEntryPhoto("pumping", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

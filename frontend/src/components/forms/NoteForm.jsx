@@ -43,9 +43,13 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
       }
       const entryId = result?.id || entry?.id;
       if (photoFile && entryId) {
-        await api.uploadEntryPhoto("notes", entryId, photoFile);
+        try { await api.uploadEntryPhoto("notes", entryId, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
-      if (entryId) await api.setEntityTags("note", entryId, tagIds);
+      if (entryId) {
+        try { await api.setEntityTags("note", entryId, tagIds); }
+        catch (err) { console.error("tag set failed", err); }
+      }
       onDone();
     } catch {
       setSaving(false);

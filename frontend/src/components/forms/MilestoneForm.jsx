@@ -48,7 +48,8 @@ export default function MilestoneForm({ childId, entry, onDone, onClose, onDelet
         result = await api.createMilestone(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("milestones", result.id, photoFile);
+        try { await api.uploadEntryPhoto("milestones", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

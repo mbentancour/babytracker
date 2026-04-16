@@ -45,7 +45,8 @@ export default function HeightForm({ childId, entry, onDone, onClose, onDelete }
         result = await api.createHeight(data);
       }
       if (photoFile && result?.id) {
-        await api.uploadEntryPhoto("height", result.id, photoFile);
+        try { await api.uploadEntryPhoto("height", result.id, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
       onDone();
     } catch {

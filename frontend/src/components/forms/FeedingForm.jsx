@@ -76,9 +76,15 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
       }
       const entryId = result?.id || entry?.id;
       if (photoFile && entryId) {
-        await api.uploadEntryPhoto("feedings", entryId, photoFile);
+        try { await api.uploadEntryPhoto("feedings", entryId, photoFile); }
+        catch (err) { console.error("photo upload failed", err); }
       }
-      if (entryId) await api.setEntityTags("feeding", entryId, tagIds);
+      if (entryId) {
+        // Tag write is best-effort — the entry itself is saved. Don't let a
+        // tag failure block the modal close and make the save look silent.
+        try { await api.setEntityTags("feeding", entryId, tagIds); }
+        catch (err) { console.error("tag set failed", err); }
+      }
       onDone();
     } catch {
       setSaving(false);

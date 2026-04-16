@@ -137,6 +137,18 @@ func GetTagsByEntityTypeForChildren(db *sqlx.DB, entityType string, childIDs []i
 // on another family's records by guessing ids. Unknown entityTypes map to
 // ErrForbidden — never "open by default".
 func EnsureEntityAccessible(db *sqlx.DB, userID int, entityType string, entityID int) error {
+	return checkEntityAccess(db, userID, entityType, entityID, false)
+}
+
+// EnsureEntityWritable is the write-level sibling of EnsureEntityAccessible.
+// Used by per-entity tag writes (setEntityTags PUT) so caregivers can tag
+// their own entries without needing admin rights. Tag management (create /
+// rename / delete at /api/tags/) stays admin-gated separately.
+func EnsureEntityWritable(db *sqlx.DB, userID int, entityType string, entityID int) error {
+	return checkEntityAccess(db, userID, entityType, entityID, true)
+}
+
+func checkEntityAccess(db *sqlx.DB, userID int, entityType string, entityID int, needWrite bool) error {
 	table, ok := TagEntityTypeToTable[entityType]
 	if !ok {
 		return ErrForbidden
@@ -151,7 +163,11 @@ func EnsureEntityAccessible(db *sqlx.DB, userID int, entityType string, entityID
 		// Includes sql.ErrNoRows — don't leak existence via a distinct code.
 		return ErrForbidden
 	}
-	if CheckAccess(db, userID, childID, feature) == "none" {
+	level := CheckAccess(db, userID, childID, feature)
+	if level == "none" {
+		return ErrForbidden
+	}
+	if needWrite && level != "write" {
 		return ErrForbidden
 	}
 	return nil
