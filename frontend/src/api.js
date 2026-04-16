@@ -18,7 +18,24 @@ export function setOnAuthRequired(callback) {
   onAuthRequired = callback;
 }
 
-async function refreshAccessToken() {
+// refreshPromise coalesces concurrent refresh attempts. Without it, N parallel
+// 401s on page load fire N /auth/refresh requests in parallel; the server
+// rotates the refresh-token cookie on the first success and the others arrive
+// with a deleted hash, all fail, N-1 requests throw "Authentication required".
+// Coalescing turns those N /refresh calls into 1 — every caller awaits the
+// same promise.
+let refreshPromise = null;
+
+function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function doRefresh() {
   try {
     const response = await fetch(`${AUTH_BASE}/refresh`, {
       method: "POST",

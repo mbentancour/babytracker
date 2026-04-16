@@ -260,7 +260,12 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
         </div>
       ) : (
         dates.map((date) => (
-          <div key={date} className="fade-in" style={{ marginBottom: 20 }}>
+          // Include `filter` in the key so every date-group remounts on
+          // filter change. Without this, React reuses the outer div and
+          // has been leaving stale child nodes in place in some transitions
+          // (e.g. Shared → Emma). Fade-in also re-triggers, which doubles
+          // as a nice visual confirmation that the filter applied.
+          <div key={`${filter}:${date}`} className="fade-in" style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.03em" }}>
               {new Date(date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
             </div>
