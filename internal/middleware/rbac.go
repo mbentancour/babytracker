@@ -136,22 +136,29 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			// Determine child ID from query param or request body
 			childID := getChildIDFromRequest(r)
 			if childID == 0 {
-				// No child specified — check if user has access to ANY child
-				// with the required feature permission
+				// Caller has to have access to at least one child. If they
+				// do, we decide how strict to be based on method:
+				//   GET    — handler scopes via AccessibleChildren, let it pass.
+				//   PATCH  — handler's ensureWritable looks up the record's
+				//            real child_id and checks ownership, safe to pass.
+				//   DELETE — same as PATCH; the URL carries the entity id and
+				//            the handler enforces ownership.
+				//   POST   — create handlers take child from the body and
+				//            have no existing row to look up; require the
+				//            body to include child so we can check it here.
 				accessible, _ := models.GetAccessibleChildIDs(db, userID)
 				if len(accessible) == 0 {
 					http.Error(w, `{"error":"you don't have access to any children"}`, http.StatusForbidden)
 					return
 				}
-				// For GET without child filter, allow — the data will be
-				// scoped by the handler's queries anyway
-				if r.Method == http.MethodGet {
+				switch r.Method {
+				case http.MethodGet, http.MethodPatch, http.MethodDelete:
 					next.ServeHTTP(w, r)
 					return
+				default:
+					http.Error(w, `{"error":"child parameter required"}`, http.StatusBadRequest)
+					return
 				}
-				// For writes without a child ID, deny
-				http.Error(w, `{"error":"child parameter required"}`, http.StatusBadRequest)
-				return
 			}
 
 			// Check access for the specific child + feature
