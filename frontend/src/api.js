@@ -71,6 +71,24 @@ async function request(endpoint, options = {}) {
   return response.json();
 }
 
+// handleUploadResponse is the error-tolerant response parser used by the
+// multipart-upload helpers below. Upload errors can come back as plain text
+// (e.g. the Home Assistant ingress proxy returning a 413 before the Go
+// handler runs, or http.MaxBytesReader tripping) and calling .json() on a
+// non-JSON body throws Safari's "The string did not match the expected
+// pattern." — which is worse than useless when shown to users.
+async function handleUploadResponse(r) {
+  const text = await r.text().catch(() => "");
+  if (r.ok) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  }
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { payload = { error: text || `HTTP ${r.status}` }; }
+  throw payload;
+}
+
 function qs(params) {
   if (!params) return "";
   const filtered = Object.fromEntries(
@@ -263,10 +281,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
   setChildPhotoFromFilename: (childId, filename) =>
     request(`children/${childId}/photo`, { method: "PUT", body: JSON.stringify({ filename }) }),
@@ -280,10 +295,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
   uploadMilestonePhoto: (milestoneId, file) => {
     const formData = new FormData();
@@ -293,10 +305,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
 
   // Standalone photos
@@ -313,10 +322,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
   updatePhoto: (id, data) =>
     request(`photos/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -369,10 +375,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
   restoreBackupFromDestination: (destinationId, name, passphrase, wipePhotos) => {
     const formData = new FormData();
@@ -385,10 +388,7 @@ export const api = {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
 
   // Backup destinations (admin)
@@ -453,10 +453,7 @@ export const api = {
       method: "POST",
       credentials: "include",
       body: formData,
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    });
+    }).then(handleUploadResponse);
   },
   register: (username, password) =>
     fetch(`${AUTH_BASE}/register`, {

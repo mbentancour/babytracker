@@ -75,12 +75,22 @@ func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Upload handles multipart bulk photo uploads. Accepts multiple files.
+//
+// Limits:
+//   - 1 GB total per request (batches above this get rejected by MaxBytesReader)
+//   - 25 MB per individual file (modern phone photos routinely exceed 10 MB,
+//     especially HEIC→JPEG conversions and high-res Android cameras)
+//
+// Files that exceed the per-file cap or aren't recognised as images are
+// skipped rather than aborting the whole batch; their filenames + reasons
+// come back in the `skipped` field of the response so the frontend can tell
+// the user which photos didn't make it.
 func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 500<<20) // 500MB max for bulk uploads
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<30) // 1 GB max for bulk uploads
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32MB in memory, rest on disk
 		if err.Error() == "http: request body too large" {
-			pagination.WriteError(w, http.StatusRequestEntityTooLarge, "upload too large, max 500MB")
+			pagination.WriteError(w, http.StatusRequestEntityTooLarge, "upload too large, max 1GB per batch")
 		} else {
 			pagination.WriteError(w, http.StatusBadRequest, "failed to parse upload: "+err.Error())
 		}

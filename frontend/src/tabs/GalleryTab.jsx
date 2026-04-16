@@ -77,7 +77,11 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
       });
   }, [childId, refreshKey]);
 
-  const [uploading, setUploading] = useState(false);
+  // progress is null when idle, { done, total } during an upload. Kept
+  // separate from `uploading` booleans so the button can show "3 / 20"
+  // instead of a generic spinner.
+  const [progress, setProgress] = useState(null);
+  const uploading = progress !== null;
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const handleDeletePhoto = async (item) => {
@@ -98,30 +102,37 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
     }
   };
 
-  const MAX_BATCH = 20;
-
   const handleBulkUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0 || !childId) return;
     e.target.value = "";
-    setUploading(true);
 
-    try {
-      // Upload in batches to avoid overwhelming the server
-      let totalUploaded = 0;
-      for (let i = 0; i < files.length; i += MAX_BATCH) {
-        const batch = files.slice(i, i + MAX_BATCH);
-        const result = await api.uploadPhotos(childId, batch);
-        totalUploaded += result.uploaded || 0;
+    // Upload one file per request. The HA ingress reverse proxy imposes a
+    // body-size limit on forwarded requests that large multi-file batches
+    // can trip; sending files individually keeps every request small.
+    // Partial failures don't abort the run — we collect them and show a
+    // summary at the end.
+    setProgress({ done: 0, total: files.length });
+    const failed = [];
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await api.uploadPhotos(childId, [files[i]]);
+      } catch (err) {
+        failed.push({
+          name: files[i].name,
+          error: err?.error || err?.message || "upload failed",
+        });
       }
-      setRefreshKey((k) => k + 1);
-    } catch (err) {
-      const msg = err?.error || err?.message || "Upload failed";
-      alert(`Upload error: ${msg}`);
-      // Still refresh in case some photos were uploaded before the error
-      setRefreshKey((k) => k + 1);
+      setProgress({ done: i + 1, total: files.length });
     }
-    setUploading(false);
+    setProgress(null);
+    setRefreshKey((k) => k + 1);
+
+    if (failed.length > 0) {
+      const list = failed.slice(0, 5).map((f) => `• ${f.name}: ${f.error}`).join("\n");
+      const more = failed.length > 5 ? `\n…and ${failed.length - 5} more` : "";
+      alert(`${files.length - failed.length} of ${files.length} uploaded.\n\nFailed:\n${list}${more}`);
+    }
   };
 
   // Filter taxonomy:
@@ -187,7 +198,9 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           }}
         >
           <Icons.Plus />
-          {uploading ? t("gallery.uploading") : t("gallery.addPhotos")}
+          {uploading
+            ? `${t("gallery.uploading")} (${progress.done}/${progress.total})`
+            : t("gallery.addPhotos")}
           <input
             type="file"
             accept="image/*"
