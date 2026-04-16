@@ -5,11 +5,7 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function PumpingForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -37,8 +33,8 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
     setSaving(true);
     try {
       const data = {
-        start: `${start}:00`,
-        end: `${end}:00`,
+        start: localInputToUTC(start),
+        end: localInputToUTC(end),
       };
       if (amount) data.amount = parseFloat(amount);
       let result;

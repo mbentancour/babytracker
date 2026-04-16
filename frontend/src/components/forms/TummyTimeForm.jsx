@@ -5,11 +5,7 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
@@ -37,7 +33,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
     try {
       let result;
       if (isEdit) {
-        const data = { start: `${start}:00`, end: `${end}:00` };
+        const data = { start: localInputToUTC(start), end: localInputToUTC(end) };
         if (milestone.trim()) data.milestone = milestone.trim();
         result = await api.updateTummyTime(entry.id, data);
       } else {
@@ -45,8 +41,8 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
         if (timerId) {
           data.timer = timerId;
         } else {
-          data.start = `${start}:00`;
-          data.end = `${end}:00`;
+          data.start = localInputToUTC(start);
+          data.end = localInputToUTC(end);
         }
         if (milestone.trim()) data.milestone = milestone.trim();
         result = await api.createTummyTime(data);

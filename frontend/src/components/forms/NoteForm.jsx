@@ -5,11 +5,7 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
@@ -33,7 +29,7 @@ export default function NoteForm({ childId, entry, onDone, onClose, onDelete }) 
     if (!note.trim()) return;
     setSaving(true);
     try {
-      const data = { note: note.trim(), time: `${time}:00` };
+      const data = { note: note.trim(), time: localInputToUTC(time) };
       let result;
       if (isEdit) {
         result = await api.updateNote(entry.id, data);

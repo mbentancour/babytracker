@@ -5,11 +5,7 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function SleepForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
@@ -38,8 +34,8 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
       let result;
       if (isEdit) {
         const data = {
-          start: `${start}:00`,
-          end: `${end}:00`,
+          start: localInputToUTC(start),
+          end: localInputToUTC(end),
         };
         if (notes.trim()) data.notes = notes.trim();
         result = await api.updateSleep(entry.id, data);
@@ -49,8 +45,8 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
         if (timerId) {
           data.timer = timerId;
         } else {
-          data.start = `${start}:00`;
-          data.end = `${end}:00`;
+          data.start = localInputToUTC(start);
+          data.end = localInputToUTC(end);
         }
         result = await api.createSleep(data);
       }

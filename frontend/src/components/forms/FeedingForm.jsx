@@ -6,11 +6,7 @@ import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -61,16 +57,16 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
       if (notes.trim()) data.notes = notes.trim();
       let result;
       if (isEdit) {
-        data.start = `${start}:00`;
-        data.end = `${end}:00`;
+        data.start = localInputToUTC(start);
+        data.end = localInputToUTC(end);
         result = await api.updateFeeding(entry.id, data);
       } else {
         data.child = childId;
         if (timerId) {
           data.timer = timerId;
         } else {
-          data.start = `${start}:00`;
-          data.end = `${end}:00`;
+          data.start = localInputToUTC(start);
+          data.end = localInputToUTC(end);
         }
         result = await api.createFeeding(data);
       }

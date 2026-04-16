@@ -4,11 +4,7 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function MedicationForm({ childId, entry, defaultDosageUnit, onDone, onClose, onDelete }) {
   const { t } = useI18n();
@@ -36,7 +32,7 @@ export default function MedicationForm({ childId, entry, defaultDosageUnit, onDo
     e.preventDefault();
     setSaving(true);
     try {
-      const data = { name, dosage, dosage_unit: dosageUnit, time: `${time}:00` };
+      const data = { name, dosage, dosage_unit: dosageUnit, time: localInputToUTC(time) };
       if (notes.trim()) data.notes = notes.trim();
       let result;
       if (isEdit) {

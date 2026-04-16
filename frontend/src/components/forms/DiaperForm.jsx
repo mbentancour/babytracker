@@ -6,11 +6,7 @@ import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { usePreferences } from "../../utils/preferences";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 const COLORS = [
   { value: "", label: "Not specified" },
@@ -45,7 +41,7 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
     e.preventDefault();
     setSaving(true);
     try {
-      const data = { wet, solid, time: `${time}:00` };
+      const data = { wet, solid, time: localInputToUTC(time) };
       if (color) data.color = color;
       if (notes.trim()) data.notes = notes.trim();
       let result;

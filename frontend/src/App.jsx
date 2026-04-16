@@ -8,6 +8,7 @@ import { getAge, formatElapsed } from "./utils/formatters";
 import { api, setAccessToken, setOnAuthRequired } from "./api";
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
+import { toLocalDatetime, localInputToUTC } from "./utils/datetime";
 import OverviewTab from "./tabs/OverviewTab";
 import GrowthTab from "./tabs/GrowthTab";
 import NotesTab from "./tabs/NotesTab";
@@ -80,10 +81,6 @@ const TIMER_TYPES = [
   { id: "tummy", label: "Tummy Time", icon: <Icons.Sun />, color: colors.tummy },
 ];
 
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 function timerNameToType(name) {
   if (!name) return "feeding";
@@ -524,7 +521,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                 autoFocus
                 onBlur={(e) => {
                   if (e.target.value) {
-                    timer.editTimer(t.id, `${e.target.value}:00`);
+                    timer.editTimer(t.id, localInputToUTC(e.target.value));
                   }
                   setEditingTimerId(null);
                 }}

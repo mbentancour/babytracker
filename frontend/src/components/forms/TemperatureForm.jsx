@@ -6,11 +6,7 @@ import PhotoPicker from "../PhotoPicker";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-
-function toLocalDatetime(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
 export default function TemperatureForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -38,7 +34,7 @@ export default function TemperatureForm({ childId, entry, onDone, onClose, onDel
     if (!temp) return;
     setSaving(true);
     try {
-      const data = { temperature: parseFloat(temp), time: `${time}:00` };
+      const data = { temperature: parseFloat(temp), time: localInputToUTC(time) };
       if (notes.trim()) data.notes = notes.trim();
       let result;
       if (isEdit) {
