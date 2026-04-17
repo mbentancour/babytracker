@@ -6,6 +6,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     # Native arm64 runner — no QEMU emulation needed.
@@ -109,11 +112,32 @@ jobs:
           LOOP=$(sudo losetup --find --show --partscan "$IMG")
           echo "Loop device: $LOOP"
           sudo partx -u "$LOOP" || true
-          ls -la "${LOOP}"p* 2>/dev/null || ls -la "${LOOP}p"* 2>/dev/null || true
+
+          # List partitions and their types for debugging
+          echo "Partitions:"
+          sudo fdisk -l "$LOOP" || true
+          sudo blkid "${LOOP}p"* 2>/dev/null || true
 
           sudo mkdir -p /mnt/pi-rootfs
-          # p2 is the root partition (p1 is boot/firmware)
-          sudo mount "${LOOP}p2" /mnt/pi-rootfs
+
+          # Find the root partition (largest ext4/btrfs partition, usually p2)
+          ROOT_PART=""
+          for p in "${LOOP}p2" "${LOOP}p1" "${LOOP}p3"; do
+            if [ -b "$p" ]; then
+              FSTYPE=$(sudo blkid -o value -s TYPE "$p" 2>/dev/null || true)
+              echo "  $p: $FSTYPE"
+              if [ "$FSTYPE" = "ext4" ] || [ "$FSTYPE" = "btrfs" ]; then
+                ROOT_PART="$p"
+                break
+              fi
+            fi
+          done
+          if [ -z "$ROOT_PART" ]; then
+            echo "ERROR: Could not find root partition"
+            exit 1
+          fi
+          echo "Mounting root partition: $ROOT_PART"
+          sudo mount "$ROOT_PART" /mnt/pi-rootfs
 
           PASS=0
           FAIL=0
