@@ -4,6 +4,7 @@
 package acme
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -49,12 +50,21 @@ type Config struct {
 	CertsDir string // Directory to store certificates and account key
 }
 
+// CertInfo holds public information about the current certificate.
+type CertInfo struct {
+	Domain  string    `json:"domain"`
+	Issuer  string    `json:"issuer"`
+	Expires time.Time `json:"expires"`
+}
+
 // Manager handles certificate issuance, renewal, and TLS config.
 type Manager struct {
-	cfg  Config
-	mu   sync.RWMutex
-	cert *tls.Certificate
+	cfg      Config
+	mu       sync.RWMutex
+	cert     *tls.Certificate
+	cancelFn context.CancelFunc // cancels the current renewal loop
 }
+
 
 // legoUser implements registration.User for the lego ACME client.
 type legoUser struct {
@@ -104,6 +114,35 @@ func (m *Manager) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, 
 	return nil, fmt.Errorf("acme: certificate not yet available")
 }
 
+// CertInfo returns public information about the current certificate, or nil if
+// no certificate is loaded.
+func (m *Manager) CertInfo() *CertInfo {
+	m.mu.RLock()
+	cert := m.cert
+	m.mu.RUnlock()
+	if cert == nil {
+		return nil
+	}
+	leaf := cert.Leaf
+	if leaf == nil && len(cert.Certificate) > 0 {
+		parsed, _ := x509.ParseCertificate(cert.Certificate[0])
+		leaf = parsed
+	}
+	if leaf == nil {
+		return nil
+	}
+	issuer := leaf.Issuer.Organization
+	issuerStr := ""
+	if len(issuer) > 0 {
+		issuerStr = issuer[0]
+	}
+	return &CertInfo{
+		Domain:  leaf.Subject.CommonName,
+		Issuer:  issuerStr,
+		Expires: leaf.NotAfter,
+	}
+}
+
 // Run obtains a certificate (or loads a cached one) and starts a background
 // goroutine that renews it before expiry. This method blocks until the initial
 // certificate is ready, then returns.
@@ -120,8 +159,46 @@ func (m *Manager) Run() error {
 		}
 	}
 
-	// Start renewal loop
-	go m.renewLoop()
+	// Start cancellable renewal loop
+	ctx, cancel := context.WithCancel(context.Background())
+	m.mu.Lock()
+	m.cancelFn = cancel
+	m.mu.Unlock()
+	go m.renewLoop(ctx)
+	return nil
+}
+
+// Reconfigure updates the ACME configuration, obtains a new certificate, and
+// restarts the renewal loop. Called when the user changes TLS settings via the UI.
+func (m *Manager) Reconfigure(cfg Config) error {
+	if cfg.Email == "" {
+		cfg.Email = "admin@" + cfg.Domain
+	}
+
+	// Stop existing renewal loop
+	m.mu.Lock()
+	if m.cancelFn != nil {
+		m.cancelFn()
+	}
+	m.cfg = cfg
+	m.cert = nil
+	m.mu.Unlock()
+
+	os.MkdirAll(cfg.CertsDir, 0700)
+
+	slog.Info("acme: reconfiguring", "domain", cfg.Domain, "provider", cfg.Provider)
+	if err := m.obtain(); err != nil {
+		return fmt.Errorf("acme: failed to obtain certificate: %w", err)
+	}
+
+	// Start new renewal loop
+	ctx, cancel := context.WithCancel(context.Background())
+	m.mu.Lock()
+	m.cancelFn = cancel
+	m.mu.Unlock()
+	go m.renewLoop(ctx)
+
+	slog.Info("acme: reconfigured successfully", "domain", cfg.Domain)
 	return nil
 }
 
@@ -146,15 +223,19 @@ func (m *Manager) obtain() error {
 	return m.loadCached()
 }
 
-func (m *Manager) renewLoop() {
+func (m *Manager) renewLoop(ctx context.Context) {
 	for {
 		m.mu.RLock()
 		cert := m.cert
 		m.mu.RUnlock()
 
 		if cert == nil {
-			time.Sleep(time.Minute)
-			continue
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				continue
+			}
 		}
 
 		// Parse the leaf certificate to check expiry
@@ -167,8 +248,12 @@ func (m *Manager) renewLoop() {
 		}
 
 		if leaf == nil {
-			time.Sleep(time.Hour)
-			continue
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Hour):
+				continue
+			}
 		}
 
 		// Renew when less than 30 days remain
@@ -180,13 +265,21 @@ func (m *Manager) renewLoop() {
 				"expires", leaf.NotAfter,
 				"renew_at", renewAt,
 			)
-			time.Sleep(sleepDur)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sleepDur):
+			}
 		}
 
 		slog.Info("acme: renewing certificate", "domain", m.cfg.Domain)
 		if err := m.obtain(); err != nil {
 			slog.Error("acme: renewal failed, retrying in 1 hour", "error", err)
-			time.Sleep(time.Hour)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Hour):
+			}
 		} else {
 			slog.Info("acme: certificate renewed", "domain", m.cfg.Domain)
 		}

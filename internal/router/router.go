@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	btacme "github.com/mbentancour/babytracker/internal/acme"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/handlers"
 	"github.com/mbentancour/babytracker/internal/middleware"
@@ -55,6 +56,13 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	displayH := handlers.NewDisplayHandler(db)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
+
+	// TLS handler — pass the ACME manager from config (set by main.go at startup)
+	var acmeMgr *btacme.Manager
+	if cfg.ACMEManager != nil {
+		acmeMgr, _ = cfg.ACMEManager.(*btacme.Manager)
+	}
+	tlsH := handlers.NewTLSHandler(db, cfg.CertsDir, acmeMgr)
 
 	// Auth routes. Split into three tiers so a user who's been kicked off
 	// and tries to log in doesn't hit a rate limit burned by their browser's
@@ -285,6 +293,9 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			// Domain/TLS settings
 			r.Get("/api/settings/domain", domainH.Get)
 			r.Put("/api/settings/domain", domainH.Set)
+			r.Get("/api/settings/tls", tlsH.Get)
+			r.Put("/api/settings/tls", tlsH.Set)
+			r.Post("/api/settings/tls/test", tlsH.Test)
 		})
 
 		// Non-admin user-management self-service endpoints

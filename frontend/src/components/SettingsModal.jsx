@@ -281,6 +281,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
                 {onLogout && applianceMode && <DomainSection />}
 
+                {onLogout && <TLSSection />}
+
                 {onLogout && <ChangePasswordSection />}
 
                 {onLogout && (
@@ -1585,6 +1587,164 @@ function DomainSection() {
       <FormButton color="#6C5CE7" disabled={saving} onClick={handleSave}>
         {saving ? t("form.saving") : t("settings.saveDomain")}
       </FormButton>
+    </div>
+  );
+}
+
+const DNS_PROVIDERS = [
+  { value: "", label: "None (self-signed)" },
+  { value: "cloudflare", label: "Cloudflare" },
+  { value: "route53", label: "AWS Route53" },
+  { value: "duckdns", label: "DuckDNS" },
+  { value: "namecheap", label: "Namecheap" },
+  { value: "simply", label: "Simply.com" },
+];
+
+const PROVIDER_FIELDS = {
+  cloudflare: [{ key: "CF_DNS_API_TOKEN", label: "API Token" }],
+  route53: [
+    { key: "AWS_ACCESS_KEY_ID", label: "Access Key ID" },
+    { key: "AWS_SECRET_ACCESS_KEY", label: "Secret Access Key" },
+    { key: "AWS_HOSTED_ZONE_ID", label: "Hosted Zone ID (optional)", optional: true },
+  ],
+  duckdns: [{ key: "DUCKDNS_TOKEN", label: "Token" }],
+  namecheap: [
+    { key: "NAMECHEAP_API_USER", label: "API User" },
+    { key: "NAMECHEAP_API_KEY", label: "API Key" },
+  ],
+  simply: [
+    { key: "SIMPLY_ACCOUNT_NAME", label: "Account Name" },
+    { key: "SIMPLY_API_KEY", label: "API Key" },
+  ],
+};
+
+function TLSSection() {
+  const [provider, setProvider] = useState("");
+  const [domain, setDomain] = useState("");
+  const [email, setEmail] = useState("");
+  const [credentials, setCredentials] = useState({});
+  const [credentialsSet, setCredentialsSet] = useState(false);
+  const [certInfo, setCertInfo] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.getTLS()
+      .then((data) => {
+        setProvider(data.provider || "");
+        setDomain(data.domain || "");
+        setEmail(data.email || "");
+        setCredentialsSet(data.credentials_set || false);
+        if (data.certificate) setCertInfo(data.certificate);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = { domain: domain.trim(), email: email.trim(), provider };
+      // Only send credentials if the user entered new ones
+      const hasNewCreds = Object.values(credentials).some((v) => v);
+      if (hasNewCreds) payload.credentials = credentials;
+      const data = await api.setTLS(payload);
+      if (data.error) {
+        setMessage({ type: "error", text: data.message || data.error });
+      } else {
+        setMessage({ type: "success", text: data.message || "Saved" });
+        if (data.certificate) setCertInfo(data.certificate);
+        setCredentialsSet(true);
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || "Failed to save" });
+    }
+    setSaving(false);
+  };
+
+  const updateCred = (key, value) => {
+    setCredentials((prev) => ({ ...prev, [key]: value }));
+  };
+
+  if (!loaded) return null;
+
+  const fields = PROVIDER_FIELDS[provider] || [];
+
+  return (
+    <div className="settings-card" style={{ marginTop: 16 }}>
+      <h4 className="settings-section-subtitle">TLS / HTTPS Certificate</h4>
+      <p className="settings-hint">
+        Get a valid TLS certificate from Let's Encrypt using DNS validation.
+        Works behind NAT — no port forwarding needed.
+      </p>
+
+      <FormField label="DNS Provider">
+        <select
+          className="form-select"
+          value={provider}
+          onChange={(e) => {
+            setProvider(e.target.value);
+            setCredentials({});
+            setCredentialsSet(false);
+          }}
+        >
+          {DNS_PROVIDERS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+      </FormField>
+
+      {provider && (
+        <>
+          <FormField label="Domain">
+            <FormInput
+              type="text"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="baby.example.com"
+            />
+          </FormField>
+
+          <FormField label="Email (for expiry notices)">
+            <FormInput
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={"admin@" + (domain || "example.com")}
+            />
+          </FormField>
+
+          {fields.map((f) => (
+            <FormField key={f.key} label={f.label}>
+              <FormInput
+                type="password"
+                value={credentials[f.key] || ""}
+                onChange={(e) => updateCred(f.key, e.target.value)}
+                placeholder={credentialsSet ? "••••••••  (saved)" : ""}
+              />
+            </FormField>
+          ))}
+
+          {certInfo && (
+            <div className="settings-hint" style={{ color: "#00b894", marginTop: 8 }}>
+              ✓ Certificate valid until {new Date(certInfo.expires).toLocaleDateString()}
+              {certInfo.issuer && ` (${certInfo.issuer})`}
+            </div>
+          )}
+
+          {message && (
+            <p className="settings-hint" style={{ color: message.type === "success" ? "#00b894" : "#e74c3c" }}>
+              {message.text}
+            </p>
+          )}
+
+          <FormButton color="#6C5CE7" disabled={saving || !domain.trim()} onClick={handleSave}>
+            {saving ? "Obtaining certificate..." : certInfo ? "Update Certificate" : "Save & Obtain Certificate"}
+          </FormButton>
+        </>
+      )}
     </div>
   );
 }

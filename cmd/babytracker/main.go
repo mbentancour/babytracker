@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"encoding/json"
 	"flag"
 	"io/fs"
 	"log/slog"
@@ -96,10 +97,51 @@ func main() {
 		// integration) so push-based updates are possible without polling.
 		webhooks.Init(db)
 
+		// Resolve TLS config: env vars take precedence, then DB tls_config, then DB tls_domain
+		if cfg.TLSDomain == "" || cfg.ACMEDNSProvider == "" {
+			var raw string
+			if db.Get(&raw, `SELECT value FROM settings WHERE key = 'tls_config'`) == nil && raw != "" {
+				var dbTLS struct {
+					Domain      string            `json:"domain"`
+					Email       string            `json:"email"`
+					Provider    string            `json:"provider"`
+					Credentials map[string]string `json:"credentials"`
+				}
+				if json.Unmarshal([]byte(raw), &dbTLS) == nil {
+					if cfg.TLSDomain == "" {
+						cfg.TLSDomain = dbTLS.Domain
+					}
+					if cfg.ACMEDNSProvider == "" && dbTLS.Provider != "" {
+						cfg.ACMEDNSProvider = dbTLS.Provider
+						cfg.ACMEEmail = dbTLS.Email
+						// Set provider credential env vars so lego can read them
+						for k, v := range dbTLS.Credentials {
+							os.Setenv(k, v)
+						}
+					}
+				}
+			}
+		}
+
+		// Pre-create ACME manager (if DNS-01 configured) so the TLS handler can use it
+		if cfg.TLSDomain != "" && cfg.ACMEDNSProvider != "" {
+			mgr, err := btacme.NewManager(btacme.Config{
+				Domain:   cfg.TLSDomain,
+				Email:    cfg.ACMEEmail,
+				Provider: cfg.ACMEDNSProvider,
+				CertsDir: cfg.CertsDir,
+			})
+			if err != nil {
+				slog.Error("failed to create ACME manager", "error", err)
+			} else {
+				cfg.ACMEManager = mgr
+			}
+		}
+
 		handler = router.New(db, cfg)
 	}
 
-	// Resolve TLS domain: env var takes precedence, then DB setting
+	// Resolve TLS domain: cfg.TLSDomain may have been set from DB above
 	tlsDomain := cfg.TLSDomain
 	if tlsDomain == "" && !cfg.IsProxyMode() && !cfg.SetupMode {
 		var savedDomain string
@@ -163,16 +205,10 @@ func main() {
 		}()
 	} else if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
 		// DNS-01 challenge via lego — works behind NAT, no port forwarding needed.
-		// Provider credentials are read from environment variables by lego
-		// (e.g. CF_DNS_API_TOKEN for Cloudflare, AWS_ACCESS_KEY_ID for Route53).
-		mgr, err := btacme.NewManager(btacme.Config{
-			Domain:   tlsDomain,
-			Email:    cfg.ACMEEmail,
-			Provider: cfg.ACMEDNSProvider,
-			CertsDir: cfg.CertsDir,
-		})
-		if err != nil {
-			slog.Error("failed to create ACME manager", "error", err)
+		// The manager was pre-created above; just run it to obtain/renew the cert.
+		mgr, _ := cfg.ACMEManager.(*btacme.Manager)
+		if mgr == nil {
+			slog.Error("ACME manager not initialized")
 			os.Exit(1)
 		}
 		if err := mgr.Run(); err != nil {

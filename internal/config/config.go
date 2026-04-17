@@ -29,6 +29,11 @@ type Config struct {
 	ACMEEmail       string // Email for ACME account registration
 	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
 
+	// ACMEManager is set at runtime by main.go when the ACME manager is started.
+	// Handlers use it to reconfigure TLS and query certificate status.
+	ACMEManager any // *acme.Manager (any to avoid import cycle)
+
+
 	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
 	// destination's path may resolve into. Defaults to {DataDir}/backups plus
 	// any colon-separated value of BACKUP_LOCAL_ROOTS. Prevents an admin from

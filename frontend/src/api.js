@@ -429,6 +429,13 @@ export const api = {
   setDomain: (domain) =>
     request("settings/domain", { method: "PUT", body: JSON.stringify({ domain }) }),
 
+  // TLS/ACME settings (admin)
+  getTLS: () => request("settings/tls"),
+  setTLS: (config) =>
+    request("settings/tls", { method: "PUT", body: JSON.stringify(config) }),
+  testTLS: (config) =>
+    request("settings/tls/test", { method: "POST", body: JSON.stringify(config) }),
+
   // System controls (admin)
   restartSystem: () => request("system/restart", { method: "POST" }),
   shutdownSystem: () => request("system/shutdown", { method: "POST" }),
