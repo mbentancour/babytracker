@@ -1,9 +1,11 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Reminder struct {
@@ -32,7 +34,7 @@ type ReminderInput struct {
 func ListReminders(db *sqlx.DB, childID int) ([]Reminder, error) {
 	var reminders []Reminder
 	err := db.Select(&reminders,
-		`SELECT * FROM reminders WHERE child_id = $1 ORDER BY created_at DESC`,
+		database.Q(db, `SELECT * FROM reminders WHERE child_id = ? ORDER BY created_at DESC`),
 		childID,
 	)
 	if err != nil {
@@ -49,8 +51,8 @@ func CreateReminder(db *sqlx.DB, r *Reminder) error {
 		r.Type = "interval"
 	}
 	return db.QueryRowx(
-		`INSERT INTO reminders (child_id, title, type, interval_minutes, fixed_time, days_of_week, active)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		database.Q(db, `INSERT INTO reminders (child_id, title, type, interval_minutes, fixed_time, days_of_week, active)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		r.ChildID, r.Title, r.Type, r.IntervalMinutes, r.FixedTime, r.DaysOfWeek, r.Active,
 	).StructScan(r)
 }
@@ -58,12 +60,12 @@ func CreateReminder(db *sqlx.DB, r *Reminder) error {
 func UpdateReminder(db *sqlx.DB, id int, updates map[string]any) (*Reminder, error) {
 	query, args := buildUpdateQuery("reminders", id, updates)
 	var r Reminder
-	err := db.QueryRowx(query, args...).StructScan(&r)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&r)
 	return &r, err
 }
 
 func DeleteReminder(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM reminders WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM reminders WHERE id = ?`), id)
 	return err
 }
 
@@ -80,6 +82,6 @@ func GetActiveReminders(db *sqlx.DB) ([]Reminder, error) {
 }
 
 func UpdateReminderTriggered(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`UPDATE reminders SET last_triggered_at = NOW() WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, fmt.Sprintf(`UPDATE reminders SET last_triggered_at = %s WHERE id = ?`, database.Now())), id)
 	return err
 }

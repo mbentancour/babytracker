@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 // buildUpdateQuery builds a dynamic UPDATE query from a map of field->value pairs.
@@ -12,23 +13,20 @@ import (
 func buildUpdateQuery(table string, id int, updates map[string]any) (string, []any) {
 	setClauses := make([]string, 0, len(updates))
 	args := make([]any, 0, len(updates)+1)
-	i := 1
 
 	for field, value := range updates {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, i))
+		setClauses = append(setClauses, fmt.Sprintf("%s = ?", field))
 		args = append(args, value)
-		i++
 	}
 
 	if table == "children" {
-		setClauses = append(setClauses, fmt.Sprintf("updated_at = NOW()"))
+		setClauses = append(setClauses, fmt.Sprintf("updated_at = %s", database.Now()))
 	}
 
 	query := fmt.Sprintf(
-		"UPDATE %s SET %s WHERE id = $%d RETURNING *",
+		"UPDATE %s SET %s WHERE id = ? RETURNING *",
 		table,
 		strings.Join(setClauses, ", "),
-		i,
 	)
 	args = append(args, id)
 
@@ -44,21 +42,17 @@ func buildUpdateQueryWithExtraCondition(table string, id int, updates map[string
 
 	setClauses := make([]string, 0, len(updates))
 	args := make([]any, 0, len(updates)+2)
-	i := 1
 
 	for field, value := range updates {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, i))
+		setClauses = append(setClauses, fmt.Sprintf("%s = ?", field))
 		args = append(args, value)
-		i++
 	}
 
 	query := fmt.Sprintf(
-		"UPDATE %s SET %s WHERE id = $%d AND %s = $%d RETURNING *",
+		"UPDATE %s SET %s WHERE id = ? AND %s = ? RETURNING *",
 		table,
 		strings.Join(setClauses, ", "),
-		i,
 		extraCondField,
-		i+1,
 	)
 	args = append(args, id, extraVal)
 
@@ -89,6 +83,6 @@ func DeleteEntity(db *sqlx.DB, table string, id int) error {
 	if !deletableTables[table] {
 		return fmt.Errorf("delete not permitted on table %q", table)
 	}
-	_, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE id = $1", table), id)
+	_, err := db.Exec(database.Q(db, fmt.Sprintf("DELETE FROM %s WHERE id = ?", table)), id)
 	return err
 }

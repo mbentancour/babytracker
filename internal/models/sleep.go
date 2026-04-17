@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Sleep struct {
@@ -30,8 +31,8 @@ type SleepInput struct {
 
 func CreateSleep(db *sqlx.DB, s *Sleep) error {
 	return db.QueryRowx(
-		`INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		database.Q(db, `INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes, timer_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		s.ChildID, s.Start, s.End, computeInterval(s.Start, s.End), s.Nap, s.Notes, s.TimerID,
 	).StructScan(s)
 }
@@ -39,6 +40,6 @@ func CreateSleep(db *sqlx.DB, s *Sleep) error {
 func UpdateSleep(db *sqlx.DB, id int, updates map[string]any) (*Sleep, error) {
 	query, args := buildUpdateQuery("sleep", id, updates)
 	var s Sleep
-	err := db.QueryRowx(query, args...).StructScan(&s)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&s)
 	return &s, err
 }

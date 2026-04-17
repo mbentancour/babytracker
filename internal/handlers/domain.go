@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -47,8 +48,8 @@ func (h *DomainHandler) Set(w http.ResponseWriter, r *http.Request) {
 	domain := strings.TrimSpace(req.Domain)
 
 	_, err := h.db.Exec(
-		`INSERT INTO settings (key, value) VALUES ('tls_domain', $1)
-		 ON CONFLICT (key) DO UPDATE SET value = $1`, domain)
+		database.Q(h.db, `INSERT INTO settings (key, value) VALUES ('tls_domain', ?)
+		 ON CONFLICT (key) DO UPDATE SET value = ?`), domain, domain)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to save domain")
 		return

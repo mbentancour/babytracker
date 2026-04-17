@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 // childOwnedTables maps each child-scoped table to the RBAC feature that
@@ -67,7 +68,7 @@ func GetRecordChildID(db *sqlx.DB, table string, id int) (int, error) {
 		return 0, fmt.Errorf("table %q is not child-owned", table)
 	}
 	var childID int
-	err := db.Get(&childID, fmt.Sprintf("SELECT child_id FROM %s WHERE id = $1", table), id)
+	err := db.Get(&childID, database.Q(db, fmt.Sprintf("SELECT child_id FROM %s WHERE id = ?", table)), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrRecordNotFound
 	}
@@ -105,7 +106,7 @@ func EnsureRecordWritable(db *sqlx.DB, userID int, table string, id int) error {
 //     from orphaning photos into the non-admin-inaccessible set.
 func EnsurePhotoWritable(db *sqlx.DB, userID int, photoID int) error {
 	var filename string
-	err := db.Get(&filename, `SELECT filename FROM photos WHERE id = $1`, photoID)
+	err := db.Get(&filename, database.Q(db, `SELECT filename FROM photos WHERE id = ?`), photoID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrRecordNotFound
 	}
@@ -114,14 +115,14 @@ func EnsurePhotoWritable(db *sqlx.DB, userID int, photoID int) error {
 	}
 
 	var isAdmin bool
-	db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	db.Get(&isAdmin, database.Q(db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 	if isAdmin {
 		return nil
 	}
 
 	var childIDs []int
 	if err := db.Select(&childIDs,
-		`SELECT child_id FROM photo_children WHERE photo_filename = $1`, filename); err != nil {
+		database.Q(db, `SELECT child_id FROM photo_children WHERE photo_filename = ?`), filename); err != nil {
 		return err
 	}
 	for _, cid := range childIDs {

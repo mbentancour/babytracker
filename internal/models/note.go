@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Note struct {
@@ -23,8 +24,8 @@ type NoteInput struct {
 
 func CreateNote(db *sqlx.DB, n *Note) error {
 	return db.QueryRowx(
-		`INSERT INTO notes (child_id, time, note)
-		 VALUES ($1, $2, $3) RETURNING *`,
+		database.Q(db, `INSERT INTO notes (child_id, time, note)
+		 VALUES (?, ?, ?) RETURNING *`),
 		n.ChildID, n.Time, n.Note,
 	).StructScan(n)
 }
@@ -32,6 +33,6 @@ func CreateNote(db *sqlx.DB, n *Note) error {
 func UpdateNote(db *sqlx.DB, id int, updates map[string]any) (*Note, error) {
 	query, args := buildUpdateQuery("notes", id, updates)
 	var n Note
-	err := db.QueryRowx(query, args...).StructScan(&n)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&n)
 	return &n, err
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
@@ -101,7 +102,7 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) {
 	w.Write([]string{"Type", "Start", "End", "Method", "Amount", "Duration", "Notes"})
 	var rows []models.Feeding
-	h.db.Select(&rows, `SELECT * FROM feedings WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM feedings WHERE child_id = ? ORDER BY start_time DESC`), childID)
 	for _, r := range rows {
 		amount := ""
 		if r.Amount != nil {
@@ -118,7 +119,7 @@ func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) {
 	w.Write([]string{"Start", "End", "Duration", "Nap", "Notes"})
 	var rows []models.Sleep
-	h.db.Select(&rows, `SELECT * FROM sleep WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM sleep WHERE child_id = ? ORDER BY start_time DESC`), childID)
 	for _, r := range rows {
 		dur := ""
 		if r.Duration != nil {
@@ -131,7 +132,7 @@ func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportChanges(w *csv.Writer, childID int) {
 	w.Write([]string{"Time", "Wet", "Solid", "Color", "Notes"})
 	var rows []models.Change
-	h.db.Select(&rows, `SELECT * FROM changes WHERE child_id = $1 ORDER BY time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM changes WHERE child_id = ? ORDER BY time DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%t", r.Wet), fmt.Sprintf("%t", r.Solid), r.Color, csvSafe(r.Notes)})
 	}
@@ -140,7 +141,7 @@ func (h *ExportHandler) exportChanges(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) {
 	w.Write([]string{"Start", "End", "Duration", "Milestone", "Notes"})
 	var rows []models.TummyTime
-	h.db.Select(&rows, `SELECT * FROM tummy_times WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM tummy_times WHERE child_id = ? ORDER BY start_time DESC`), childID)
 	for _, r := range rows {
 		dur := ""
 		if r.Duration != nil {
@@ -153,7 +154,7 @@ func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportTemperature(w *csv.Writer, childID int) {
 	w.Write([]string{"Time", "Temperature", "Notes"})
 	var rows []models.Temperature
-	h.db.Select(&rows, `SELECT * FROM temperature WHERE child_id = $1 ORDER BY time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM temperature WHERE child_id = ? ORDER BY time DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Temperature), csvSafe(r.Notes)})
 	}
@@ -162,7 +163,7 @@ func (h *ExportHandler) exportTemperature(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportWeight(w *csv.Writer, childID int) {
 	w.Write([]string{"Date", "Weight", "Notes"})
 	var rows []models.Weight
-	h.db.Select(&rows, `SELECT * FROM weight WHERE child_id = $1 ORDER BY date DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM weight WHERE child_id = ? ORDER BY date DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.2f", r.Weight), csvSafe(r.Notes)})
 	}
@@ -171,7 +172,7 @@ func (h *ExportHandler) exportWeight(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportHeight(w *csv.Writer, childID int) {
 	w.Write([]string{"Date", "Height", "Notes"})
 	var rows []models.Height
-	h.db.Select(&rows, `SELECT * FROM height WHERE child_id = $1 ORDER BY date DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM height WHERE child_id = ? ORDER BY date DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.Height), csvSafe(r.Notes)})
 	}
@@ -180,7 +181,7 @@ func (h *ExportHandler) exportHeight(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) {
 	w.Write([]string{"Date", "Head Circumference", "Notes"})
 	var rows []models.HeadCircumference
-	h.db.Select(&rows, `SELECT * FROM head_circumference WHERE child_id = $1 ORDER BY date DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM head_circumference WHERE child_id = ? ORDER BY date DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.HeadCircumference), csvSafe(r.Notes)})
 	}
@@ -189,7 +190,7 @@ func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) {
 	w.Write([]string{"Time", "Name", "Dosage", "Unit", "Notes"})
 	var rows []models.Medication
-	h.db.Select(&rows, `SELECT * FROM medications WHERE child_id = $1 ORDER BY time DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM medications WHERE child_id = ? ORDER BY time DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), csvSafe(r.Name), csvSafe(r.Dosage), r.DosageUnit, csvSafe(r.Notes)})
 	}
@@ -198,7 +199,7 @@ func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) {
 func (h *ExportHandler) exportMilestones(w *csv.Writer, childID int) {
 	w.Write([]string{"Date", "Title", "Category", "Description"})
 	var rows []models.Milestone
-	h.db.Select(&rows, `SELECT * FROM milestones WHERE child_id = $1 ORDER BY date DESC`, childID)
+	h.db.Select(&rows, database.Q(h.db, `SELECT * FROM milestones WHERE child_id = ? ORDER BY date DESC`), childID)
 	for _, r := range rows {
 		w.Write([]string{r.Date, csvSafe(r.Title), r.Category, csvSafe(r.Description)})
 	}

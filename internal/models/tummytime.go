@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type TummyTime struct {
@@ -30,8 +31,8 @@ type TummyTimeInput struct {
 
 func CreateTummyTime(db *sqlx.DB, t *TummyTime) error {
 	return db.QueryRowx(
-		`INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		database.Q(db, `INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes, timer_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		t.ChildID, t.Start, t.End, computeInterval(t.Start, t.End), t.Milestone, t.Notes, t.TimerID,
 	).StructScan(t)
 }
@@ -39,6 +40,6 @@ func CreateTummyTime(db *sqlx.DB, t *TummyTime) error {
 func UpdateTummyTime(db *sqlx.DB, id int, updates map[string]any) (*TummyTime, error) {
 	query, args := buildUpdateQuery("tummy_times", id, updates)
 	var t TummyTime
-	err := db.QueryRowx(query, args...).StructScan(&t)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&t)
 	return &t, err
 }

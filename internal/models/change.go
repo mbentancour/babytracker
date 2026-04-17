@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Change struct {
@@ -31,8 +32,8 @@ type ChangeInput struct {
 
 func CreateChange(db *sqlx.DB, c *Change) error {
 	return db.QueryRowx(
-		`INSERT INTO changes (child_id, time, wet, solid, color, amount, notes)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		database.Q(db, `INSERT INTO changes (child_id, time, wet, solid, color, amount, notes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		c.ChildID, c.Time, c.Wet, c.Solid, c.Color, c.Amount, c.Notes,
 	).StructScan(c)
 }
@@ -40,6 +41,6 @@ func CreateChange(db *sqlx.DB, c *Change) error {
 func UpdateChange(db *sqlx.DB, id int, updates map[string]any) (*Change, error) {
 	query, args := buildUpdateQuery("changes", id, updates)
 	var c Change
-	err := db.QueryRowx(query, args...).StructScan(&c)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&c)
 	return &c, err
 }

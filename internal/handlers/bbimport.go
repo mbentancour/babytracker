@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -75,7 +76,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(raw, &c)
 		var localID int
 		err := h.db.QueryRow(
-			`INSERT INTO children (first_name, last_name, birth_date) VALUES ($1, $2, $3) RETURNING id`,
+			database.Q(h.db, `INSERT INTO children (first_name, last_name, birth_date) VALUES (?, ?, ?) RETURNING id`),
 			c.FirstName, c.LastName, c.BirthDate,
 		).Scan(&localID)
 		if err != nil {
@@ -96,7 +97,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 
 	imports := []importDef{
 		{"feedings", "/api/feedings/",
-			`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes) VALUES (?,?,?,?,?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End, Type, Method string
@@ -108,7 +109,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Start, e.End, e.Type, e.Method, e.Amount, e.Duration, e.Notes}
 			}},
 		{"sleep", "/api/sleep/",
-			`INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes) VALUES (?,?,?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
@@ -120,7 +121,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Start, e.End, e.Duration, e.Nap, e.Notes}
 			}},
 		{"changes", "/api/changes/",
-			`INSERT INTO changes (child_id, time, wet, solid, color, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO changes (child_id, time, wet, solid, color, notes) VALUES (?,?,?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Time, Color, Notes string
@@ -130,7 +131,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Time, e.Wet, e.Solid, e.Color, e.Notes}
 			}},
 		{"tummy-times", "/api/tummy-times/",
-			`INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes) VALUES (?,?,?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
@@ -142,7 +143,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Start, e.End, e.Duration, e.Milestone, e.Notes}
 			}},
 		{"temperature", "/api/temperature/",
-			`INSERT INTO temperature (child_id, time, temperature, notes) VALUES ($1,$2,$3,$4)`,
+			`INSERT INTO temperature (child_id, time, temperature, notes) VALUES (?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Time  string
@@ -153,7 +154,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Time, e.Temp, e.Notes}
 			}},
 		{"weight", "/api/weight/",
-			`INSERT INTO weight (child_id, date, weight, notes) VALUES ($1,$2,$3,$4)`,
+			`INSERT INTO weight (child_id, date, weight, notes) VALUES (?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Date   string
@@ -164,7 +165,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Date, e.Weight, e.Notes}
 			}},
 		{"height", "/api/height/",
-			`INSERT INTO height (child_id, date, height, notes) VALUES ($1,$2,$3,$4)`,
+			`INSERT INTO height (child_id, date, height, notes) VALUES (?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Date   string
@@ -175,7 +176,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Date, e.Height, e.Notes}
 			}},
 		{"pumping", "/api/pumping/",
-			`INSERT INTO pumping (child_id, start_time, end_time, amount, duration) VALUES ($1,$2,$3,$4,$5)`,
+			`INSERT INTO pumping (child_id, start_time, end_time, amount, duration) VALUES (?,?,?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
@@ -186,7 +187,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Start, e.End, e.Amount, e.Duration}
 			}},
 		{"notes", "/api/notes/",
-			`INSERT INTO notes (child_id, time, note) VALUES ($1,$2,$3)`,
+			`INSERT INTO notes (child_id, time, note) VALUES (?,?,?)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Time string
@@ -210,7 +211,7 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			args := imp.extract(raw, localID)
-			if _, err := h.db.Exec(imp.sql, args...); err == nil {
+			if _, err := h.db.Exec(database.Q(h.db, imp.sql), args...); err == nil {
 				count++
 			}
 		}

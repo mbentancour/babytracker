@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Pumping struct {
@@ -26,8 +27,8 @@ type PumpingInput struct {
 
 func CreatePumping(db *sqlx.DB, p *Pumping) error {
 	return db.QueryRowx(
-		`INSERT INTO pumping (child_id, start_time, end_time, amount, duration)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+		database.Q(db, `INSERT INTO pumping (child_id, start_time, end_time, amount, duration)
+		 VALUES (?, ?, ?, ?, ?) RETURNING *`),
 		p.ChildID, p.Start, p.End, p.Amount, computeInterval(p.Start, p.End),
 	).StructScan(p)
 }

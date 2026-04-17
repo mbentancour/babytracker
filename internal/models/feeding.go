@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Feeding struct {
@@ -34,8 +35,8 @@ type FeedingInput struct {
 
 func CreateFeeding(db *sqlx.DB, f *Feeding) error {
 	return db.QueryRowx(
-		`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+		database.Q(db, `INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes, timer_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		f.ChildID, f.Start, f.End, f.Type, f.Method, f.Amount,
 		computeInterval(f.Start, f.End), f.Notes, f.TimerID,
 	).StructScan(f)
@@ -44,7 +45,7 @@ func CreateFeeding(db *sqlx.DB, f *Feeding) error {
 func UpdateFeeding(db *sqlx.DB, id int, updates map[string]any) (*Feeding, error) {
 	query, args := buildUpdateQuery("feedings", id, updates)
 	var f Feeding
-	err := db.QueryRowx(query, args...).StructScan(&f)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&f)
 	return &f, err
 }
 

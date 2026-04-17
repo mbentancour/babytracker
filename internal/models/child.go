@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Child struct {
@@ -31,8 +32,8 @@ func ListChildren(db *sqlx.DB) ([]Child, error) {
 
 func CreateChild(db *sqlx.DB, c *Child) error {
 	return db.QueryRowx(
-		`INSERT INTO children (first_name, last_name, birth_date, picture, sex)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+		database.Q(db, `INSERT INTO children (first_name, last_name, birth_date, picture, sex)
+		 VALUES (?, ?, ?, ?, ?) RETURNING *`),
 		c.FirstName, c.LastName, c.BirthDate, c.Picture, c.Sex,
 	).StructScan(c)
 }
@@ -40,12 +41,12 @@ func CreateChild(db *sqlx.DB, c *Child) error {
 func UpdateChild(db *sqlx.DB, id int, updates map[string]any) (*Child, error) {
 	query, args := buildUpdateQuery("children", id, updates)
 	var child Child
-	err := db.QueryRowx(query, args...).StructScan(&child)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&child)
 	return &child, err
 }
 
 func GetChild(db *sqlx.DB, id int) (*Child, error) {
 	var child Child
-	err := db.Get(&child, `SELECT * FROM children WHERE id = $1`, id)
+	err := db.Get(&child, database.Q(db, `SELECT * FROM children WHERE id = ?`), id)
 	return &child, err
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type User struct {
@@ -19,7 +20,7 @@ type User struct {
 func CreateUser(db *sqlx.DB, username, passwordHash string, isAdmin bool) (*User, error) {
 	var user User
 	err := db.QueryRowx(
-		`INSERT INTO users (username, password_hash, is_admin) VALUES ($1, $2, $3) RETURNING *`,
+		database.Q(db, `INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?) RETURNING *`),
 		username, passwordHash, isAdmin,
 	).StructScan(&user)
 	return &user, err
@@ -30,23 +31,23 @@ func DeleteUser(db *sqlx.DB, id int) error {
 	var adminCount int
 	db.Get(&adminCount, `SELECT COUNT(*) FROM users WHERE is_admin = TRUE`)
 	var isAdmin bool
-	db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, id)
+	db.Get(&isAdmin, database.Q(db, `SELECT is_admin FROM users WHERE id = ?`), id)
 	if isAdmin && adminCount <= 1 {
 		return fmt.Errorf("cannot delete the last admin")
 	}
-	_, err := db.Exec(`DELETE FROM users WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM users WHERE id = ?`), id)
 	return err
 }
 
 func GetUserByUsername(db *sqlx.DB, username string) (*User, error) {
 	var user User
-	err := db.Get(&user, `SELECT * FROM users WHERE username = $1`, username)
+	err := db.Get(&user, database.Q(db, `SELECT * FROM users WHERE username = ?`), username)
 	return &user, err
 }
 
 func GetUserByID(db *sqlx.DB, id int) (*User, error) {
 	var user User
-	err := db.Get(&user, `SELECT * FROM users WHERE id = $1`, id)
+	err := db.Get(&user, database.Q(db, `SELECT * FROM users WHERE id = ?`), id)
 	return &user, err
 }
 

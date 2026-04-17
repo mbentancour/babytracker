@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Milestone struct {
@@ -30,8 +31,8 @@ func CreateMilestone(db *sqlx.DB, m *Milestone) error {
 		m.Category = "other"
 	}
 	return db.QueryRowx(
-		`INSERT INTO milestones (child_id, date, title, category, description, photo)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+		database.Q(db, `INSERT INTO milestones (child_id, date, title, category, description, photo)
+		 VALUES (?, ?, ?, ?, ?, ?) RETURNING *`),
 		m.ChildID, m.Date, m.Title, m.Category, m.Description, m.Photo,
 	).StructScan(m)
 }
@@ -39,11 +40,11 @@ func CreateMilestone(db *sqlx.DB, m *Milestone) error {
 func UpdateMilestone(db *sqlx.DB, id int, updates map[string]any) (*Milestone, error) {
 	query, args := buildUpdateQuery("milestones", id, updates)
 	var m Milestone
-	err := db.QueryRowx(query, args...).StructScan(&m)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&m)
 	return &m, err
 }
 
 func DeleteMilestone(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM milestones WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM milestones WHERE id = ?`), id)
 	return err
 }

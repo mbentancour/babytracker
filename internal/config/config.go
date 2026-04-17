@@ -46,7 +46,9 @@ func New() *Config {
 		jwtSecret = loadOrCreateSecret(dataDir)
 	}
 
-	databaseURL := envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=prefer")
+	// Default to SQLite (zero-config, no external DB needed). Existing
+	// Postgres installs keep working by setting DATABASE_URL=postgres://...
+	databaseURL := envOrDefault("DATABASE_URL", filepath.Join(dataDir, "babytracker.db"))
 	warnIfInsecureDatabaseURL(databaseURL)
 
 	return &Config{
@@ -77,6 +79,10 @@ func New() *Config {
 func warnIfInsecureDatabaseURL(raw string) {
 	u, err := url.Parse(raw)
 	if err != nil {
+		return
+	}
+	// Only relevant for postgres:// URLs — SQLite is local-only by nature.
+	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
 		return
 	}
 	host := u.Hostname()

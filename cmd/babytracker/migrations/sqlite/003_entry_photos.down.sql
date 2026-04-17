@@ -1,0 +1,11 @@
+ALTER TABLE feedings DROP COLUMN photo;
+ALTER TABLE sleep DROP COLUMN photo;
+ALTER TABLE changes DROP COLUMN photo;
+ALTER TABLE tummy_times DROP COLUMN photo;
+ALTER TABLE temperature DROP COLUMN photo;
+ALTER TABLE weight DROP COLUMN photo;
+ALTER TABLE height DROP COLUMN photo;
+ALTER TABLE head_circumference DROP COLUMN photo;
+ALTER TABLE pumping DROP COLUMN photo;
+ALTER TABLE medications DROP COLUMN photo;
+ALTER TABLE notes DROP COLUMN photo;

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 // BackupDestinationType enumerates supported storage backends.
@@ -170,7 +171,7 @@ func ListBackupDestinations(db *sqlx.DB) ([]BackupDestination, error) {
 
 func GetBackupDestination(db *sqlx.DB, id int) (*BackupDestination, error) {
 	var d BackupDestination
-	err := db.Get(&d, `SELECT * FROM backup_destinations WHERE id = $1`, id)
+	err := db.Get(&d, database.Q(db, `SELECT * FROM backup_destinations WHERE id = ?`), id)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +180,8 @@ func GetBackupDestination(db *sqlx.DB, id int) (*BackupDestination, error) {
 
 func CreateBackupDestination(db *sqlx.DB, d *BackupDestination) error {
 	return db.QueryRowx(
-		`INSERT INTO backup_destinations (name, type, config, retention_count, auto_backup, enabled, schedule)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		database.Q(db, `INSERT INTO backup_destinations (name, type, config, retention_count, auto_backup, enabled, schedule)
+		 VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`),
 		d.Name, d.Type, d.ConfigJSON, d.RetentionCount, d.AutoBackup, d.Enabled, d.Schedule,
 	).StructScan(d)
 }
@@ -188,7 +189,7 @@ func CreateBackupDestination(db *sqlx.DB, d *BackupDestination) error {
 func UpdateBackupDestination(db *sqlx.DB, id int, updates map[string]any) (*BackupDestination, error) {
 	query, args := buildUpdateQuery("backup_destinations", id, updates)
 	var d BackupDestination
-	err := db.QueryRowx(query, args...).StructScan(&d)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&d)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +197,6 @@ func UpdateBackupDestination(db *sqlx.DB, id int, updates map[string]any) (*Back
 }
 
 func DeleteBackupDestination(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM backup_destinations WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM backup_destinations WHERE id = ?`), id)
 	return err
 }

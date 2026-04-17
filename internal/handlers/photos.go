@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
@@ -31,7 +32,7 @@ func NewPhotosHandler(db *sqlx.DB, cfg *config.Config) *PhotosHandler {
 func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	h.db.Get(&isAdmin, database.Q(h.db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 
 	var photos []models.Photo
 	if isAdmin {
@@ -51,14 +52,14 @@ func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
 			placeholders := make([]string, len(accessible))
 			args := make([]any, len(accessible))
 			for i, id := range accessible {
-				placeholders[i] = fmt.Sprintf("$%d", i+1)
+				placeholders[i] = "?"
 				args[i] = id
 			}
-			query := fmt.Sprintf(`
+			query := database.Q(h.db, fmt.Sprintf(`
 				SELECT DISTINCT p.* FROM photos p
 				JOIN photo_children pc ON pc.photo_filename = p.filename
 				WHERE pc.child_id IN (%s)
-				ORDER BY p.date DESC`, strings.Join(placeholders, ","))
+				ORDER BY p.date DESC`, strings.Join(placeholders, ",")))
 			if err := h.db.Select(&photos, query, args...); err != nil {
 				pagination.WriteError(w, http.StatusInternalServerError, "failed to list photos")
 				return

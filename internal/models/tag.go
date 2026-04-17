@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Tag struct {
@@ -42,7 +43,7 @@ func ListTags(db *sqlx.DB) ([]Tag, error) {
 
 func CreateTag(db *sqlx.DB, t *Tag) error {
 	return db.QueryRowx(
-		`INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING *`,
+		database.Q(db, `INSERT INTO tags (name, color) VALUES (?, ?) RETURNING *`),
 		t.Name, t.Color,
 	).StructScan(t)
 }
@@ -50,12 +51,12 @@ func CreateTag(db *sqlx.DB, t *Tag) error {
 func UpdateTag(db *sqlx.DB, id int, updates map[string]any) (*Tag, error) {
 	query, args := buildUpdateQuery("tags", id, updates)
 	var t Tag
-	err := db.QueryRowx(query, args...).StructScan(&t)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&t)
 	return &t, err
 }
 
 func DeleteTag(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM tags WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM tags WHERE id = ?`), id)
 	return err
 }
 
@@ -71,11 +72,11 @@ func GetTagsByEntityType(db *sqlx.DB, entityType string) (map[int][]Tag, error) 
 	}
 	var rows []row
 	err := db.Select(&rows,
-		`SELECT et.entity_id, t.id, t.name, t.color
+		database.Q(db, `SELECT et.entity_id, t.id, t.name, t.color
 		 FROM entry_tags et
 		 JOIN tags t ON t.id = et.tag_id
-		 WHERE et.entity_type = $1
-		 ORDER BY et.entity_id, t.name`,
+		 WHERE et.entity_type = ?
+		 ORDER BY et.entity_id, t.name`),
 		entityType,
 	)
 	if err != nil {
@@ -104,7 +105,7 @@ func GetTagsByEntityTypeForChildren(db *sqlx.DB, entityType string, childIDs []i
 	args := make([]any, 0, len(childIDs)+1)
 	args = append(args, entityType)
 	for i, cid := range childIDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		placeholders[i] = "?"
 		args = append(args, cid)
 	}
 	type row struct {
@@ -119,9 +120,9 @@ func GetTagsByEntityTypeForChildren(db *sqlx.DB, entityType string, childIDs []i
 		FROM entry_tags et
 		JOIN tags t ON t.id = et.tag_id
 		JOIN %s src ON src.id = et.entity_id
-		WHERE et.entity_type = $1 AND src.child_id IN (%s)
+		WHERE et.entity_type = ? AND src.child_id IN (%s)
 		ORDER BY et.entity_id, t.name`, table, strings.Join(placeholders, ","))
-	if err := db.Select(&rows, query, args...); err != nil {
+	if err := db.Select(&rows, database.Q(db, query), args...); err != nil {
 		return nil, err
 	}
 	out := map[int][]Tag{}
@@ -158,7 +159,7 @@ func checkEntityAccess(db *sqlx.DB, userID int, entityType string, entityID int,
 		return ErrForbidden
 	}
 	var childID int
-	err := db.Get(&childID, fmt.Sprintf("SELECT child_id FROM %s WHERE id = $1", table), entityID)
+	err := db.Get(&childID, database.Q(db, fmt.Sprintf("SELECT child_id FROM %s WHERE id = ?", table)), entityID)
 	if err != nil {
 		// Includes sql.ErrNoRows — don't leak existence via a distinct code.
 		return ErrForbidden
@@ -176,10 +177,10 @@ func checkEntityAccess(db *sqlx.DB, userID int, entityType string, entityID int,
 func GetTagsForEntity(db *sqlx.DB, entityType string, entityID int) ([]Tag, error) {
 	var tags []Tag
 	err := db.Select(&tags,
-		`SELECT t.* FROM tags t
+		database.Q(db, `SELECT t.* FROM tags t
 		 JOIN entry_tags et ON et.tag_id = t.id
-		 WHERE et.entity_type = $1 AND et.entity_id = $2
-		 ORDER BY t.name`,
+		 WHERE et.entity_type = ? AND et.entity_id = ?
+		 ORDER BY t.name`),
 		entityType, entityID,
 	)
 	if err != nil {
@@ -198,14 +199,14 @@ func SetEntityTags(db *sqlx.DB, entityType string, entityID int, tagIDs []int) e
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`DELETE FROM entry_tags WHERE entity_type = $1 AND entity_id = $2`, entityType, entityID)
+	_, err = tx.Exec(tx.Rebind(`DELETE FROM entry_tags WHERE entity_type = ? AND entity_id = ?`), entityType, entityID)
 	if err != nil {
 		return err
 	}
 
 	for _, tagID := range tagIDs {
 		_, err = tx.Exec(
-			`INSERT INTO entry_tags (tag_id, entity_type, entity_id) VALUES ($1, $2, $3)`,
+			tx.Rebind(`INSERT INTO entry_tags (tag_id, entity_type, entity_id) VALUES (?, ?, ?)`),
 			tagID, entityType, entityID,
 		)
 		if err != nil {

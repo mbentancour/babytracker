@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Role struct {
@@ -58,14 +59,14 @@ func ListRoles(db *sqlx.DB) ([]Role, error) {
 
 func GetRole(db *sqlx.DB, id int) (*Role, error) {
 	var role Role
-	err := db.Get(&role, `SELECT * FROM roles WHERE id = $1`, id)
+	err := db.Get(&role, database.Q(db, `SELECT * FROM roles WHERE id = ?`), id)
 	return &role, err
 }
 
 func CreateRole(db *sqlx.DB, name, description string) (*Role, error) {
 	var role Role
 	err := db.QueryRowx(
-		`INSERT INTO roles (name, description) VALUES ($1, $2) RETURNING *`,
+		database.Q(db, `INSERT INTO roles (name, description) VALUES (?, ?) RETURNING *`),
 		name, description,
 	).StructScan(&role)
 	return &role, err
@@ -73,13 +74,13 @@ func CreateRole(db *sqlx.DB, name, description string) (*Role, error) {
 
 func DeleteRole(db *sqlx.DB, id int) error {
 	// Don't allow deleting system roles
-	_, err := db.Exec(`DELETE FROM roles WHERE id = $1 AND is_system = FALSE`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM roles WHERE id = ? AND is_system = FALSE`), id)
 	return err
 }
 
 func GetRolePermissions(db *sqlx.DB, roleID int) ([]RolePermission, error) {
 	var perms []RolePermission
-	err := db.Select(&perms, `SELECT * FROM role_permissions WHERE role_id = $1 ORDER BY feature`, roleID)
+	err := db.Select(&perms, database.Q(db, `SELECT * FROM role_permissions WHERE role_id = ? ORDER BY feature`), roleID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +92,10 @@ func GetRolePermissions(db *sqlx.DB, roleID int) ([]RolePermission, error) {
 
 func SetRolePermission(db *sqlx.DB, roleID int, feature, accessLevel string) error {
 	_, err := db.Exec(
-		`INSERT INTO role_permissions (role_id, feature, access_level)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (role_id, feature) DO UPDATE SET access_level = $3`,
-		roleID, feature, accessLevel,
+		database.Q(db, `INSERT INTO role_permissions (role_id, feature, access_level)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT (role_id, feature) DO UPDATE SET access_level = ?`),
+		roleID, feature, accessLevel, accessLevel,
 	)
 	return err
 }
@@ -108,10 +109,10 @@ func SetRolePermissions(db *sqlx.DB, roleID int, perms map[string]string) error 
 
 	for feature, level := range perms {
 		_, err = tx.Exec(
-			`INSERT INTO role_permissions (role_id, feature, access_level)
-			 VALUES ($1, $2, $3)
-			 ON CONFLICT (role_id, feature) DO UPDATE SET access_level = $3`,
-			roleID, feature, level,
+			tx.Rebind(`INSERT INTO role_permissions (role_id, feature, access_level)
+			 VALUES (?, ?, ?)
+			 ON CONFLICT (role_id, feature) DO UPDATE SET access_level = ?`),
+			roleID, feature, level, level,
 		)
 		if err != nil {
 			return err
@@ -124,14 +125,14 @@ func SetRolePermissions(db *sqlx.DB, roleID int, perms map[string]string) error 
 
 func GetUserChildAccess(db *sqlx.DB, userID int) ([]UserAccess, error) {
 	var results []UserAccess
-	rows, err := db.Queryx(`
+	rows, err := db.Queryx(database.Q(db, `
 		SELECT uc.child_id, c.first_name AS child_name, uc.role_id, r.name AS role_name
 		FROM user_children uc
 		JOIN children c ON c.id = uc.child_id
 		JOIN roles r ON r.id = uc.role_id
-		WHERE uc.user_id = $1
+		WHERE uc.user_id = ?
 		ORDER BY c.first_name
-	`, userID)
+	`), userID)
 	if err != nil {
 		return nil, err
 	}
@@ -153,17 +154,17 @@ func GetUserChildAccess(db *sqlx.DB, userID int) ([]UserAccess, error) {
 
 func GrantChildAccess(db *sqlx.DB, userID, childID, roleID int) error {
 	_, err := db.Exec(
-		`INSERT INTO user_children (user_id, child_id, role_id)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (user_id, child_id) DO UPDATE SET role_id = $3`,
-		userID, childID, roleID,
+		database.Q(db, `INSERT INTO user_children (user_id, child_id, role_id)
+		 VALUES (?, ?, ?)
+		 ON CONFLICT (user_id, child_id) DO UPDATE SET role_id = ?`),
+		userID, childID, roleID, roleID,
 	)
 	return err
 }
 
 func RevokeChildAccess(db *sqlx.DB, userID, childID int) error {
 	_, err := db.Exec(
-		`DELETE FROM user_children WHERE user_id = $1 AND child_id = $2`,
+		database.Q(db, `DELETE FROM user_children WHERE user_id = ? AND child_id = ?`),
 		userID, childID,
 	)
 	return err
@@ -174,18 +175,18 @@ func RevokeChildAccess(db *sqlx.DB, userID, childID int) error {
 func CheckAccess(db *sqlx.DB, userID int, childID int, feature string) string {
 	// Check if admin
 	var isAdmin bool
-	db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	db.Get(&isAdmin, database.Q(db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 	if isAdmin {
 		return "write"
 	}
 
 	var level string
-	err := db.Get(&level, `
+	err := db.Get(&level, database.Q(db, `
 		SELECT rp.access_level
 		FROM user_children uc
 		JOIN role_permissions rp ON rp.role_id = uc.role_id
-		WHERE uc.user_id = $1 AND uc.child_id = $2 AND rp.feature = $3
-	`, userID, childID, feature)
+		WHERE uc.user_id = ? AND uc.child_id = ? AND rp.feature = ?
+	`), userID, childID, feature)
 	if err != nil {
 		return "none"
 	}
@@ -196,7 +197,7 @@ func CheckAccess(db *sqlx.DB, userID int, childID int, feature string) string {
 // Admins get all children.
 func GetAccessibleChildIDs(db *sqlx.DB, userID int) ([]int, error) {
 	var isAdmin bool
-	db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	db.Get(&isAdmin, database.Q(db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 	if isAdmin {
 		var ids []int
 		err := db.Select(&ids, `SELECT id FROM children ORDER BY id`)
@@ -204,7 +205,7 @@ func GetAccessibleChildIDs(db *sqlx.DB, userID int) ([]int, error) {
 	}
 
 	var ids []int
-	err := db.Select(&ids, `SELECT child_id FROM user_children WHERE user_id = $1`, userID)
+	err := db.Select(&ids, database.Q(db, `SELECT child_id FROM user_children WHERE user_id = ?`), userID)
 	return ids, err
 }
 

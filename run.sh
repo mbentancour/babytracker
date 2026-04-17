@@ -24,8 +24,7 @@ fi
 # All persistent data goes in /data/ which HA maps as a persistent volume
 PG_DATA="/data/postgresql"
 
-mkdir -p "${DATA_DIR}/photos" "${DATA_DIR}/backups" "${PG_DATA}" /run/postgresql
-chown -R postgres:postgres "${PG_DATA}" /run/postgresql
+mkdir -p "${DATA_DIR}/photos" "${DATA_DIR}/backups"
 
 if [ "${MODE}" = "external" ]; then
     ##############################################
@@ -47,32 +46,58 @@ if [ "${MODE}" = "external" ]; then
 
 else
     ##############################################
-    # LOCAL MODE: built-in PostgreSQL + app
+    # LOCAL MODE: SQLite (default) or PostgreSQL
     ##############################################
-    bashio::log.info "Starting BabyTracker in local mode"
 
-    # Initialize PostgreSQL if needed
-    if [ ! -f "${PG_DATA}/PG_VERSION" ]; then
-        bashio::log.info "Initializing PostgreSQL database..."
-        su postgres -c "initdb -D ${PG_DATA} --auth=trust --no-locale --encoding=UTF8"
-    fi
+    # Check if user explicitly wants PostgreSQL via add-on config or env.
+    # If DATABASE_URL is set to a postgres:// URL (via HA add-on options or
+    # environment), use Postgres. Otherwise default to SQLite.
+    DB_URL=$(bashio::config 'database_url' 2>/dev/null || echo "")
 
-    # Start PostgreSQL
-    bashio::log.info "Starting PostgreSQL..."
-    su postgres -c "pg_ctl start -D ${PG_DATA} -l ${PG_DATA}/postgresql.log -o '-k /run/postgresql'"
+    if echo "${DB_URL}" | grep -qi "^postgres"; then
+        ################################################
+        # POSTGRES MODE (legacy / explicit opt-in)
+        ################################################
+        bashio::log.info "Starting BabyTracker with PostgreSQL"
 
-    # Wait for PostgreSQL
-    for i in $(seq 1 30); do
-        if su postgres -c "pg_isready -h /run/postgresql" > /dev/null 2>&1; then
-            break
+        mkdir -p "${PG_DATA}" /run/postgresql
+        chown -R postgres:postgres "${PG_DATA}" /run/postgresql
+
+        if [ ! -f "${PG_DATA}/PG_VERSION" ]; then
+            bashio::log.info "Initializing PostgreSQL database..."
+            su postgres -c "initdb -D ${PG_DATA} --auth=trust --no-locale --encoding=UTF8"
         fi
-        sleep 1
-    done
 
-    # Create database if it doesn't exist (ignore error if it already exists)
-    su postgres -c "createdb -h /run/postgresql babytracker" 2>/dev/null || true
+        bashio::log.info "Starting PostgreSQL..."
+        su postgres -c "pg_ctl start -D ${PG_DATA} -l ${PG_DATA}/postgresql.log -o '-k /run/postgresql'"
 
-    export DATABASE_URL="postgres://postgres@/babytracker?host=/run/postgresql&sslmode=disable"
+        for i in $(seq 1 30); do
+            if su postgres -c "pg_isready -h /run/postgresql" > /dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+        done
+
+        su postgres -c "createdb -h /run/postgresql babytracker" 2>/dev/null || true
+
+        export DATABASE_URL="${DB_URL:-postgres://postgres@/babytracker?host=/run/postgresql&sslmode=disable}"
+
+    else
+        ################################################
+        # SQLITE MODE (default — no Postgres needed)
+        ################################################
+        bashio::log.info "Starting BabyTracker with SQLite"
+        export DATABASE_URL="${DATA_DIR}/babytracker.db"
+
+        # If there's a legacy Postgres install but no SQLite DB yet,
+        # log instructions so the user knows how to migrate.
+        if [ -f "${PG_DATA}/PG_VERSION" ] && [ ! -f "${DATA_DIR}/babytracker.db" ]; then
+            bashio::log.warning "Found an existing PostgreSQL database at ${PG_DATA}."
+            bashio::log.warning "The add-on now defaults to SQLite. Your Postgres data is untouched."
+            bashio::log.warning "To migrate: set database_url to 'postgres://postgres@/babytracker?host=/run/postgresql&sslmode=disable'"
+            bashio::log.warning "in the add-on configuration, then use the migrate-db tool."
+        fi
+    fi
 
     bashio::log.info "Starting BabyTracker server..."
     exec /usr/local/bin/babytracker

@@ -1,9 +1,11 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type APIToken struct {
@@ -25,8 +27,8 @@ type APITokenInput struct {
 
 func CreateAPIToken(db *sqlx.DB, t *APIToken) error {
 	return db.QueryRowx(
-		`INSERT INTO api_tokens (user_id, name, token_hash, permissions, expires_at)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+		database.Q(db, `INSERT INTO api_tokens (user_id, name, token_hash, permissions, expires_at)
+		 VALUES (?, ?, ?, ?, ?) RETURNING *`),
 		t.UserID, t.Name, t.TokenHash, t.Permissions, t.ExpiresAt,
 	).StructScan(t)
 }
@@ -34,7 +36,7 @@ func CreateAPIToken(db *sqlx.DB, t *APIToken) error {
 func GetAPITokenByHash(db *sqlx.DB, tokenHash string) (*APIToken, error) {
 	var t APIToken
 	err := db.Get(&t,
-		`SELECT * FROM api_tokens WHERE token_hash = $1 AND (expires_at IS NULL OR expires_at > NOW())`,
+		database.Q(db, fmt.Sprintf(`SELECT * FROM api_tokens WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > %s)`, database.Now())),
 		tokenHash,
 	)
 	return &t, err
@@ -43,7 +45,7 @@ func GetAPITokenByHash(db *sqlx.DB, tokenHash string) (*APIToken, error) {
 func ListAPITokens(db *sqlx.DB, userID int) ([]APIToken, error) {
 	var tokens []APIToken
 	err := db.Select(&tokens,
-		`SELECT * FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC`,
+		database.Q(db, `SELECT * FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC`),
 		userID,
 	)
 	if err != nil {
@@ -56,11 +58,11 @@ func ListAPITokens(db *sqlx.DB, userID int) ([]APIToken, error) {
 }
 
 func DeleteAPIToken(db *sqlx.DB, id int, userID int) error {
-	_, err := db.Exec(`DELETE FROM api_tokens WHERE id = $1 AND user_id = $2`, id, userID)
+	_, err := db.Exec(database.Q(db, `DELETE FROM api_tokens WHERE id = ? AND user_id = ?`), id, userID)
 	return err
 }
 
 func UpdateAPITokenLastUsed(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`UPDATE api_tokens SET last_used_at = NOW() WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, fmt.Sprintf(`UPDATE api_tokens SET last_used_at = %s WHERE id = ?`, database.Now())), id)
 	return err
 }

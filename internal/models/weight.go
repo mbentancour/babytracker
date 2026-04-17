@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Weight struct {
@@ -25,8 +26,8 @@ type WeightInput struct {
 
 func CreateWeight(db *sqlx.DB, w *Weight) error {
 	return db.QueryRowx(
-		`INSERT INTO weight (child_id, date, weight, notes)
-		 VALUES ($1, $2, $3, $4) RETURNING *`,
+		database.Q(db, `INSERT INTO weight (child_id, date, weight, notes)
+		 VALUES (?, ?, ?, ?) RETURNING *`),
 		w.ChildID, w.Date, w.Weight, w.Notes,
 	).StructScan(w)
 }
@@ -34,6 +35,6 @@ func CreateWeight(db *sqlx.DB, w *Weight) error {
 func UpdateWeight(db *sqlx.DB, id int, updates map[string]any) (*Weight, error) {
 	query, args := buildUpdateQuery("weight", id, updates)
 	var w Weight
-	err := db.QueryRowx(query, args...).StructScan(&w)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&w)
 	return &w, err
 }

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Photo struct {
@@ -16,8 +17,8 @@ type Photo struct {
 
 func CreatePhoto(db *sqlx.DB, p *Photo) error {
 	return db.QueryRowx(
-		`INSERT INTO photos (filename, caption, date)
-		 VALUES ($1, $2, $3) RETURNING *`,
+		database.Q(db, `INSERT INTO photos (filename, caption, date)
+		 VALUES (?, ?, ?) RETURNING *`),
 		p.Filename, p.Caption, p.Date,
 	).StructScan(p)
 }
@@ -25,7 +26,7 @@ func CreatePhoto(db *sqlx.DB, p *Photo) error {
 // TagPhotoWithChild adds a child tag to a photo.
 func TagPhotoWithChild(db *sqlx.DB, filename string, childID int) error {
 	_, err := db.Exec(
-		`INSERT INTO photo_children (photo_filename, child_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		database.Q(db, `INSERT INTO photo_children (photo_filename, child_id) VALUES (?, ?) ON CONFLICT DO NOTHING`),
 		filename, childID,
 	)
 	return err
@@ -34,17 +35,17 @@ func TagPhotoWithChild(db *sqlx.DB, filename string, childID int) error {
 func UpdatePhoto(db *sqlx.DB, id int, updates map[string]any) (*Photo, error) {
 	query, args := buildUpdateQuery("photos", id, updates)
 	var p Photo
-	err := db.QueryRowx(query, args...).StructScan(&p)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&p)
 	return &p, err
 }
 
 func DeletePhoto(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM photos WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM photos WHERE id = ?`), id)
 	return err
 }
 
 func GetPhoto(db *sqlx.DB, id int) (*Photo, error) {
 	var p Photo
-	err := db.Get(&p, `SELECT * FROM photos WHERE id = $1`, id)
+	err := db.Get(&p, database.Q(db, `SELECT * FROM photos WHERE id = ?`), id)
 	return &p, err
 }

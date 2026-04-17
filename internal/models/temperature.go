@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Temperature struct {
@@ -25,8 +26,8 @@ type TemperatureInput struct {
 
 func CreateTemperature(db *sqlx.DB, t *Temperature) error {
 	return db.QueryRowx(
-		`INSERT INTO temperature (child_id, time, temperature, notes)
-		 VALUES ($1, $2, $3, $4) RETURNING *`,
+		database.Q(db, `INSERT INTO temperature (child_id, time, temperature, notes)
+		 VALUES (?, ?, ?, ?) RETURNING *`),
 		t.ChildID, t.Time, t.Temperature, t.Notes,
 	).StructScan(t)
 }
@@ -34,6 +35,6 @@ func CreateTemperature(db *sqlx.DB, t *Temperature) error {
 func UpdateTemperature(db *sqlx.DB, id int, updates map[string]any) (*Temperature, error) {
 	query, args := buildUpdateQuery("temperature", id, updates)
 	var t Temperature
-	err := db.QueryRowx(query, args...).StructScan(&t)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&t)
 	return &t, err
 }

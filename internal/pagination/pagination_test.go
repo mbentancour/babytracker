@@ -58,7 +58,9 @@ func TestBuildQuery_ExplicitChildFilterNarrowsButDoesNotWiden(t *testing.T) {
 	if !strings.Contains(qr.SelectQuery, "child_id IN") {
 		t.Fatalf("expected accessible IN clause, got: %s", qr.SelectQuery)
 	}
-	if !strings.Contains(qr.SelectQuery, "child_id = $") {
+	// After the placeholder migration, the query uses ? (rebound by Q() at
+	// execution time). Check for the explicit child filter clause.
+	if !strings.Contains(qr.SelectQuery, "child_id = ?") {
 		t.Fatalf("expected explicit child filter, got: %s", qr.SelectQuery)
 	}
 }

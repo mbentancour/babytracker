@@ -24,10 +24,21 @@ import (
 	"github.com/mbentancour/babytracker/internal/webhooks"
 )
 
-//go:embed all:migrations
-var migrationsFS embed.FS
+//go:embed all:migrations/postgres
+var pgMigrationsFS embed.FS
+
+//go:embed all:migrations/sqlite
+var sqliteMigrationsFS embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "migrate-db" {
+		if err := runMigrateDB(); err != nil {
+			slog.Error("migration failed", "error", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	cfg := config.New()
 
 	flag.StringVar(&cfg.Port, "port", cfg.Port, "Server port")
@@ -68,7 +79,12 @@ func main() {
 		}
 		defer db.Close()
 
-		migFS, err := fs.Sub(migrationsFS, "migrations")
+		var migFS fs.FS
+		if database.IsSQLite() {
+			migFS, err = fs.Sub(sqliteMigrationsFS, "migrations/sqlite")
+		} else {
+			migFS, err = fs.Sub(pgMigrationsFS, "migrations/postgres")
+		}
 		if err != nil {
 			slog.Error("failed to access embedded migrations", "error", err)
 			os.Exit(1)

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Medication struct {
@@ -29,8 +30,8 @@ type MedicationInput struct {
 
 func CreateMedication(db *sqlx.DB, m *Medication) error {
 	return db.QueryRowx(
-		`INSERT INTO medications (child_id, time, name, dosage, dosage_unit, notes)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+		database.Q(db, `INSERT INTO medications (child_id, time, name, dosage, dosage_unit, notes)
+		 VALUES (?, ?, ?, ?, ?, ?) RETURNING *`),
 		m.ChildID, m.Time, m.Name, m.Dosage, m.DosageUnit, m.Notes,
 	).StructScan(m)
 }
@@ -38,11 +39,11 @@ func CreateMedication(db *sqlx.DB, m *Medication) error {
 func UpdateMedication(db *sqlx.DB, id int, updates map[string]any) (*Medication, error) {
 	query, args := buildUpdateQuery("medications", id, updates)
 	var m Medication
-	err := db.QueryRowx(query, args...).StructScan(&m)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&m)
 	return &m, err
 }
 
 func DeleteMedication(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM medications WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM medications WHERE id = ?`), id)
 	return err
 }

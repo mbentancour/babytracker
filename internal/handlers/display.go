@@ -8,6 +8,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/crypto"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
@@ -62,7 +63,7 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 
 	userID := middleware.GetUserID(r.Context())
 	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	h.db.Get(&isAdmin, database.Q(h.db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 
 	h.subsMu.Lock()
 	targeted := 0
@@ -96,7 +97,7 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 func (h *DisplayHandler) GetState(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	h.db.Get(&isAdmin, database.Q(h.db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 
 	h.subsMu.Lock()
 	devices := make([]string, 0, len(h.subs))

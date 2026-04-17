@@ -28,6 +28,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/mbentancour/babytracker/internal/backup/storage"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/models"
 )
 
@@ -102,34 +103,42 @@ func BuildArchive(databaseURL, dataDir string) (string, error) {
 	gz := gzip.NewWriter(out)
 	tw := tar.NewWriter(gz)
 
-	// 1. Dump database to a temp .sql file, then add to archive.
-	tmpSQL, err := os.CreateTemp("", "babytracker-dump-*.sql")
-	if err != nil {
-		return cleanup(fmt.Errorf("temp dump file: %w", err))
-	}
-	tmpSQLPath := tmpSQL.Name()
-	defer os.Remove(tmpSQLPath)
+	// 1. Dump database into the archive.
+	if database.IsSQLite() {
+		// SQLite: checkpoint the WAL so the .db file is self-contained,
+		// then add the file to the archive. Much simpler than pg_dump.
+		_, dbPath := database.ParseDatabaseURL(databaseURL)
+		if err := sqliteCheckpoint(dbPath); err != nil {
+			return cleanup(fmt.Errorf("sqlite wal checkpoint: %w", err))
+		}
+		if err := addFileToTar(tw, dbPath, "database.sqlite"); err != nil {
+			return cleanup(fmt.Errorf("tar database: %w", err))
+		}
+	} else {
+		tmpSQL, err := os.CreateTemp("", "babytracker-dump-*.sql")
+		if err != nil {
+			return cleanup(fmt.Errorf("temp dump file: %w", err))
+		}
+		tmpSQLPath := tmpSQL.Name()
+		defer os.Remove(tmpSQLPath)
 
-	// --clean --if-exists makes the dump emit DROP statements before each
-	// CREATE so restoring overwrites the current schema instead of merging
-	// (which produces PK conflicts and orphan rows). --no-owner --no-privileges
-	// keeps the dump portable across role names.
-	env, err := pgEnv(databaseURL)
-	if err != nil {
+		env, err := pgEnv(databaseURL)
+		if err != nil {
+			tmpSQL.Close()
+			return cleanup(err)
+		}
+		cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges")
+		cmd.Env = env
+		cmd.Stdout = tmpSQL
+		if err := cmd.Run(); err != nil {
+			tmpSQL.Close()
+			return cleanup(fmt.Errorf("pg_dump: %w", err))
+		}
 		tmpSQL.Close()
-		return cleanup(err)
-	}
-	cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges")
-	cmd.Env = env
-	cmd.Stdout = tmpSQL
-	if err := cmd.Run(); err != nil {
-		tmpSQL.Close()
-		return cleanup(fmt.Errorf("pg_dump: %w", err))
-	}
-	tmpSQL.Close()
 
-	if err := addFileToTar(tw, tmpSQLPath, "database.sql"); err != nil {
-		return cleanup(fmt.Errorf("tar database: %w", err))
+		if err := addFileToTar(tw, tmpSQLPath, "database.sql"); err != nil {
+			return cleanup(fmt.Errorf("tar database: %w", err))
+		}
 	}
 
 	// 2. Add all photos (skip dirs; non-fatal if individual photos fail).
@@ -499,16 +508,43 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			return fmt.Errorf("tar entry: %w", err)
 		}
 
-		if header.Name == "database.sql" {
+		if header.Name == "database.sqlite" {
+			// SQLite restore: write the backup file over the current DB.
+			// The live connections will see the new data after the next
+			// write triggers a WAL rebuild. For safety the caller should
+			// restart the process after restore completes.
+			_, dbPath := database.ParseDatabaseURL(databaseURL)
+			tmpPath := dbPath + ".restoring"
+			tmp, err := os.Create(tmpPath)
+			if err != nil {
+				return fmt.Errorf("create temp restore file: %w", err)
+			}
+			if _, err := io.Copy(tmp, tr); err != nil {
+				tmp.Close()
+				os.Remove(tmpPath)
+				return fmt.Errorf("write sqlite backup: %w", err)
+			}
+			tmp.Close()
+			// Atomic rename over the live DB file.
+			if err := os.Rename(tmpPath, dbPath); err != nil {
+				os.Remove(tmpPath)
+				return fmt.Errorf("replace database file: %w", err)
+			}
+			// Remove any leftover WAL/SHM from the old DB.
+			os.Remove(dbPath + "-wal")
+			os.Remove(dbPath + "-shm")
+			slog.Info("sqlite database restored from backup", "path", dbPath)
+			// Schedule a process restart so the app picks up the new DB.
+			go func() {
+				time.Sleep(500 * time.Millisecond)
+				slog.Info("restarting after sqlite restore")
+				os.Exit(0)
+			}()
+		} else if header.Name == "database.sql" {
 			env, err := pgEnv(databaseURL)
 			if err != nil {
 				return err
 			}
-			// Wipe the public schema first so the restore is deterministic.
-			// pg_dump --clean emits per-table DROPs, but those can fail (FK
-			// dependencies, race with active connections) and psql by default
-			// continues past errors, leaving a half-merged DB. Dropping and
-			// recreating the schema in one shot guarantees a clean slate.
 			reset := exec.Command("psql", "-v", "ON_ERROR_STOP=1",
 				"-c", "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
 			reset.Env = env
@@ -516,11 +552,6 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			if err := reset.Run(); err != nil {
 				return fmt.Errorf("schema reset: %w", err)
 			}
-			// Run the dump in a single transaction with ON_ERROR_STOP so any
-			// failure rolls back instead of leaving a partial restore. The
-			// dump is filtered first to drop SET commands for parameters that
-			// don't exist on the running server (e.g. when pg_dump and the
-			// server are on different major versions).
 			cmd := exec.Command("psql", "-v", "ON_ERROR_STOP=1", "--single-transaction")
 			cmd.Env = env
 			cmd.Stdin = filterIncompatibleSQL(tr)
@@ -807,4 +838,17 @@ func filterIncompatibleSQL(r io.Reader) io.Reader {
 		}
 	}()
 	return pr
+}
+
+// sqliteCheckpoint flushes the WAL into the main database file so a file
+// copy produces a consistent, self-contained backup. Uses a short-lived
+// connection so it doesn't interfere with the app's main pool.
+func sqliteCheckpoint(dbPath string) error {
+	db, err := sqlx.Open("sqlite", dbPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	return err
 }

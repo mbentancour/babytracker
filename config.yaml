@@ -49,9 +49,11 @@ options:
   unit_system: "metric"
   demo_mode: false
   media_path: ""
+  database_url: ""
 schema:
   mode: "list(local|external)"
   external_url: "str?"
   unit_system: "list(metric|imperial)"
   demo_mode: bool
   media_path: "str?"
+  database_url: "str?"

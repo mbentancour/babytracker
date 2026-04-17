@@ -1,11 +1,11 @@
 package models
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Timer struct {
@@ -45,14 +45,12 @@ func ListTimersForChildren(db *sqlx.DB, childIDs []int) ([]Timer, error) {
 	placeholders := make([]string, len(childIDs))
 	args := make([]any, len(childIDs))
 	for i, id := range childIDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		placeholders[i] = "?"
 		args[i] = id
 	}
-	query := fmt.Sprintf(
-		`SELECT * FROM timers WHERE child_id IN (%s) ORDER BY start_time DESC`,
-		strings.Join(placeholders, ","))
+	query := "SELECT * FROM timers WHERE child_id IN (" + strings.Join(placeholders, ",") + ") ORDER BY start_time DESC"
 	var timers []Timer
-	if err := db.Select(&timers, query, args...); err != nil {
+	if err := db.Select(&timers, database.Q(db, query), args...); err != nil {
 		return nil, err
 	}
 	if timers == nil {
@@ -63,26 +61,26 @@ func ListTimersForChildren(db *sqlx.DB, childIDs []int) ([]Timer, error) {
 
 func CreateTimer(db *sqlx.DB, t *Timer) error {
 	return db.QueryRowx(
-		`INSERT INTO timers (child_id, name, start_time)
-		 VALUES ($1, $2, $3) RETURNING *`,
+		database.Q(db, `INSERT INTO timers (child_id, name, start_time)
+		 VALUES (?, ?, ?) RETURNING *`),
 		t.ChildID, t.Name, t.Start,
 	).StructScan(t)
 }
 
 func GetTimer(db *sqlx.DB, id int) (*Timer, error) {
 	var t Timer
-	err := db.Get(&t, `SELECT * FROM timers WHERE id = $1`, id)
+	err := db.Get(&t, database.Q(db, `SELECT * FROM timers WHERE id = ?`), id)
 	return &t, err
 }
 
 func UpdateTimer(db *sqlx.DB, id int, updates map[string]any) (*Timer, error) {
 	query, args := buildUpdateQuery("timers", id, updates)
 	var t Timer
-	err := db.QueryRowx(query, args...).StructScan(&t)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&t)
 	return &t, err
 }
 
 func DeleteTimer(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM timers WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM timers WHERE id = ?`), id)
 	return err
 }

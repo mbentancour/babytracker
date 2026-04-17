@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/crypto"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
@@ -162,7 +164,7 @@ func (h *UsersHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err = h.db.Exec(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, hash, userID)
+	_, err = h.db.Exec(database.Q(h.db, fmt.Sprintf(`UPDATE users SET password_hash = ?, updated_at = %s WHERE id = ?`, database.Now())), hash, userID)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to update password")
 		return
@@ -207,7 +209,7 @@ func (h *UsersHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.db.Exec(`UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, hash, id)
+	_, err = h.db.Exec(database.Q(h.db, fmt.Sprintf(`UPDATE users SET password_hash = ?, updated_at = %s WHERE id = ?`, database.Now())), hash, id)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to reset password")
 		return
@@ -396,7 +398,7 @@ func (h *UsersHandler) GetCurrentUserAccess(w http.ResponseWriter, r *http.Reque
 	userID := middleware.GetUserID(r.Context())
 
 	var user models.User
-	if err := h.db.Get(&user, `SELECT * FROM users WHERE id = $1`, userID); err != nil {
+	if err := h.db.Get(&user, database.Q(h.db, `SELECT * FROM users WHERE id = ?`), userID); err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to get user")
 		return
 	}

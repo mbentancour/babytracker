@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Height struct {
@@ -25,8 +26,8 @@ type HeightInput struct {
 
 func CreateHeight(db *sqlx.DB, h *Height) error {
 	return db.QueryRowx(
-		`INSERT INTO height (child_id, date, height, notes)
-		 VALUES ($1, $2, $3, $4) RETURNING *`,
+		database.Q(db, `INSERT INTO height (child_id, date, height, notes)
+		 VALUES (?, ?, ?, ?) RETURNING *`),
 		h.ChildID, h.Date, h.Height, h.Notes,
 	).StructScan(h)
 }
@@ -34,6 +35,6 @@ func CreateHeight(db *sqlx.DB, h *Height) error {
 func UpdateHeight(db *sqlx.DB, id int, updates map[string]any) (*Height, error) {
 	query, args := buildUpdateQuery("height", id, updates)
 	var h Height
-	err := db.QueryRowx(query, args...).StructScan(&h)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&h)
 	return &h, err
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Response struct {
@@ -101,7 +102,6 @@ type QueryResult struct {
 func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 	var conditions []string
 	var args []any
-	argIdx := 1
 
 	// Mandatory ownership scope: never return rows outside the caller's
 	// accessible child set. Empty slice = no access = match nothing.
@@ -110,9 +110,8 @@ func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 	} else {
 		placeholders := make([]string, len(fc.AccessibleChildren))
 		for i, id := range fc.AccessibleChildren {
-			placeholders[i] = fmt.Sprintf("$%d", argIdx)
+			placeholders[i] = "?"
 			args = append(args, id)
-			argIdx++
 		}
 		conditions = append(conditions,
 			fmt.Sprintf("%s IN (%s)", fc.ChildIDField, strings.Join(placeholders, ",")))
@@ -123,9 +122,8 @@ func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 	// can see.
 	if v := r.URL.Query().Get("child"); v != "" {
 		if childID, err := strconv.Atoi(v); err == nil {
-			conditions = append(conditions, fmt.Sprintf("%s = $%d", fc.ChildIDField, argIdx))
+			conditions = append(conditions, fmt.Sprintf("%s = ?", fc.ChildIDField))
 			args = append(args, childID)
-			argIdx++
 		}
 	}
 
@@ -133,24 +131,22 @@ func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 	for param, col := range fc.TimeFields {
 		if v := r.URL.Query().Get(param); v != "" {
 			if strings.HasSuffix(param, "_min") {
-				conditions = append(conditions, fmt.Sprintf("%s >= $%d", col, argIdx))
+				conditions = append(conditions, fmt.Sprintf("%s >= ?", col))
 			} else {
-				conditions = append(conditions, fmt.Sprintf("%s <= $%d", col, argIdx))
+				conditions = append(conditions, fmt.Sprintf("%s <= ?", col))
 			}
 			args = append(args, v)
-			argIdx++
 		}
 	}
 
 	for param, col := range fc.DateFields {
 		if v := r.URL.Query().Get(param); v != "" {
 			if strings.HasSuffix(param, "_min") {
-				conditions = append(conditions, fmt.Sprintf("%s >= $%d", col, argIdx))
+				conditions = append(conditions, fmt.Sprintf("%s >= ?", col))
 			} else {
-				conditions = append(conditions, fmt.Sprintf("%s <= $%d", col, argIdx))
+				conditions = append(conditions, fmt.Sprintf("%s <= ?", col))
 			}
 			args = append(args, v)
-			argIdx++
 		}
 	}
 
@@ -180,12 +176,12 @@ func BuildQuery(r *http.Request, fc FilterConfig, pp Params) QueryResult {
 
 func Execute[T any](db *sqlx.DB, qr QueryResult) (*Response, error) {
 	var count int
-	if err := db.Get(&count, qr.CountQuery, qr.Args...); err != nil {
+	if err := db.Get(&count, database.Q(db, qr.CountQuery), qr.Args...); err != nil {
 		return nil, err
 	}
 
 	var results []T
-	if err := db.Select(&results, qr.SelectQuery, qr.Args...); err != nil {
+	if err := db.Select(&results, database.Q(db, qr.SelectQuery), qr.Args...); err != nil {
 		return nil, err
 	}
 	if results == nil {

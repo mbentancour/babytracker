@@ -88,10 +88,16 @@ cd babytracker
 docker compose -f deploy/docker/docker-compose.yml up -d
 ```
 
-This starts two containers: the BabyTracker app and PostgreSQL 18.
+This starts one container using SQLite (zero-config, no external DB).
 
 - Default port: **8099**
-- Database data persisted in the `pgdata` volume.
+- Data persisted in the `appdata` volume.
+
+**To use PostgreSQL instead:**
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml -f docker-compose.postgres.yml up -d
+```
 
 To set a JWT secret (recommended for production):
 
@@ -115,7 +121,7 @@ See the [Configuration Reference](#5-configuration-reference) for the full list.
 
 - Go 1.26+
 - Node.js 22+
-- PostgreSQL 17 or 18
+- (Optional) PostgreSQL 17 or 18 — only needed if you prefer Postgres over SQLite
 
 ### Steps
 
@@ -133,11 +139,12 @@ cp -r frontend/dist/* internal/router/static/
 # Build the Go binary
 go build -o babytracker ./cmd/babytracker/
 
-# Create the database
-createdb babytracker
+# Run (SQLite — no database setup needed)
+./babytracker
 
-# Run
-DATABASE_URL="postgres://localhost/babytracker?sslmode=disable" ./babytracker
+# Or run with PostgreSQL:
+# createdb babytracker
+# DATABASE_URL="postgres://localhost/babytracker?sslmode=disable" ./babytracker
 ```
 
 BabyTracker will be available at `http://localhost:8099`.
@@ -152,7 +159,7 @@ All configuration is done through environment variables.
 |----------|---------|-------------|
 | `PORT` | `8099` | HTTP listen port |
 | `DATA_DIR` | `/var/lib/babytracker` | Directory for photos, backups, and JWT secret |
-| `DATABASE_URL` | `postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=disable` | PostgreSQL connection string |
+| `DATABASE_URL` | `{DATA_DIR}/babytracker.db` | SQLite file path (default) or `postgres://...` connection string |
 | `JWT_SECRET` | (auto-generated) | Session signing key. If not set, auto-created and persisted in `DATA_DIR/.jwt_secret` |
 | `UNIT_SYSTEM` | `metric` | `metric` or `imperial` |
 | `DEMO_MODE` | `false` | Skip authentication (for demos) |

@@ -15,6 +15,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/crypto"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -62,7 +63,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 	// Authorization: verify user can access this photo's child.
 	// Admins can access all photos.
 	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+	h.db.Get(&isAdmin, database.Q(h.db, `SELECT is_admin FROM users WHERE id = ?`), userID)
 
 	if !isAdmin {
 		// Check that the user has access to at least one child
@@ -178,10 +179,10 @@ func (h *MediaHandler) UploadChildPhoto(w http.ResponseWriter, r *http.Request) 
 
 	// Preserve the old profile photo as a standalone photo in the gallery
 	var oldPicture string
-	h.db.Get(&oldPicture, `SELECT picture FROM children WHERE id = $1`, id)
+	h.db.Get(&oldPicture, database.Q(h.db, `SELECT picture FROM children WHERE id = ?`), id)
 	if oldPicture != "" {
 		h.db.Exec(
-			`INSERT INTO photos (child_id, filename, caption, date) VALUES ($1, $2, 'Profile photo', CURRENT_DATE)`,
+			database.Q(h.db, `INSERT INTO photos (child_id, filename, caption, date) VALUES (?, ?, 'Profile photo', CURRENT_DATE)`),
 			id, oldPicture,
 		)
 	}
@@ -226,10 +227,10 @@ func (h *MediaHandler) SetChildPhotoFromFilename(w http.ResponseWriter, r *http.
 
 	// Preserve the old profile photo as a standalone photo
 	var oldPicture string
-	h.db.Get(&oldPicture, `SELECT picture FROM children WHERE id = $1`, id)
+	h.db.Get(&oldPicture, database.Q(h.db, `SELECT picture FROM children WHERE id = ?`), id)
 	if oldPicture != "" && oldPicture != cleaned {
 		h.db.Exec(
-			`INSERT INTO photos (child_id, filename, caption, date) VALUES ($1, $2, 'Profile photo', CURRENT_DATE)`,
+			database.Q(h.db, `INSERT INTO photos (child_id, filename, caption, date) VALUES (?, ?, 'Profile photo', CURRENT_DATE)`),
 			id, oldPicture,
 		)
 	}
@@ -322,7 +323,7 @@ func (h *MediaHandler) UploadEntryPhoto(w http.ResponseWriter, r *http.Request) 
 
 	// Update the entity's photo field
 	_, err = h.db.Exec(
-		fmt.Sprintf("UPDATE %s SET photo = $1 WHERE id = $2", table),
+		database.Q(h.db, fmt.Sprintf("UPDATE %s SET photo = ? WHERE id = ?", table)),
 		filename, id,
 	)
 	if err != nil {
@@ -383,13 +384,13 @@ func (h *MediaHandler) DeleteEntryPhoto(w http.ResponseWriter, r *http.Request) 
 
 	var currentPhoto string
 	err = h.db.Get(&currentPhoto,
-		fmt.Sprintf("SELECT %s FROM %s WHERE id = $1", photoCol, table), id)
+		database.Q(h.db, fmt.Sprintf("SELECT %s FROM %s WHERE id = ?", photoCol, table)), id)
 	if err == nil && currentPhoto != "" {
 		os.Remove(filepath.Join(h.cfg.PhotosDir(), currentPhoto))
 	}
 
 	_, err = h.db.Exec(
-		fmt.Sprintf("UPDATE %s SET %s = '' WHERE id = $1", table, photoCol), id)
+		database.Q(h.db, fmt.Sprintf("UPDATE %s SET %s = '' WHERE id = ?", table, photoCol)), id)
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to remove photo")
 		return

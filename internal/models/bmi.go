@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type BMI struct {
@@ -25,8 +26,8 @@ type BMIInput struct {
 
 func CreateBMI(db *sqlx.DB, b *BMI) error {
 	return db.QueryRowx(
-		`INSERT INTO bmi (child_id, date, bmi, notes, photo)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+		database.Q(db, `INSERT INTO bmi (child_id, date, bmi, notes, photo)
+		 VALUES (?, ?, ?, ?, ?) RETURNING *`),
 		b.ChildID, b.Date, b.BMI, b.Notes, b.Photo,
 	).StructScan(b)
 }
@@ -34,11 +35,11 @@ func CreateBMI(db *sqlx.DB, b *BMI) error {
 func UpdateBMI(db *sqlx.DB, id int, updates map[string]any) (*BMI, error) {
 	query, args := buildUpdateQuery("bmi", id, updates)
 	var b BMI
-	err := db.QueryRowx(query, args...).StructScan(&b)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&b)
 	return &b, err
 }
 
 func DeleteBMI(db *sqlx.DB, id int) error {
-	_, err := db.Exec(`DELETE FROM bmi WHERE id = $1`, id)
+	_, err := db.Exec(database.Q(db, `DELETE FROM bmi WHERE id = ?`), id)
 	return err
 }

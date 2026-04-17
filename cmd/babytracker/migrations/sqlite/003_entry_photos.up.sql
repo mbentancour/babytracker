@@ -1,0 +1,12 @@
+-- Add photo column to measurement and tracking tables
+ALTER TABLE feedings ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE sleep ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE changes ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE tummy_times ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE temperature ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE weight ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE height ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE head_circumference ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE pumping ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE medications ADD COLUMN photo TEXT DEFAULT '';
+ALTER TABLE notes ADD COLUMN photo TEXT DEFAULT '';

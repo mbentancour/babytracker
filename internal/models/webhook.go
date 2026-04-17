@@ -1,9 +1,11 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/database"
 )
 
 type Webhook struct {
@@ -30,7 +32,7 @@ type WebhookInput struct {
 func ListWebhooks(db *sqlx.DB, userID int) ([]Webhook, error) {
 	var webhooks []Webhook
 	err := db.Select(&webhooks,
-		`SELECT * FROM webhooks WHERE user_id = $1 ORDER BY created_at DESC`,
+		database.Q(db, `SELECT * FROM webhooks WHERE user_id = ? ORDER BY created_at DESC`),
 		userID,
 	)
 	if err != nil {
@@ -44,8 +46,8 @@ func ListWebhooks(db *sqlx.DB, userID int) ([]Webhook, error) {
 
 func CreateWebhook(db *sqlx.DB, w *Webhook) error {
 	return db.QueryRowx(
-		`INSERT INTO webhooks (user_id, name, url, secret, events, active)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+		database.Q(db, `INSERT INTO webhooks (user_id, name, url, secret, events, active)
+		 VALUES (?, ?, ?, ?, ?, ?) RETURNING *`),
 		w.UserID, w.Name, w.URL, w.Secret, w.Events, w.Active,
 	).StructScan(w)
 }
@@ -55,19 +57,19 @@ func UpdateWebhook(db *sqlx.DB, id int, userID int, updates map[string]any) (*We
 	updates["user_id"] = userID
 	query, args := buildUpdateQueryWithExtraCondition("webhooks", id, updates, "user_id")
 	var w Webhook
-	err := db.QueryRowx(query, args...).StructScan(&w)
+	err := db.QueryRowx(database.Q(db, query), args...).StructScan(&w)
 	return &w, err
 }
 
 func DeleteWebhook(db *sqlx.DB, id int, userID int) error {
-	_, err := db.Exec(`DELETE FROM webhooks WHERE id = $1 AND user_id = $2`, id, userID)
+	_, err := db.Exec(database.Q(db, `DELETE FROM webhooks WHERE id = ? AND user_id = ?`), id, userID)
 	return err
 }
 
 func GetActiveWebhooksForEvent(db *sqlx.DB, event string) ([]Webhook, error) {
 	var webhooks []Webhook
 	err := db.Select(&webhooks,
-		`SELECT * FROM webhooks WHERE active = TRUE AND (events = '*' OR events LIKE '%' || $1 || '%')`,
+		database.Q(db, `SELECT * FROM webhooks WHERE active = TRUE AND (events = '*' OR events LIKE '%' || ? || '%')`),
 		event,
 	)
 	if err != nil {
@@ -81,7 +83,7 @@ func GetActiveWebhooksForEvent(db *sqlx.DB, event string) ([]Webhook, error) {
 
 func UpdateWebhookStatus(db *sqlx.DB, id int, statusCode int) error {
 	_, err := db.Exec(
-		`UPDATE webhooks SET last_triggered_at = NOW(), last_status_code = $1 WHERE id = $2`,
+		database.Q(db, fmt.Sprintf(`UPDATE webhooks SET last_triggered_at = %s, last_status_code = ? WHERE id = ?`, database.Now())),
 		statusCode, id,
 	)
 	return err

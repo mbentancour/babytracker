@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -53,14 +54,14 @@ func (h *GenericDeleteHandler) deleteEntity(table string) http.HandlerFunc {
 		// Clean up photo file before deleting the record
 		if hasPhoto[table] {
 			var photo string
-			h.db.Get(&photo, fmt.Sprintf("SELECT photo FROM %s WHERE id = $1", table), id)
+			h.db.Get(&photo, database.Q(h.db, fmt.Sprintf("SELECT photo FROM %s WHERE id = ?", table)), id)
 			if photo != "" {
 				os.Remove(filepath.Join(h.cfg.PhotosDir(), photo))
 			}
 		}
 		if isChild {
 			var picture string
-			h.db.Get(&picture, `SELECT picture FROM children WHERE id = $1`, id)
+			h.db.Get(&picture, database.Q(h.db, `SELECT picture FROM children WHERE id = ?`), id)
 			if picture != "" {
 				os.Remove(filepath.Join(h.cfg.PhotosDir(), picture))
 			}
