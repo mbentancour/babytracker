@@ -107,7 +107,14 @@ DHCP=yes
 UseDNS=yes
 NETEOF
 chroot "${ROOTFS}" systemctl enable systemd-networkd
-chroot "${ROOTFS}" systemctl enable systemd-resolved
+# systemd-resolved may not be present in minbase — fall back to static resolv.conf
+if chroot "${ROOTFS}" systemctl enable systemd-resolved 2>/dev/null; then
+    echo "[lxc] systemd-resolved enabled."
+else
+    echo "[lxc] systemd-resolved not available, using static resolv.conf."
+    echo "nameserver 1.1.1.1" > "${ROOTFS}/etc/resolv.conf"
+    echo "nameserver 8.8.8.8" >> "${ROOTFS}/etc/resolv.conf"
+fi
 
 # 9. Fix permissions
 chroot "${ROOTFS}" chown root:babytracker /etc/babytracker/babytracker.env

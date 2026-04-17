@@ -90,10 +90,10 @@ jobs:
           echo "=== Pi Image Smoke Test ==="
 
           # Find the built image
-          IMG=$(find /tmp/rpi-image-gen/work -name '*.img' -o -name '*.img.xz' | head -1)
+          IMG=$(sudo find /tmp/rpi-image-gen/work -type f \( -name '*.img' -o -name '*.img.xz' \) 2>/dev/null | head -1)
           if [ -z "$IMG" ]; then
             echo "ERROR: No .img file found in build output"
-            find /tmp/rpi-image-gen/work -type f -printf '%p\n' | head -50
+            sudo find /tmp/rpi-image-gen/work -type f 2>/dev/null | head -50
             exit 1
           fi
           echo "Found image: $IMG"
