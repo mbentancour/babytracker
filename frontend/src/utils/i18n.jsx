@@ -267,6 +267,8 @@ const en = {
   "settings.language": "Language",
   "settings.pictureFrame": "Picture Frame (screensaver)",
   "settings.pictureFrameHint": "After no interaction, the app shows a slideshow of your baby's photos. Tap anywhere to return.",
+  "settings.slideDuration": "Slide Duration",
+  "settings.seconds": "{{n}} seconds",
   "settings.deviceName": "Device Name",
   "settings.deviceNameHint": "Optional. Identifies this device for remote control via Home Assistant.",
   "settings.signOut": "Sign Out",

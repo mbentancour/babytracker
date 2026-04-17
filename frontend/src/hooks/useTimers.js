@@ -65,9 +65,13 @@ export function useTimers(serverTimers, childId) {
   }, [activeTimers]);
 
   const editTimer = useCallback(async (timerId, newStart) => {
-    await api.updateTimer(timerId, { start: newStart });
+    // Use the server response (which carries a Z/offset suffix) to update
+    // the in-memory Date. newStart is a UTC naive string from
+    // localInputToUTC — new Date() would parse it as local, silently
+    // shifting the timer start by the UTC offset on every edit.
+    const updated = await api.updateTimer(timerId, { start: newStart });
     setActiveTimers((prev) =>
-      prev.map((t) => (t.id === timerId ? { ...t, start: new Date(newStart) } : t))
+      prev.map((t) => (t.id === timerId ? { ...t, start: new Date(updated.start) } : t))
     );
   }, []);
 

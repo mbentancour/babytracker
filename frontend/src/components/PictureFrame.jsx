@@ -1,15 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
 import { timeAgo, formatElapsed } from "../utils/formatters";
 import { useScreenWakeLock } from "../utils/wakeLock";
 
+function shuffle(arr) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 export default function PictureFrame({ photos, children = [], onWake }) {
   const { t } = useI18n();
   const { prefs } = usePreferences();
   const overlay = prefs.pictureFrame?.overlay || {};
   const overlayActive = Object.values(overlay).some(Boolean);
+  const slideDuration = Math.max(3, prefs.pictureFrame?.slideDuration || 8);
 
   // While the picture frame is mounted, ask the browser to keep the screen
   // awake — a tablet sitting on a shelf as a photo frame should stay lit.
@@ -18,18 +28,29 @@ export default function PictureFrame({ photos, children = [], onWake }) {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fading, setFading] = useState(false);
+  const [shuffled, setShuffled] = useState(() => shuffle(photos));
 
-  // Shuffle on mount
-  const [shuffled] = useState(() => {
-    const arr = [...photos];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  });
+  // Track which photo keys we've seen so new uploads get merged in without
+  // reshuffling the entire set (which would reset the viewer's position).
+  const seenKeysRef = useRef(new Set(photos.map((p) => p.photo)));
 
-  // Cycle photos every 8 seconds with a crossfade
+  useEffect(() => {
+    const newPhotos = photos.filter((p) => !seenKeysRef.current.has(p.photo));
+    if (newPhotos.length === 0) return;
+    for (const p of newPhotos) seenKeysRef.current.add(p.photo);
+    // Append new photos in random positions after the current index so the
+    // viewer sees them soon without a jarring reshuffle.
+    setShuffled((prev) => {
+      const updated = [...prev];
+      for (const p of shuffle(newPhotos)) {
+        const insertAt = Math.floor(Math.random() * (updated.length - currentIndex)) + currentIndex + 1;
+        updated.splice(insertAt, 0, p);
+      }
+      return updated;
+    });
+  }, [photos, currentIndex]);
+
+  // Cycle photos with configurable duration + crossfade
   useEffect(() => {
     if (shuffled.length <= 1) return;
     const timer = setInterval(() => {
@@ -38,9 +59,9 @@ export default function PictureFrame({ photos, children = [], onWake }) {
         setCurrentIndex((i) => (i + 1) % shuffled.length);
         setFading(false);
       }, 800);
-    }, 8000);
+    }, slideDuration * 1000);
     return () => clearInterval(timer);
-  }, [shuffled]);
+  }, [shuffled, slideDuration]);
 
   const handleWake = useCallback(() => {
     onWake();

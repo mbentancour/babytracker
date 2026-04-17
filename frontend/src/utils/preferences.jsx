@@ -31,6 +31,7 @@ const DEFAULT_PREFERENCES = {
 
   // Picture frame content filters (only types that support photos)
   pictureFrame: {
+    slideDuration: 8, // seconds each photo is shown before advancing
     showShared: true,
     showProfile: true,
     showPhoto: true,

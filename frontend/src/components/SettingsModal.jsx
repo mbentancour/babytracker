@@ -141,6 +141,22 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     {t("settings.pictureFrameHint")}
                   </p>
 
+                  <FormField label={t("settings.slideDuration")}>
+                    <FormSelect
+                      options={[
+                        { value: "5", label: t("settings.seconds", { n: 5 }) },
+                        { value: "8", label: t("settings.seconds", { n: 8 }) },
+                        { value: "10", label: t("settings.seconds", { n: 10 }) },
+                        { value: "15", label: t("settings.seconds", { n: 15 }) },
+                        { value: "20", label: t("settings.seconds", { n: 20 }) },
+                        { value: "30", label: t("settings.seconds", { n: 30 }) },
+                        { value: "60", label: t("settings.seconds", { n: 60 }) },
+                      ]}
+                      value={String(prefs.pictureFrame?.slideDuration || 8)}
+                      onChange={(e) => setPref("pictureFrame", { ...prefs.pictureFrame, slideDuration: parseInt(e.target.value) })}
+                    />
+                  </FormField>
+
                   <div style={{ marginTop: 16 }}>
                     <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
                       {t("settings.slideshowContent")}
