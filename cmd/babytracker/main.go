@@ -16,6 +16,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/acme/autocert"
 
+	btacme "github.com/mbentancour/babytracker/internal/acme"
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/database"
@@ -160,8 +161,57 @@ func main() {
 				slog.Warn("captive portal listener error", "error", err)
 			}
 		}()
+	} else if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
+		// DNS-01 challenge via lego — works behind NAT, no port forwarding needed.
+		// Provider credentials are read from environment variables by lego
+		// (e.g. CF_DNS_API_TOKEN for Cloudflare, AWS_ACCESS_KEY_ID for Route53).
+		mgr, err := btacme.NewManager(btacme.Config{
+			Domain:   tlsDomain,
+			Email:    cfg.ACMEEmail,
+			Provider: cfg.ACMEDNSProvider,
+			CertsDir: cfg.CertsDir,
+		})
+		if err != nil {
+			slog.Error("failed to create ACME manager", "error", err)
+			os.Exit(1)
+		}
+		if err := mgr.Run(); err != nil {
+			slog.Error("failed to obtain certificate via DNS-01", "error", err)
+			os.Exit(1)
+		}
+
+		autocertSrv = &http.Server{
+			Addr:              ":443",
+			Handler:           handler,
+			TLSConfig:         mgr.TLSConfig(),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       5 * time.Minute,
+			WriteTimeout:      5 * time.Minute,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func() {
+			slog.Info("starting HTTPS server (DNS-01 cert)", "domain", tlsDomain, "provider", cfg.ACMEDNSProvider, "port", 443)
+			if err := autocertSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				slog.Error("ACME HTTPS server error", "error", err)
+			}
+		}()
+
+		// HTTP :80 redirects to HTTPS (no ACME challenge listener needed for DNS-01)
+		httpSrv = &http.Server{
+			Addr:              ":80",
+			Handler:           http.HandlerFunc(httpToHTTPSRedirect(tlsDomain)),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+		go func() {
+			slog.Info("starting HTTP->HTTPS redirect", "port", 80)
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Warn("HTTP redirect listener error", "error", err)
+			}
+		}()
 	} else if tlsDomain != "" {
-		// Let's Encrypt autocert on :443 with HTTP-01 challenge on :80
+		// HTTP-01 challenge via autocert — requires port 443 reachable from the internet.
 		os.MkdirAll(cfg.CertsDir, 0700)
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
@@ -182,7 +232,7 @@ func main() {
 			IdleTimeout:       120 * time.Second,
 		}
 		go func() {
-			slog.Info("starting Let's Encrypt HTTPS server", "domain", tlsDomain, "port", 443)
+			slog.Info("starting Let's Encrypt HTTPS server (HTTP-01)", "domain", tlsDomain, "port", 443)
 			if err := autocertSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 				slog.Error("autocert server error", "error", err)
 			}

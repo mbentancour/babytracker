@@ -25,6 +25,8 @@ type Config struct {
 	TLSKey          string // Path to TLS private key file (self-signed)
 	TLSDomain       string // Custom domain for Let's Encrypt autocert (empty = disabled)
 	CertsDir        string // Directory for autocert certificate cache
+	ACMEDNSProvider string // DNS provider for DNS-01 challenge (cloudflare, route53, duckdns, namecheap, simply)
+	ACMEEmail       string // Email for ACME account registration
 	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
 
 	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
@@ -63,6 +65,8 @@ func New() *Config {
 		TLSKey:          os.Getenv("TLS_KEY"),
 		TLSDomain:       os.Getenv("TLS_DOMAIN"),
 		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
+		ACMEDNSProvider: os.Getenv("ACME_DNS_PROVIDER"),
+		ACMEEmail:       os.Getenv("ACME_EMAIL"),
 		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}

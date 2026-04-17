@@ -197,6 +197,8 @@ All configuration is done through environment variables.
 | `TLS_CERT` | (empty) | Path to TLS certificate file |
 | `TLS_KEY` | (empty) | Path to TLS private key file |
 | `TLS_DOMAIN` | (empty) | Domain for Let's Encrypt autocert |
+| `ACME_DNS_PROVIDER` | (empty) | DNS provider for DNS-01 challenge: `cloudflare`, `route53`, `duckdns`, `namecheap`, `simply` |
+| `ACME_EMAIL` | `admin@{TLS_DOMAIN}` | Email for Let's Encrypt account (expiry notifications) |
 | `CERTS_DIR` | `{DATA_DIR}/certs` | Autocert cache directory |
 | `MEDIA_PATH` | (empty) | External photo directory (used with HA media) |
 | `BABYTRACKER_PROXY_URL` | (empty) | Proxy mode: forward all requests to this URL |
@@ -250,16 +252,67 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 
 A self-signed certificate is generated on first boot. Access BabyTracker at `https://babytracker.local:8099`. Your browser will show a certificate warning -- accept it to proceed.
 
-### Let's Encrypt (custom domain)
+### Let's Encrypt with DNS-01 (recommended for LAN)
 
-To get a trusted certificate automatically:
+Get a trusted certificate without port forwarding. BabyTracker uses DNS validation to prove domain ownership, so it works behind NAT on a private network.
 
-1. Register a domain and create a DNS A record pointing to your BabyTracker device's public IP.
+Set `TLS_DOMAIN`, `ACME_DNS_PROVIDER`, and the provider's credentials:
+
+**Cloudflare:**
+
+```bash
+TLS_DOMAIN=baby.example.com
+ACME_DNS_PROVIDER=cloudflare
+CF_DNS_API_TOKEN=your-api-token      # Zone:DNS:Edit permission
+```
+
+**Route53 (AWS):**
+
+```bash
+TLS_DOMAIN=baby.example.com
+ACME_DNS_PROVIDER=route53
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_HOSTED_ZONE_ID=Z1234567890       # optional, speeds up lookup
+```
+
+**DuckDNS:**
+
+```bash
+TLS_DOMAIN=yourname.duckdns.org
+ACME_DNS_PROVIDER=duckdns
+DUCKDNS_TOKEN=your-token
+```
+
+**Namecheap:**
+
+```bash
+TLS_DOMAIN=baby.example.com
+ACME_DNS_PROVIDER=namecheap
+NAMECHEAP_API_USER=your-username
+NAMECHEAP_API_KEY=your-api-key
+```
+
+**Simply.com:**
+
+```bash
+TLS_DOMAIN=baby.example.com
+ACME_DNS_PROVIDER=simply
+SIMPLY_ACCOUNT_NAME=your-account
+SIMPLY_API_KEY=your-api-key
+```
+
+Certificates are cached in `CERTS_DIR` and renewed automatically 30 days before expiry.
+
+### Let's Encrypt with HTTP-01
+
+If your server is publicly reachable on port 443:
+
+1. Create a DNS A record pointing to your server's public IP.
 2. Forward port **443** on your router to the device.
-3. In BabyTracker, go to **Settings > General** and enter your domain.
-4. Set the `TLS_DOMAIN` environment variable to the same domain, or configure it via the UI.
+3. Set `TLS_DOMAIN` to your domain (without `ACME_DNS_PROVIDER`).
 
-BabyTracker will obtain and renew certificates from Let's Encrypt automatically.
+BabyTracker will use the HTTP-01 challenge on port 80 to validate and obtain a certificate.
 
 ### Manual TLS
 
