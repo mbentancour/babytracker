@@ -209,7 +209,7 @@ ENVEOF
     for i in $(seq 1 120); do
         if pct exec "${VMID}" -- test -f /var/lib/babytracker/certs/cert.pem 2>/dev/null; then
             echo "TLS certificate obtained!"
-            echo "  URL: https://${TLS_DOMAIN}:8099"
+            echo "  URL: https://${TLS_DOMAIN}"
             echo "  (Make sure ${TLS_DOMAIN} resolves to ${IP:-the container IP})"
             return
         fi
