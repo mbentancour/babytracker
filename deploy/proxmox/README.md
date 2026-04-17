@@ -4,25 +4,45 @@ Two deployment options for running BabyTracker on Proxmox: LXC containers (light
 
 ## LXC Container
 
-Build a rootfs tarball and import it as a Proxmox LXC template.
+### Quick install (one command)
 
-### Prerequisites
+SSH into your Proxmox host and run:
 
-- Linux host with root access
-- `debootstrap` and `zstd` installed
-- Pre-built BabyTracker binary
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mbentancour/babytracker/main/deploy/proxmox/lxc/install.sh)
+```
 
-### Build
+This downloads the pre-built template from GitHub Releases, creates a container, starts it, and prints the URL when ready.
+
+Customize with environment variables:
+
+```bash
+BT_VMID=200 BT_MEMORY=2048 BT_STORAGE=local-zfs bash <(curl -fsSL ...)
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BT_VMID` | (next available) | Container ID |
+| `BT_STORAGE` | `local-lvm` | Storage pool |
+| `BT_BRIDGE` | `vmbr0` | Network bridge |
+| `BT_MEMORY` | `1024` | Memory in MB |
+| `BT_CORES` | `2` | CPU cores |
+| `BT_DISK` | `4` | Disk size in GB |
+| `BT_VERSION` | `latest` | Release tag to download |
+
+### Build from source
+
+If you prefer to build the LXC template yourself:
 
 ```bash
 # Build the Go binary first
 CGO_ENABLED=0 go build -o babytracker.bin ./cmd/babytracker/
 
-# Build the LXC template
+# Build the LXC template (requires root, debootstrap, zstd)
 sudo BABYTRACKER_BINARY=./babytracker.bin deploy/proxmox/lxc/build-lxc-template.sh
 ```
 
-### Import into Proxmox
+Then import manually:
 
 ```bash
 # Copy the tarball to Proxmox
@@ -41,13 +61,18 @@ pct create 200 local:vztmpl/babytracker-lxc-amd64.tar.zst \
 pct start 200
 ```
 
-The container is ready when `babytracker-firstboot.service` completes. Check progress:
+### Checking status
 
 ```bash
-pct exec 200 -- journalctl -u babytracker-firstboot -f
-```
+# Watch first boot progress
+pct exec <vmid> -- journalctl -u babytracker-firstboot -f
 
-Access at `https://<container-ip>:8099`.
+# Check service status
+pct exec <vmid> -- systemctl status babytracker
+
+# Access the app
+pct exec <vmid> -- curl -k https://localhost:8099
+```
 
 ## VM (Packer)
 

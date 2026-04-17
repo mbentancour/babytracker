@@ -78,7 +78,45 @@ Settings → Integrations → API Tokens.
 
 ---
 
-## 3. Docker Compose (recommended for servers)
+## 3. Proxmox (LXC or VM)
+
+Run BabyTracker on a Proxmox hypervisor as a lightweight LXC container or a full VM.
+
+### LXC Container (one command)
+
+SSH into your Proxmox host and run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/mbentancour/babytracker/main/deploy/proxmox/lxc/install.sh)
+```
+
+This downloads the pre-built LXC template from GitHub Releases, creates a container, and starts it. First boot initializes PostgreSQL, generates a TLS certificate, and starts BabyTracker.
+
+Optional environment variables to customize the container:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BT_VMID` | (next available) | Container ID |
+| `BT_STORAGE` | `local-lvm` | Storage pool |
+| `BT_BRIDGE` | `vmbr0` | Network bridge |
+| `BT_MEMORY` | `1024` | Memory in MB |
+| `BT_CORES` | `2` | CPU cores |
+| `BT_DISK` | `4` | Disk size in GB |
+| `BT_VERSION` | `latest` | Release tag to download |
+
+Example with custom settings:
+
+```bash
+BT_VMID=200 BT_MEMORY=2048 bash <(curl -fsSL https://raw.githubusercontent.com/mbentancour/babytracker/main/deploy/proxmox/lxc/install.sh)
+```
+
+### VM (Packer)
+
+For a full VM, use the Packer template with the `proxmox-clone` builder. See [deploy/proxmox/README.md](deploy/proxmox/README.md) for prerequisites and instructions.
+
+---
+
+## 4. Docker Compose (recommended for servers)
 
 A `docker-compose.yml` is included in the repository.
 
@@ -105,11 +143,11 @@ Pass these via `environment` in your compose file or on the command line:
 
 `DATABASE_URL`, `DATA_DIR`, `JWT_SECRET`, `UNIT_SYSTEM`, `DEMO_MODE`
 
-See the [Configuration Reference](#5-configuration-reference) for the full list.
+See the [Configuration Reference](#6-configuration-reference) for the full list.
 
 ---
 
-## 4. Manual Installation (for developers)
+## 5. Manual Installation (for developers)
 
 ### Prerequisites
 
@@ -144,7 +182,7 @@ BabyTracker will be available at `http://localhost:8099`.
 
 ---
 
-## 5. Configuration Reference
+## 6. Configuration Reference
 
 All configuration is done through environment variables.
 
@@ -167,7 +205,7 @@ All configuration is done through environment variables.
 
 ---
 
-## 6. Updating
+## 7. Updating
 
 **Raspberry Pi image:** Download the new image and flash it. User data lives on a separate partition and is preserved across re-flashes.
 
@@ -184,7 +222,7 @@ docker compose -f deploy/docker/docker-compose.yml up -d
 
 ---
 
-## 7. Backups
+## 8. Backups
 
 > **Default PostgreSQL version by install mode:**
 > - Docker Compose + Home Assistant add-on: **PG 18** (Alpine 3.23 / `postgres:18-alpine`)
@@ -206,7 +244,7 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 
 ---
 
-## 8. HTTPS / TLS
+## 9. HTTPS / TLS
 
 ### Self-signed (default on Pi image)
 
