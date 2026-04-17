@@ -40,8 +40,16 @@ else
     URL="https://github.com/${REPO}/releases/download/${VERSION}/${TEMPLATE_NAME}"
 fi
 
-echo "Downloading template..."
-wget -q --show-progress -O "${TEMPLATE_DIR}/${TEMPLATE_NAME}" "${URL}"
+echo "Downloading template from ${URL}..."
+if ! wget -q --show-progress -O "${TEMPLATE_DIR}/${TEMPLATE_NAME}" "${URL}"; then
+    echo "ERROR: Download failed. Check that a release exists at:"
+    echo "  https://github.com/${REPO}/releases"
+    echo ""
+    echo "Alternatively, build the template locally and copy it to:"
+    echo "  ${TEMPLATE_DIR}/${TEMPLATE_NAME}"
+    rm -f "${TEMPLATE_DIR}/${TEMPLATE_NAME}"
+    exit 1
+fi
 
 # Create container
 echo "Creating container ${VMID}..."
