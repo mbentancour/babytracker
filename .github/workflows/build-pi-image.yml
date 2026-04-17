@@ -39,6 +39,25 @@ jobs:
             -o deploy/rpi-image-gen/files/usr/local/bin/babytracker.bin \
             ./cmd/babytracker/
 
+      - name: Stage common files into rpi-image-gen source tree
+        run: |
+          # Create the common-files staging directory that the layer YAML copies first.
+          # It contains: shared config files (/etc/...) and common provisioning scripts.
+          STAGING="deploy/rpi-image-gen/common-files"
+          rm -rf "${STAGING}"
+          mkdir -p "${STAGING}"
+
+          # Shared config files (env, systemd units, avahi, apt)
+          cp -a deploy/common/files/. "${STAGING}/"
+
+          # Common provisioning scripts → /usr/lib/babytracker/common/
+          mkdir -p "${STAGING}/usr/lib/babytracker/common"
+          cp deploy/common/install.sh \
+             deploy/common/setup-postgres.sh \
+             deploy/common/setup-tls.sh \
+             deploy/common/setup-ufw.sh \
+             "${STAGING}/usr/lib/babytracker/common/"
+
       - name: Clone rpi-image-gen
         run: git clone --depth 1 https://github.com/raspberrypi/rpi-image-gen.git /tmp/rpi-image-gen
 
@@ -65,6 +84,94 @@ jobs:
           echo "=== Deploy output dir(s) ==="
           ls -lah /tmp/rpi-image-gen/work/deploy-*/ 2>/dev/null || echo "(no deploy dir)"
 
+      - name: Smoke test Pi image
+        run: |
+          set -euo pipefail
+          echo "=== Pi Image Smoke Test ==="
+
+          # Find the built image
+          IMG=$(find /tmp/rpi-image-gen/work -name '*.img' -o -name '*.img.xz' | head -1)
+          if [ -z "$IMG" ]; then
+            echo "ERROR: No .img file found in build output"
+            find /tmp/rpi-image-gen/work -type f -printf '%p\n' | head -50
+            exit 1
+          fi
+          echo "Found image: $IMG"
+
+          # Decompress if needed
+          if [[ "$IMG" == *.xz ]]; then
+            echo "Decompressing..."
+            xz -d "$IMG"
+            IMG="${IMG%.xz}"
+          fi
+
+          # Set up loop device and mount root partition
+          LOOP=$(sudo losetup --find --show --partscan "$IMG")
+          echo "Loop device: $LOOP"
+          sudo partx -u "$LOOP" || true
+          ls -la "${LOOP}"p* 2>/dev/null || ls -la "${LOOP}p"* 2>/dev/null || true
+
+          sudo mkdir -p /mnt/pi-rootfs
+          # p2 is the root partition (p1 is boot/firmware)
+          sudo mount "${LOOP}p2" /mnt/pi-rootfs
+
+          PASS=0
+          FAIL=0
+          check() {
+            local desc="$1"
+            shift
+            if "$@" > /dev/null 2>&1; then
+              echo "  PASS: $desc"
+              PASS=$((PASS + 1))
+            else
+              echo "  FAIL: $desc"
+              FAIL=$((FAIL + 1))
+            fi
+          }
+
+          echo "--- File presence checks ---"
+          check "babytracker binary exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker
+          check "firstboot.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-firstboot.sh
+          check "setup-wifi.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-setup-wifi.sh
+          check "babytracker.env exists" test -f /mnt/pi-rootfs/etc/babytracker/babytracker.env
+          check "babytracker.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker.service
+          check "firstboot.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-firstboot.service
+          check "setup-ap.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-setup-ap.service
+          check "avahi service exists" test -f /mnt/pi-rootfs/etc/avahi/services/babytracker.service
+          check "hostapd.conf exists" test -f /mnt/pi-rootfs/etc/hostapd/hostapd.conf
+          check ".needs-setup flag exists" test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
+          check "common scripts installed" test -f /mnt/pi-rootfs/usr/lib/babytracker/common/setup-postgres.sh
+
+          echo "--- Binary checks ---"
+          check "binary is ARM aarch64 ELF" file /mnt/pi-rootfs/usr/local/bin/babytracker '|' grep -q 'ELF 64-bit.*ARM aarch64'
+          check "binary is executable" test -x /mnt/pi-rootfs/usr/local/bin/babytracker
+
+          echo "--- System user ---"
+          check "babytracker user exists" grep -q '^babytracker:' /mnt/pi-rootfs/etc/passwd
+          check "pi user locked" grep -q '^pi:!' /mnt/pi-rootfs/etc/shadow || grep -q '^pi:\*' /mnt/pi-rootfs/etc/shadow
+
+          echo "--- Installed packages ---"
+          check "postgresql installed" test -f /mnt/pi-rootfs/usr/bin/psql
+          check "hostapd installed" test -f /mnt/pi-rootfs/usr/sbin/hostapd
+          check "ufw installed" test -f /mnt/pi-rootfs/usr/sbin/ufw
+          check "avahi-daemon installed" test -f /mnt/pi-rootfs/usr/sbin/avahi-daemon
+          check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
+
+          echo "--- Permissions ---"
+          check "data dir owned by babytracker" stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker '|' grep -q 'babytracker:babytracker'
+          check "sudoers is 0440" stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker '|' grep -q '440'
+
+          echo ""
+          echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
+
+          # Cleanup
+          sudo umount /mnt/pi-rootfs
+          sudo losetup -d "$LOOP"
+
+          if [ "$FAIL" -gt 0 ]; then
+            exit 1
+          fi
+
       - name: Upload entire output dir
         uses: actions/upload-artifact@v4
         with:
@@ -74,4 +181,11 @@ jobs:
             /tmp/rpi-image-gen/work/deploy-*/
           if-no-files-found: error
 
-      # TODO: add release upload once we confirm which file is the disk image
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            /tmp/rpi-image-gen/work/image-babytracker/*.img.xz
+            /tmp/rpi-image-gen/work/deploy-*/*.img.xz
+          fail_on_unmatched_files: false

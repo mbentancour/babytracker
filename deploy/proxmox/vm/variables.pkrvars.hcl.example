@@ -1,0 +1,19 @@
+# Copy this file to variables.pkrvars.hcl and fill in your values.
+# Usage: packer build -var-file=variables.pkrvars.hcl vm.pkr.hcl
+
+proxmox_url          = "https://pve.local:8006/api2/json"
+proxmox_token_id     = "root@pam!packer"
+proxmox_token_secret = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+proxmox_node         = "pve"
+
+# Name of your existing Debian 13 cloud-init template
+clone_vm = "debian-13-cloud"
+
+# Storage pool for disks and cloud-init drive
+storage = "local-lvm"
+
+# Network bridge
+network_bridge = "vmbr0"
+
+# Path to the pre-built BabyTracker binary
+babytracker_binary = "../../../babytracker.bin"

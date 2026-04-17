@@ -1,75 +1,40 @@
 #!/bin/bash
+# BabyTracker first boot setup for Raspberry Pi.
+# Calls shared provisioning scripts with Pi-specific settings,
+# then performs Pi-only steps (hostname, setup-mode firewall).
 set -euo pipefail
 exec > >(tee -a /var/log/babytracker-firstboot.log) 2>&1
 
-echo "=== BabyTracker First Boot Setup ==="
+echo "=== BabyTracker First Boot Setup (Raspberry Pi) ==="
 echo "Date: $(date)"
 
-# 1. Generate self-signed TLS certificate
-if [ ! -f /etc/ssl/certs/babytracker.crt ]; then
-    echo "Generating TLS certificate..."
-    openssl req -x509 -nodes -days 3650 \
-        -newkey rsa:2048 \
-        -keyout /etc/ssl/private/babytracker.key \
-        -out /etc/ssl/certs/babytracker.crt \
-        -subj "/CN=babytracker.local" \
-        -addext "subjectAltName=DNS:babytracker.local,DNS:babytracker,IP:192.168.4.1"
-    chmod 640 /etc/ssl/private/babytracker.key
-    chgrp ssl-cert /etc/ssl/private/babytracker.key
-    # /etc/ssl/private is 0710 root:ssl-cert in Debian — babytracker user needs ssl-cert membership
-    usermod -aG ssl-cert babytracker
-    echo "TLS certificate generated."
-fi
+COMMON_DIR="/usr/lib/babytracker/common"
 
-# 2. Initialize PostgreSQL
-PG_CLUSTER="17/main"
-PG_DATA="/var/lib/postgresql/${PG_CLUSTER}"
+# --- Shared setup with Pi-specific tuning ---
 
-if [ ! -f "${PG_DATA}/PG_VERSION" ]; then
-    echo "Initializing PostgreSQL cluster..."
-    pg_ctlcluster 17 main start || true
-    sleep 2
-    su - postgres -c "createuser --no-password babytracker" 2>/dev/null || true
-    su - postgres -c "createdb --owner=babytracker babytracker" 2>/dev/null || true
-else
-    echo "Starting existing PostgreSQL cluster..."
-    pg_ctlcluster 17 main start || true
-fi
+# TLS: include the AP IP in the SAN
+export BT_TLS_SAN="DNS:babytracker.local,DNS:babytracker,IP:192.168.4.1"
+"${COMMON_DIR}/setup-tls.sh"
 
-# Wait for PostgreSQL to be ready
-echo "Waiting for PostgreSQL..."
-for i in $(seq 1 30); do
-    if pg_isready -q 2>/dev/null; then
-        echo "PostgreSQL is ready."
-        break
-    fi
-    sleep 1
-done
+# PostgreSQL: low-memory tuning for Pi Zero 2W (512MB)
+export BT_PG_SHARED_BUFFERS="32MB"
+export BT_PG_WORK_MEM="2MB"
+export BT_PG_MAINT_WORK_MEM="32MB"
+export BT_PG_CACHE_SIZE="128MB"
+export BT_PG_MAX_CONN="20"
+"${COMMON_DIR}/setup-postgres.sh"
 
-# 3. Tune PostgreSQL for low memory (Pi Zero 2W has 512MB)
-PG_CONF="/etc/postgresql/17/main/postgresql.conf"
-if [ -f "${PG_CONF}" ] && ! grep -q "# BabyTracker tuning" "${PG_CONF}"; then
-    echo "Tuning PostgreSQL for low memory..."
-    cat >> "${PG_CONF}" << 'PGEOF'
+# --- Pi-only steps ---
 
-# BabyTracker tuning for Raspberry Pi
-shared_buffers = 32MB
-work_mem = 2MB
-maintenance_work_mem = 32MB
-effective_cache_size = 128MB
-max_connections = 20
-PGEOF
-    pg_ctlcluster 17 main reload || true
-fi
-
-# 4. Set hostname
-echo "Setting hostname to babytracker..."
+# Set hostname
+echo "[firstboot] Setting hostname to babytracker..."
 hostnamectl set-hostname babytracker
 sed -i 's/127\.0\.1\.1.*/127.0.1.1\tbabytracker/' /etc/hosts || true
 
-# 5. Configure UFW with setup-mode rules (setup-wifi.sh resets to production rules after setup)
+# Configure UFW with setup-mode rules (includes captive portal ports).
+# Production rules are applied later by setup-wifi.sh after Wi-Fi is configured.
 if ! ufw status | grep -q "Status: active"; then
-    echo "Configuring firewall (setup mode)..."
+    echo "[firstboot] Configuring firewall (setup mode)..."
     ufw --force reset
     ufw default deny incoming
     ufw default allow outgoing

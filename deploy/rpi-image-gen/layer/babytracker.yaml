@@ -23,7 +23,10 @@ mmdebstrap:
     - sudo
 
   customize-hooks:
-    # Copy all our files into the rootfs (cwd is SRC dir, files/ holds the tree)
+    # Copy shared (common) files into the rootfs first, then Pi-specific files
+    # on top. The CI workflow stages common/ into the source tree before build.
+    # cwd is the SRC dir; common-files/ and files/ hold the trees.
+    - cp -a common-files/. $1/
     - cp -a files/. $1/
     # .gitkeep is only needed to preserve empty dirs in git — remove it from the image
     - rm -f $1/var/lib/babytracker/.gitkeep
@@ -35,6 +38,9 @@ mmdebstrap:
     - mv $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh
+
+    # Make common scripts executable
+    - chmod 755 $1/usr/lib/babytracker/common/*.sh
 
     # Sudoers must be 0440 root:root or sudo refuses to use it
     - chmod 440 $1/etc/sudoers.d/babytracker
