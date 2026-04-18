@@ -238,13 +238,19 @@ jobs:
             exit 1
           fi
 
+      - name: Compress image for flashing tools
+        run: |
+          IMG=$(find /tmp/rpi-image-gen/work/image-babytracker -name '*.img' -not -name '*.sparse' | head -1)
+          echo "Compressing ${IMG} with xz..."
+          xz -T0 -9 "${IMG}"
+          ls -lh "${IMG}.xz"
+
       - name: Upload entire output dir
         uses: actions/upload-artifact@v4
         with:
           name: babytracker-pi-image
           path: |
             /tmp/rpi-image-gen/work/image-babytracker/
-            /tmp/rpi-image-gen/work/deploy-*/
           if-no-files-found: error
 
       - name: Upload to release
@@ -252,4 +258,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            /tmp/rpi-image-gen/work/deploy-*/*.img.zst
+            /tmp/rpi-image-gen/work/image-babytracker/*.img.xz

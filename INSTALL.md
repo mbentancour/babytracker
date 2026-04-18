@@ -8,7 +8,7 @@ The simplest way to run BabyTracker. Download a pre-built image, flash it, and g
 
 ### Steps
 
-1. Download the latest `.img.gz` from [GitHub Releases](https://github.com/mbentancour/babytracker/releases).
+1. Download the latest `.img.xz` from [GitHub Releases](https://github.com/mbentancour/babytracker/releases).
 2. Flash to an SD card using [Raspberry Pi Imager](https://www.raspberrypi.com/software/) or [balenaEtcher](https://etcher.balena.io/).
 3. Insert the SD card into your Pi and power it on.
 4. On your phone, connect to the **BabyTracker-Setup** Wi-Fi hotspot.
