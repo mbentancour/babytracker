@@ -72,7 +72,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
         <div className="settings-body">
           {/* Sidebar navigation */}
-          <nav className="settings-nav">
+          {/* Desktop: sidebar nav */}
+          <nav className="settings-nav settings-nav-desktop">
             {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
               <button
                 key={item.id}
@@ -84,6 +85,18 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
               </button>
             ))}
           </nav>
+          {/* Mobile: dropdown */}
+          <div className="settings-nav-mobile">
+            <select
+              className="form-select"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+            >
+              {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
+                <option key={item.id} value={item.id}>{t(item.label)}</option>
+              ))}
+            </select>
+          </div>
 
           {/* Content */}
           <div className="settings-content">
@@ -122,6 +135,25 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       onChange={(e) => setLocale(e.target.value)}
                     />
                   </FormField>
+                </div>
+
+                <div className="settings-card">
+                  <FormField label={t("settings.deviceName")}>
+                    <FormInput
+                      type="text"
+                      value={deviceName}
+                      onChange={(e) => setDeviceName(e.target.value)}
+                      onBlur={(e) => {
+                        const name = e.target.value.trim();
+                        localStorage.setItem("babytracker_device_name", name);
+                        setDeviceName(name);
+                      }}
+                      placeholder="e.g. nursery-tablet"
+                    />
+                  </FormField>
+                  <p className="settings-hint">
+                    {t("settings.deviceNameHint")}
+                  </p>
                 </div>
               </div>
             )}
@@ -281,25 +313,6 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 <TLSSection />
 
                 {applianceMode && <DomainSection />}
-
-                <div className="settings-card" style={{ marginTop: 16 }}>
-                  <FormField label={t("settings.deviceName")}>
-                    <FormInput
-                      type="text"
-                      value={deviceName}
-                      onChange={(e) => setDeviceName(e.target.value)}
-                      onBlur={(e) => {
-                        const name = e.target.value.trim();
-                        localStorage.setItem("babytracker_device_name", name);
-                        setDeviceName(name);
-                      }}
-                      placeholder="e.g. nursery-tablet"
-                    />
-                  </FormField>
-                  <p className="settings-hint">
-                    {t("settings.deviceNameHint")}
-                  </p>
-                </div>
 
                 {applianceMode && (
                   <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
