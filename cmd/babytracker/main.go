@@ -107,6 +107,8 @@ func main() {
 					Email       string            `json:"email"`
 					Provider    string            `json:"provider"`
 					Credentials map[string]string `json:"credentials"`
+					ManageA     *bool             `json:"manage_a,omitempty"`
+					IP          string            `json:"ip,omitempty"`
 				}
 				if json.Unmarshal([]byte(raw), &dbTLS) == nil {
 					if cfg.TLSDomain == "" {
@@ -115,6 +117,12 @@ func main() {
 					if cfg.ACMEDNSProvider == "" && dbTLS.Provider != "" {
 						cfg.ACMEDNSProvider = dbTLS.Provider
 						cfg.ACMEEmail = dbTLS.Email
+						if dbTLS.ManageA != nil {
+							cfg.ACMEManageA = *dbTLS.ManageA
+						}
+						if dbTLS.IP != "" {
+							cfg.ACMEIP = dbTLS.IP
+						}
 						// Set provider credential env vars so lego can read them
 						for k, v := range dbTLS.Credentials {
 							os.Setenv(k, v)
@@ -131,6 +139,8 @@ func main() {
 				Email:    cfg.ACMEEmail,
 				Provider: cfg.ACMEDNSProvider,
 				CertsDir: cfg.CertsDir,
+				ManageA:  cfg.ACMEManageA,
+				IP:       cfg.ACMEIP,
 			})
 			if err != nil {
 				slog.Error("failed to create ACME manager", "error", err)

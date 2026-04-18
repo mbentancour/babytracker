@@ -29,6 +29,8 @@ type tlsConfig struct {
 	Email       string            `json:"email"`
 	Provider    string            `json:"provider"`
 	Credentials map[string]string `json:"credentials"`
+	ManageA     bool              `json:"manage_a"`
+	IP          string            `json:"ip,omitempty"`
 }
 
 // providerEnvKeys maps each DNS provider to its required environment variable names.
@@ -49,6 +51,8 @@ func (h *TLSHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"email":           cfg.Email,
 		"provider":        cfg.Provider,
 		"credentials_set": len(cfg.Credentials) > 0,
+		"manage_a":        cfg.ManageA,
+		"ip":              cfg.IP,
 	}
 
 	// Add current certificate info if available
@@ -66,6 +70,8 @@ type setTLSRequest struct {
 	Email       string            `json:"email"`
 	Provider    string            `json:"provider"`
 	Credentials map[string]string `json:"credentials,omitempty"`
+	ManageA     *bool             `json:"manage_a,omitempty"`
+	IP          string            `json:"ip,omitempty"`
 }
 
 // Set saves TLS configuration and triggers certificate issuance.
@@ -99,12 +105,24 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		req.Credentials = existing.Credentials
 	}
 
+	// Resolve manage_a: default true if not explicitly set
+	manageA := true
+	if req.ManageA != nil {
+		manageA = *req.ManageA
+	} else {
+		// Preserve existing setting
+		existing := h.loadConfig()
+		manageA = existing.ManageA
+	}
+
 	// Build config for storage
 	cfg := tlsConfig{
 		Domain:      req.Domain,
 		Email:       req.Email,
 		Provider:    req.Provider,
 		Credentials: req.Credentials,
+		ManageA:     manageA,
+		IP:          req.IP,
 	}
 
 	// Save to database
@@ -138,6 +156,8 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 			Email:    cfg.Email,
 			Provider: cfg.Provider,
 			CertsDir: h.certsDir,
+			ManageA:  cfg.ManageA,
+			IP:       cfg.IP,
 		}
 
 		if h.mgr != nil {

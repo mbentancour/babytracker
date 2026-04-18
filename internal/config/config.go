@@ -27,6 +27,8 @@ type Config struct {
 	CertsDir        string // Directory for autocert certificate cache
 	ACMEDNSProvider string // DNS provider for DNS-01 challenge (cloudflare, route53, duckdns, namecheap, simply)
 	ACMEEmail       string // Email for ACME account registration
+	ACMEManageA     bool   // Create/update A record via DNS provider
+	ACMEIP          string // IP for the A record (empty = auto-detect)
 	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
 
 	// ACMEManager is set at runtime by main.go when the ACME manager is started.
@@ -72,6 +74,8 @@ func New() *Config {
 		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
 		ACMEDNSProvider: os.Getenv("ACME_DNS_PROVIDER"),
 		ACMEEmail:       os.Getenv("ACME_EMAIL"),
+		ACMEManageA:     os.Getenv("ACME_MANAGE_A") != "false", // default true
+		ACMEIP:          os.Getenv("ACME_IP"),
 		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}

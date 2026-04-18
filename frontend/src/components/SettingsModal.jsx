@@ -1624,6 +1624,8 @@ function TLSSection() {
   const [email, setEmail] = useState("");
   const [credentials, setCredentials] = useState({});
   const [credentialsSet, setCredentialsSet] = useState(false);
+  const [manageA, setManageA] = useState(true);
+  const [ip, setIp] = useState("");
   const [certInfo, setCertInfo] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -1636,6 +1638,8 @@ function TLSSection() {
         setDomain(data.domain || "");
         setEmail(data.email || "");
         setCredentialsSet(data.credentials_set || false);
+        setManageA(data.manage_a !== false);
+        setIp(data.ip || "");
         if (data.certificate) setCertInfo(data.certificate);
         setLoaded(true);
       })
@@ -1646,7 +1650,7 @@ function TLSSection() {
     setSaving(true);
     setMessage(null);
     try {
-      const payload = { domain: domain.trim(), email: email.trim(), provider };
+      const payload = { domain: domain.trim(), email: email.trim(), provider, manage_a: manageA, ip: ip.trim() };
       // Only send credentials if the user entered new ones
       const hasNewCreds = Object.values(credentials).some((v) => v);
       if (hasNewCreds) payload.credentials = credentials;
@@ -1726,6 +1730,29 @@ function TLSSection() {
               />
             </FormField>
           ))}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            <input
+              type="checkbox"
+              id="manage-a-record"
+              checked={manageA}
+              onChange={(e) => setManageA(e.target.checked)}
+            />
+            <label htmlFor="manage-a-record" style={{ fontSize: 13 }}>
+              Manage DNS A record (point domain to this server)
+            </label>
+          </div>
+
+          {manageA && (
+            <FormField label="IP address (leave empty to auto-detect)">
+              <FormInput
+                type="text"
+                value={ip}
+                onChange={(e) => setIp(e.target.value)}
+                placeholder="Auto-detect LAN IP"
+              />
+            </FormField>
+          )}
 
           {certInfo && (
             <div className="settings-hint" style={{ color: "#00b894", marginTop: 8 }}>

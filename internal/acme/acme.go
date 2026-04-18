@@ -80,6 +80,8 @@ type Config struct {
 	Email    string // ACME account email (used for expiry notices)
 	Provider string // DNS provider name
 	CertsDir string // Directory to store certificates and account key
+	IP       string // IP for the A record (empty = auto-detect LAN IP)
+	ManageA  bool   // Whether to create/update the A record via the DNS provider
 }
 
 // CertInfo holds public information about the current certificate.
@@ -270,6 +272,13 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 		m.mu.RUnlock()
 
 		if cert == nil {
+			// Ensure A record exists before attempting ACME
+			if m.cfg.ManageA {
+				if err := EnsureARecord(m.cfg.Provider, m.cfg.Domain, m.cfg.IP); err != nil {
+					slog.Warn("acme: failed to set A record, continuing anyway", "error", err)
+				}
+			}
+
 			// No certificate — try to obtain one
 			slog.Info("acme: obtaining certificate", "domain", m.cfg.Domain, "provider", m.cfg.Provider)
 			if err := m.obtain(); err != nil {
