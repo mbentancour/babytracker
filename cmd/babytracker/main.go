@@ -181,6 +181,18 @@ func main() {
 	}
 
 	var httpSrv *http.Server
+
+	if !cfg.TLSEnabled {
+		// Plain HTTP mode (e.g. HA add-on behind ingress proxy)
+		go func() {
+			slog.Info("starting HTTP server (TLS disabled)", "port", cfg.Port)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
+			}
+		}()
+	} else {
+
 	acmeMgr, _ := cfg.ACMEManager.(*btacme.Manager)
 
 	// Start ACME background loop if configured
@@ -271,6 +283,8 @@ func main() {
 			}
 		}()
 	}
+
+	} // end TLS enabled
 
 	// Setup mode: captive portal on :80
 	if cfg.SetupMode {

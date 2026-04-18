@@ -14,6 +14,7 @@ export BACKUP_FREQUENCY
 export DEMO_MODE
 export DATA_DIR="/data/babytracker"
 export PORT=8099
+export TLS_ENABLED=false
 
 # If media path is configured, set the full path to HA's media directory
 if [ -n "${MEDIA_SCAN_PATH}" ]; then

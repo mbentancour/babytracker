@@ -25,6 +25,7 @@ type Config struct {
 	TLSKey          string // Path to TLS private key file (self-signed)
 	TLSDomain       string // Custom domain for Let's Encrypt autocert (empty = disabled)
 	CertsDir        string // Directory for autocert certificate cache
+	TLSEnabled      bool   // When false, serve plain HTTP (e.g. HA add-on behind ingress proxy)
 	ACMEDNSProvider string // DNS provider for DNS-01 challenge (cloudflare, route53, duckdns, namecheap, simply)
 	ACMEEmail       string // Email for ACME account registration
 	ACMEManageA     bool   // Create/update A record via DNS provider
@@ -72,6 +73,7 @@ func New() *Config {
 		TLSKey:          os.Getenv("TLS_KEY"),
 		TLSDomain:       os.Getenv("TLS_DOMAIN"),
 		CertsDir:        envOrDefault("CERTS_DIR", filepath.Join(dataDir, "certs")),
+		TLSEnabled:      os.Getenv("TLS_ENABLED") != "false", // default true
 		ACMEDNSProvider: os.Getenv("ACME_DNS_PROVIDER"),
 		ACMEEmail:       os.Getenv("ACME_EMAIL"),
 		ACMEManageA:     os.Getenv("ACME_MANAGE_A") != "false", // default true
