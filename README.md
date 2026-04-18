@@ -75,9 +75,11 @@ Screenshots coming soon.
 
 ## License
 
-[MIT](LICENSE) — do whatever you want with it.
+[MIT](LICENSE)
 
 ### In plain English
+
+TL;DR: Do whatever you want with it. 
 
 I'm releasing this under MIT because I want to make it as easy as possible for anyone to use, fork, remix, learn from, or run their own version. No strings attached.
 
