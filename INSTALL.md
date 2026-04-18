@@ -116,7 +116,31 @@ For a full VM, use the Packer template with the `proxmox-clone` builder. See [de
 
 ---
 
-## 4. Docker Compose (recommended for servers)
+## 4. Kubernetes (Helm)
+
+A Helm chart is included for deploying to Kubernetes clusters.
+
+```bash
+git clone https://github.com/mbentancour/babytracker.git
+cd babytracker
+
+helm install babytracker ./deploy/helm/babytracker \
+  --set secrets.postgresPassword=$(openssl rand -base64 32)
+```
+
+The chart deploys:
+
+- BabyTracker app (1 replica, `Recreate` strategy — uses local volumes)
+- PostgreSQL 18 StatefulSet (optional, bundled by default)
+- Services and PVCs
+
+No bitnami dependencies — uses the official `postgres:18-alpine` image directly.
+
+See [deploy/helm/babytracker/README.md](deploy/helm/babytracker/README.md) for the full configuration reference (TLS modes, external database, ingress setup).
+
+---
+
+## 5. Docker Compose (recommended for servers)
 
 A `docker-compose.yml` is included in the repository.
 
@@ -143,11 +167,11 @@ Pass these via `environment` in your compose file or on the command line:
 
 `DATABASE_URL`, `DATA_DIR`, `JWT_SECRET`, `UNIT_SYSTEM`, `DEMO_MODE`
 
-See the [Configuration Reference](#6-configuration-reference) for the full list.
+See the [Configuration Reference](#7-configuration-reference) for the full list.
 
 ---
 
-## 5. Manual Installation (for developers)
+## 6. Manual Installation (for developers)
 
 ### Prerequisites
 
@@ -182,7 +206,7 @@ BabyTracker will be available at `https://localhost`.
 
 ---
 
-## 6. Configuration Reference
+## 7. Configuration Reference
 
 All configuration is done through environment variables.
 
@@ -209,7 +233,7 @@ All configuration is done through environment variables.
 
 ---
 
-## 7. Updating
+## 8. Updating
 
 **Raspberry Pi image:** Download the new image and flash it. User data lives on a separate partition and is preserved across re-flashes.
 
@@ -226,7 +250,7 @@ docker compose -f deploy/docker/docker-compose.yml up -d
 
 ---
 
-## 8. Backups
+## 9. Backups
 
 > **Default PostgreSQL version by install mode:**
 > - Docker Compose + Home Assistant add-on: **PG 18** (Alpine 3.23 / `postgres:18-alpine`)
@@ -248,7 +272,7 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 
 ---
 
-## 9. HTTPS / TLS
+## 10. HTTPS / TLS
 
 ### Self-signed (default on Pi image)
 

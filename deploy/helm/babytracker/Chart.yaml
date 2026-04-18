@@ -1,0 +1,16 @@
+apiVersion: v2
+name: babytracker
+description: A self-hosted baby tracking application
+type: application
+version: 0.1.0
+appVersion: "1.4.1"
+home: https://github.com/mbentancour/babytracker
+sources:
+  - https://github.com/mbentancour/babytracker
+keywords:
+  - baby
+  - tracker
+  - self-hosted
+maintainers:
+  - name: Martin Bentancour
+    url: https://github.com/mbentancour

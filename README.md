@@ -44,13 +44,14 @@ Then visit [https://localhost](https://localhost).
 
 ## Installation
 
-Five installation options are available (see [INSTALL.md](INSTALL.md) for details):
+Six installation options are available (see [INSTALL.md](INSTALL.md) for details):
 
 1. **Raspberry Pi appliance** -- flash the image, plug in, done
 2. **Home Assistant add-on**
 3. **Proxmox** -- one-command LXC install or Packer VM template
-4. **Docker Compose**
-5. **Manual installation**
+4. **Kubernetes** -- Helm chart in `deploy/helm/babytracker/`
+5. **Docker Compose**
+6. **Manual installation**
 
 ## Documentation
 

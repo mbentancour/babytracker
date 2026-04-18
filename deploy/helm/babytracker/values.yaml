@@ -1,0 +1,108 @@
+# Default values for babytracker.
+
+image:
+  repository: ghcr.io/mbentancour/babytracker
+  tag: ""  # defaults to chart's appVersion
+  pullPolicy: IfNotPresent
+
+replicaCount: 1  # BabyTracker isn't designed for horizontal scaling; keep at 1
+
+# --- App configuration ---
+config:
+  unitSystem: metric  # metric | imperial
+  demoMode: false
+  # TLS_ENABLED=false is for environments where an ingress/LB terminates TLS.
+  # When true (default), the app serves HTTPS on the container port.
+  tlsEnabled: true
+
+# --- Secrets ---
+# If provided, these values are written to a Secret; leave unset to let the
+# app auto-generate (JWT) or require external input (Postgres password).
+secrets:
+  jwtSecret: ""            # 32+ char random. Auto-generated if empty.
+  postgresPassword: ""     # Required if postgresql.enabled=true
+  # External database URL (used when postgresql.enabled=false)
+  databaseUrl: ""
+  # ACME DNS provider credentials — set via Settings UI after deploy, or
+  # pre-configure here. Example for Cloudflare: CF_DNS_API_TOKEN: ...
+  acmeCredentials: {}
+
+# --- Persistence ---
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""  # "" = default; set to e.g. "fast-ssd" to pin
+  accessMode: ReadWriteOnce
+
+# --- Service ---
+service:
+  type: ClusterIP
+  port: 443
+
+# --- Ingress (optional) ---
+# When ingress is used, typically the app should run in HTTP mode
+# (config.tlsEnabled=false) and the ingress handles TLS via cert-manager.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: babytracker.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: babytracker-tls
+    #   hosts:
+    #     - babytracker.example.com
+
+# --- Resources ---
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# --- Pod security ---
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+    add:
+      - NET_BIND_SERVICE  # Only needed if binding to :443 in-container
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- PostgreSQL (bundled) ---
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "18-alpine"
+    pullPolicy: IfNotPresent
+  database: babytracker
+  username: babytracker
+  # Password is taken from secrets.postgresPassword
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi

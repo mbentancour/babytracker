@@ -1,0 +1,32 @@
+BabyTracker has been deployed.
+
+{{- if .Values.ingress.enabled }}
+
+Access it at:
+{{- range .Values.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+
+Get the external IP:
+  kubectl get svc -n {{ .Release.Namespace }} -w {{ include "babytracker.fullname" . }}
+
+Then visit https://<EXTERNAL-IP>
+{{- else }}
+
+To access BabyTracker, port-forward:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "babytracker.fullname" . }} 8443:{{ .Values.service.port }}
+
+Then visit https://localhost:8443 (accept self-signed cert warning).
+{{- end }}
+
+{{- if .Values.postgresql.enabled }}
+
+PostgreSQL runs as a StatefulSet with a PersistentVolumeClaim.
+Data persists across pod restarts.
+{{- end }}
+
+On first load, create an admin account. Then configure TLS (for a valid
+Let's Encrypt certificate) via Settings → Server → TLS / HTTPS.
+
+Docs: https://github.com/mbentancour/babytracker/blob/main/INSTALL.md
