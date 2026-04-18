@@ -223,13 +223,21 @@ func main() {
 					fallbackCert = &c
 				}
 			}
+			if fallbackCert == nil {
+				// No cert files — generate an in-memory self-signed cert
+				c, err := btacme.GenerateSelfSignedCert(tlsDomain)
+				if err != nil {
+					slog.Error("failed to generate self-signed cert", "error", err)
+				} else {
+					fallbackCert = c
+					slog.Info("generated self-signed fallback certificate", "domain", tlsDomain)
+				}
+			}
 			srv.TLSConfig = &tls.Config{
 				GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					// Try ACME cert first
 					if acmeMgr.HasCert() {
 						return acmeMgr.TLSConfig().GetCertificate(hello)
 					}
-					// Fall back to self-signed
 					if fallbackCert != nil {
 						return fallbackCert, nil
 					}
