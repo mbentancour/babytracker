@@ -198,16 +198,29 @@ func main() {
 		}
 	}
 	if fallbackCert == nil {
-		domain := tlsDomain
-		if domain == "" {
-			domain = "babytracker.local"
-		}
-		c, err := btacme.GenerateSelfSignedCert(domain)
-		if err != nil {
-			slog.Error("failed to generate self-signed cert", "error", err)
+		// Try loading a previously generated self-signed cert from disk
+		certPath := cfg.CertsDir + "/self-signed.crt"
+		keyPath := cfg.CertsDir + "/self-signed.key"
+		c, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err == nil {
+			fallbackCert = &c
+			slog.Info("loaded self-signed certificate from disk")
 		} else {
-			fallbackCert = c
-			slog.Info("generated self-signed fallback certificate", "domain", domain)
+			// Generate and persist a new one
+			domain := tlsDomain
+			if domain == "" {
+				domain = "babytracker.local"
+			}
+			gen, err := btacme.GenerateSelfSignedCert(domain)
+			if err != nil {
+				slog.Error("failed to generate self-signed cert", "error", err)
+			} else {
+				fallbackCert = gen
+				// Persist to disk for next restart
+				os.MkdirAll(cfg.CertsDir, 0700)
+				btacme.SaveCertToFiles(gen, certPath, keyPath)
+				slog.Info("generated and saved self-signed certificate", "domain", domain)
+			}
 		}
 	}
 

@@ -65,6 +65,23 @@ func GenerateSelfSignedCert(domain string) (*tls.Certificate, error) {
 	}, nil
 }
 
+// SaveCertToFiles writes a tls.Certificate's PEM-encoded cert and key to disk.
+func SaveCertToFiles(cert *tls.Certificate, certPath, keyPath string) {
+	if len(cert.Certificate) == 0 {
+		return
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
+	os.WriteFile(certPath, certPEM, 0644)
+
+	if key, ok := cert.PrivateKey.(*ecdsa.PrivateKey); ok {
+		keyBytes, err := x509.MarshalECPrivateKey(key)
+		if err == nil {
+			keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+			os.WriteFile(keyPath, keyPEM, 0600)
+		}
+	}
+}
+
 // Supported DNS provider names.
 const (
 	ProviderCloudflare = "cloudflare"
