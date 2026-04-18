@@ -174,27 +174,31 @@ func main() {
 	var httpSrv *http.Server // secondary listener (:80 redirect or captive portal)
 	var acmeMgr *btacme.Manager
 
-	if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
-		// DNS-01: obtain cert, serve with it on :PORT (default 443)
+	started := false
+
+	// 1. Try DNS-01 ACME
+	if !started && tlsDomain != "" && cfg.ACMEDNSProvider != "" {
 		acmeMgr, _ = cfg.ACMEManager.(*btacme.Manager)
-		if acmeMgr == nil {
-			slog.Error("ACME manager not initialized")
-			os.Exit(1)
-		}
-		if err := acmeMgr.Run(); err != nil {
-			slog.Error("failed to obtain certificate via DNS-01", "error", err)
-			os.Exit(1)
-		}
-		srv.TLSConfig = acmeMgr.TLSConfig()
-		go func() {
-			slog.Info("starting HTTPS server (DNS-01)", "domain", tlsDomain, "port", cfg.Port)
-			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				slog.Error("server error", "error", err)
-				os.Exit(1)
+		if acmeMgr != nil {
+			if err := acmeMgr.Run(); err != nil {
+				slog.Error("ACME certificate failed — falling back to self-signed (fix config in Settings)",
+					"error", err, "domain", tlsDomain, "provider", cfg.ACMEDNSProvider)
+			} else {
+				srv.TLSConfig = acmeMgr.TLSConfig()
+				go func() {
+					slog.Info("starting HTTPS server (DNS-01)", "domain", tlsDomain, "port", cfg.Port)
+					if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+						slog.Error("server error", "error", err)
+						os.Exit(1)
+					}
+				}()
+				started = true
 			}
-		}()
-	} else if tlsDomain != "" {
-		// HTTP-01: autocert on :PORT (default 443)
+		}
+	}
+
+	// 2. Try HTTP-01 ACME (only if DNS-01 not configured)
+	if !started && tlsDomain != "" && cfg.ACMEDNSProvider == "" {
 		os.MkdirAll(cfg.CertsDir, 0700)
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
@@ -226,17 +230,23 @@ func main() {
 				slog.Warn("HTTP listener error", "error", err)
 			}
 		}()
-	} else if cfg.TLSCert != "" && cfg.TLSKey != "" {
-		// Self-signed or manual cert
+		started = true
+	}
+
+	// 3. Fall back to self-signed / manual cert files
+	if !started && cfg.TLSCert != "" && cfg.TLSKey != "" {
 		go func() {
-			slog.Info("starting HTTPS server", "port", cfg.Port)
+			slog.Info("starting HTTPS server (self-signed)", "port", cfg.Port)
 			if err := srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
 				slog.Error("server error", "error", err)
 				os.Exit(1)
 			}
 		}()
-	} else {
-		// Plain HTTP
+		started = true
+	}
+
+	// 4. Last resort: plain HTTP
+	if !started {
 		go func() {
 			slog.Info("starting HTTP server", "port", cfg.Port)
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
