@@ -252,6 +252,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            /tmp/rpi-image-gen/work/image-babytracker/*.img.xz
-            /tmp/rpi-image-gen/work/deploy-*/*.img.xz
-          fail_on_unmatched_files: false
+            /tmp/rpi-image-gen/work/deploy-*/*.img.zst
