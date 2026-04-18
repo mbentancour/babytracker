@@ -26,7 +26,7 @@ Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow
 - **API tokens and webhooks** for external integrations
 - **Multi-language**: English, Spanish, Danish
 - **Light / dark / system theme**
-- **Optional Let's Encrypt HTTPS** via autocert
+- **HTTPS by default** on port 443 (self-signed certificate, upgradeable to Let's Encrypt via DNS-01 with Cloudflare, Route53, DuckDNS, Namecheap, or Simply.com)
 - **CSV data export**
 - **Mobile-responsive** design with safe area support
 

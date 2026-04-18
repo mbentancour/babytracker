@@ -23,5 +23,5 @@ RUN apk add --no-cache ca-certificates tzdata && \
 USER babytracker
 WORKDIR /var/lib/babytracker
 COPY --from=go-builder /babytracker /usr/local/bin/babytracker
-EXPOSE 8099
+EXPOSE 443
 ENTRYPOINT ["babytracker"]
