@@ -137,7 +137,14 @@ jobs:
             exit 1
           fi
           echo "Mounting root partition: $ROOT_PART"
-          sudo mount "$ROOT_PART" /mnt/pi-rootfs
+          # The Pi image may use 16K block ext4 (arm64 page size) which can't
+          # be mounted on a 4K-page kernel. Try normal mount first, then
+          # fall back to debugfs-based checks.
+          USE_DEBUGFS=false
+          if ! sudo mount "$ROOT_PART" /mnt/pi-rootfs 2>/dev/null; then
+            echo "WARNING: mount failed (likely 16K block ext4 on 4K kernel), using debugfs"
+            USE_DEBUGFS=true
+          fi
 
           PASS=0
           FAIL=0
@@ -153,43 +160,78 @@ jobs:
             fi
           }
 
-          echo "--- File presence checks ---"
-          check "babytracker binary exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker
-          check "firstboot.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-firstboot.sh
-          check "setup-wifi.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-setup-wifi.sh
-          check "babytracker.env exists" test -f /mnt/pi-rootfs/etc/babytracker/babytracker.env
-          check "babytracker.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker.service
-          check "firstboot.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-firstboot.service
-          check "setup-ap.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-setup-ap.service
-          check "avahi service exists" test -f /mnt/pi-rootfs/etc/avahi/services/babytracker.service
-          check "hostapd.conf exists" test -f /mnt/pi-rootfs/etc/hostapd/hostapd.conf
-          check ".needs-setup flag exists" test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
-          check "common scripts installed" test -f /mnt/pi-rootfs/usr/lib/babytracker/common/setup-postgres.sh
+          # debugfs_exists checks if a path exists inside the ext4 image
+          debugfs_exists() {
+            sudo debugfs -R "stat $1" "$ROOT_PART" 2>/dev/null | grep -q "Inode:"
+          }
 
-          echo "--- Binary checks ---"
-          check "binary is ARM aarch64 ELF" file /mnt/pi-rootfs/usr/local/bin/babytracker '|' grep -q 'ELF 64-bit.*ARM aarch64'
-          check "binary is executable" test -x /mnt/pi-rootfs/usr/local/bin/babytracker
+          # debugfs_cat reads a file from the ext4 image
+          debugfs_cat() {
+            sudo debugfs -R "cat $1" "$ROOT_PART" 2>/dev/null
+          }
 
-          echo "--- System user ---"
-          check "babytracker user exists" grep -q '^babytracker:' /mnt/pi-rootfs/etc/passwd
-          check "pi user locked" grep -q '^pi:!' /mnt/pi-rootfs/etc/shadow || grep -q '^pi:\*' /mnt/pi-rootfs/etc/shadow
+          if [ "$USE_DEBUGFS" = "true" ]; then
+            echo "--- File presence checks (via debugfs) ---"
+            check "babytracker binary exists" debugfs_exists /usr/local/bin/babytracker
+            check "firstboot.sh exists" debugfs_exists /usr/local/bin/babytracker-firstboot.sh
+            check "setup-wifi.sh exists" debugfs_exists /usr/local/bin/babytracker-setup-wifi.sh
+            check "babytracker.env exists" debugfs_exists /etc/babytracker/babytracker.env
+            check "babytracker.service exists" debugfs_exists /etc/systemd/system/babytracker.service
+            check "firstboot.service exists" debugfs_exists /etc/systemd/system/babytracker-firstboot.service
+            check "setup-ap.service exists" debugfs_exists /etc/systemd/system/babytracker-setup-ap.service
+            check "avahi service exists" debugfs_exists /etc/avahi/services/babytracker.service
+            check "hostapd.conf exists" debugfs_exists /etc/hostapd/hostapd.conf
+            check ".needs-setup flag exists" debugfs_exists /var/lib/babytracker/.needs-setup
+            check "common scripts installed" debugfs_exists /usr/lib/babytracker/common/setup-postgres.sh
+            check "postgresql installed" debugfs_exists /usr/bin/psql
+            check "hostapd installed" debugfs_exists /usr/sbin/hostapd
+            check "ufw installed" debugfs_exists /usr/sbin/ufw
+            check "avahi-daemon installed" debugfs_exists /usr/sbin/avahi-daemon
+            check "nmcli installed" debugfs_exists /usr/bin/nmcli
 
-          echo "--- Installed packages ---"
-          check "postgresql installed" test -f /mnt/pi-rootfs/usr/bin/psql
-          check "hostapd installed" test -f /mnt/pi-rootfs/usr/sbin/hostapd
-          check "ufw installed" test -f /mnt/pi-rootfs/usr/sbin/ufw
-          check "avahi-daemon installed" test -f /mnt/pi-rootfs/usr/sbin/avahi-daemon
-          check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
+            echo "--- System user (via debugfs) ---"
+            check "babytracker user exists" debugfs_cat /etc/passwd '|' grep -q '^babytracker:'
+          else
+            echo "--- File presence checks ---"
+            check "babytracker binary exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker
+            check "firstboot.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-firstboot.sh
+            check "setup-wifi.sh exists" test -f /mnt/pi-rootfs/usr/local/bin/babytracker-setup-wifi.sh
+            check "babytracker.env exists" test -f /mnt/pi-rootfs/etc/babytracker/babytracker.env
+            check "babytracker.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker.service
+            check "firstboot.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-firstboot.service
+            check "setup-ap.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-setup-ap.service
+            check "avahi service exists" test -f /mnt/pi-rootfs/etc/avahi/services/babytracker.service
+            check "hostapd.conf exists" test -f /mnt/pi-rootfs/etc/hostapd/hostapd.conf
+            check ".needs-setup flag exists" test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
+            check "common scripts installed" test -f /mnt/pi-rootfs/usr/lib/babytracker/common/setup-postgres.sh
 
-          echo "--- Permissions ---"
-          check "data dir owned by babytracker" stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker '|' grep -q 'babytracker:babytracker'
-          check "sudoers is 0440" stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker '|' grep -q '440'
+            echo "--- Binary checks ---"
+            check "binary is ARM aarch64 ELF" file /mnt/pi-rootfs/usr/local/bin/babytracker '|' grep -q 'ELF 64-bit.*ARM aarch64'
+            check "binary is executable" test -x /mnt/pi-rootfs/usr/local/bin/babytracker
+
+            echo "--- System user ---"
+            check "babytracker user exists" grep -q '^babytracker:' /mnt/pi-rootfs/etc/passwd
+            check "pi user locked" grep -q '^pi:!' /mnt/pi-rootfs/etc/shadow || grep -q '^pi:\*' /mnt/pi-rootfs/etc/shadow
+
+            echo "--- Installed packages ---"
+            check "postgresql installed" test -f /mnt/pi-rootfs/usr/bin/psql
+            check "hostapd installed" test -f /mnt/pi-rootfs/usr/sbin/hostapd
+            check "ufw installed" test -f /mnt/pi-rootfs/usr/sbin/ufw
+            check "avahi-daemon installed" test -f /mnt/pi-rootfs/usr/sbin/avahi-daemon
+            check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
+
+            echo "--- Permissions ---"
+            check "data dir owned by babytracker" stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker '|' grep -q 'babytracker:babytracker'
+            check "sudoers is 0440" stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker '|' grep -q '440'
+          fi
 
           echo ""
           echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 
           # Cleanup
-          sudo umount /mnt/pi-rootfs
+          if [ "$USE_DEBUGFS" = "false" ]; then
+            sudo umount /mnt/pi-rootfs
+          fi
           sudo losetup -d "$LOOP"
 
           if [ "$FAIL" -gt 0 ]; then
