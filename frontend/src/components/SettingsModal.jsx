@@ -1681,7 +1681,8 @@ function TLSSection() {
       <h4 className="settings-section-subtitle">TLS / HTTPS Certificate</h4>
       <p className="settings-hint">
         Get a valid TLS certificate from Let's Encrypt using DNS validation.
-        Works behind NAT — no port forwarding needed.
+        The certificate works on your local network without port forwarding.
+        For access from outside your network, forward port 443 on your router.
       </p>
 
       <FormField label="DNS Provider">
@@ -1739,17 +1740,23 @@ function TLSSection() {
               onChange={(e) => setManageA(e.target.checked)}
             />
             <label htmlFor="manage-a-record" style={{ fontSize: 13 }}>
-              Manage DNS A record (point domain to this server)
+              Update DNS A record automatically
             </label>
           </div>
+          {manageA && (
+            <p className="settings-hint" style={{ fontSize: 11, marginTop: 2 }}>
+              Sets the DNS A record to this server's IP. Uses LAN IP by default.
+              For external access, enter your public IP and forward port 443.
+            </p>
+          )}
 
           {manageA && (
-            <FormField label="IP address (leave empty to auto-detect)">
+            <FormField label="IP override (empty = auto-detect LAN IP)">
               <FormInput
                 type="text"
                 value={ip}
                 onChange={(e) => setIp(e.target.value)}
-                placeholder="Auto-detect LAN IP"
+                placeholder="Auto-detect"
               />
             </FormField>
           )}

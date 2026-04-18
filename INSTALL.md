@@ -199,6 +199,8 @@ All configuration is done through environment variables.
 | `TLS_DOMAIN` | (empty) | Domain for Let's Encrypt autocert |
 | `ACME_DNS_PROVIDER` | (empty) | DNS provider for DNS-01 challenge: `cloudflare`, `route53`, `duckdns`, `namecheap`, `simply` |
 | `ACME_EMAIL` | `admin@{TLS_DOMAIN}` | Email for Let's Encrypt account (expiry notifications) |
+| `ACME_MANAGE_A` | `true` | Automatically create/update the DNS A record for the domain |
+| `ACME_IP` | (auto-detect) | IP for the A record. Empty = server's LAN IP. Set to public IP for external access. |
 | `CERTS_DIR` | `{DATA_DIR}/certs` | Autocert cache directory |
 | `MEDIA_PATH` | (empty) | External photo directory (used with HA media) |
 | `BABYTRACKER_PROXY_URL` | (empty) | Proxy mode: forward all requests to this URL |
@@ -252,9 +254,19 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 
 A self-signed certificate is generated on first boot. Access BabyTracker at `https://babytracker.local`. Your browser will show a certificate warning -- accept it to proceed.
 
-### Let's Encrypt with DNS-01 (recommended for LAN)
+### Let's Encrypt with DNS-01 (recommended)
 
-Get a trusted certificate without port forwarding. BabyTracker uses DNS validation to prove domain ownership, so it works behind NAT on a private network.
+Get a valid TLS certificate using DNS validation. This works behind NAT on a private network — no port forwarding is needed for the certificate itself.
+
+BabyTracker will:
+1. Create/update a DNS **A record** pointing your domain to this server's IP (auto-detected or manually specified)
+2. Create a DNS **TXT record** for the ACME DNS-01 challenge
+3. Obtain and cache a Let's Encrypt certificate
+4. Renew it automatically 30 days before expiry
+
+**DNS A record behavior:** By default, BabyTracker sets the A record to your server's LAN IP. This means the domain resolves to your server on your local network — browsers on the same network can access it at `https://baby.example.com` with a valid certificate and no warnings.
+
+**External access:** If you want to access BabyTracker from outside your network, set `ACME_IP` to your **public** IP address (or use the Settings UI) and forward **port 443** on your router to the server. Without port forwarding, the domain will only work from within your LAN.
 
 Set `TLS_DOMAIN`, `ACME_DNS_PROVIDER`, and the provider's credentials:
 
@@ -302,7 +314,14 @@ SIMPLY_ACCOUNT_NAME=your-account
 SIMPLY_API_KEY=your-api-key
 ```
 
-Certificates are cached in `CERTS_DIR` and renewed automatically 30 days before expiry.
+**Additional options:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ACME_MANAGE_A` | `true` | Set to `false` to skip A record management (if you manage DNS records yourself) |
+| `ACME_IP` | (auto-detect) | IP address for the A record. Auto-detects LAN IP if empty. Set to your public IP for external access. |
+
+Certificates are cached in `CERTS_DIR` and renewed automatically 30 days before expiry. The server starts immediately with a self-signed certificate while the Let's Encrypt cert is obtained in the background — if ACME fails, the server stays up and you can fix the configuration in Settings.
 
 ### Let's Encrypt with HTTP-01
 
