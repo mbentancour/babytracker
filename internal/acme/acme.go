@@ -114,6 +114,8 @@ type Manager struct {
 	mu       sync.RWMutex
 	cert     *tls.Certificate
 	cancelFn context.CancelFunc // cancels the current renewal loop
+	status   string             // "idle", "obtaining", "active", "error"
+	lastErr  string             // last error message (if status == "error")
 }
 
 
@@ -206,6 +208,7 @@ func (m *Manager) Run() {
 
 	// Try loading a cached certificate (non-blocking best-effort)
 	if err := m.loadCached(); err == nil {
+		m.setStatus("active", "")
 		slog.Info("acme: loaded cached certificate", "domain", m.cfg.Domain)
 	} else {
 		slog.Info("acme: no cached certificate, will obtain in background", "domain", m.cfg.Domain)
@@ -224,6 +227,23 @@ func (m *Manager) HasCert() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cert != nil
+}
+
+// Status returns the current ACME status and last error (if any).
+func (m *Manager) Status() (status string, lastErr string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.status == "" {
+		return "idle", ""
+	}
+	return m.status, m.lastErr
+}
+
+func (m *Manager) setStatus(status, errMsg string) {
+	m.mu.Lock()
+	m.status = status
+	m.lastErr = errMsg
+	m.mu.Unlock()
 }
 
 // Reconfigure updates the ACME configuration and restarts the background
@@ -297,8 +317,10 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 			}
 
 			// No certificate — try to obtain one
+			m.setStatus("obtaining", "")
 			slog.Info("acme: obtaining certificate", "domain", m.cfg.Domain, "provider", m.cfg.Provider)
 			if err := m.obtain(); err != nil {
+				m.setStatus("error", err.Error())
 				slog.Error("acme: failed to obtain certificate, will retry",
 					"error", err, "retry_in", retryDelay)
 				select {
@@ -310,6 +332,7 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 				retryDelay = min(retryDelay*2, time.Hour)
 				continue
 			}
+			m.setStatus("active", "")
 			slog.Info("acme: certificate obtained", "domain", m.cfg.Domain)
 			retryDelay = 5 * time.Minute // reset on success
 			continue                     // re-enter loop to check expiry
@@ -349,8 +372,10 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 			}
 		}
 
+		m.setStatus("obtaining", "")
 		slog.Info("acme: renewing certificate", "domain", m.cfg.Domain)
 		if err := m.obtain(); err != nil {
+			m.setStatus("error", err.Error())
 			slog.Error("acme: renewal failed, retrying in 1 hour", "error", err)
 			select {
 			case <-ctx.Done():
@@ -358,6 +383,7 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 			case <-time.After(time.Hour):
 			}
 		} else {
+			m.setStatus("active", "")
 			slog.Info("acme: certificate renewed", "domain", m.cfg.Domain)
 		}
 	}

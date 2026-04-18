@@ -1646,11 +1646,13 @@ function TLSSection() {
   const [manageA, setManageA] = useState(true);
   const [ip, setIp] = useState("");
   const [certInfo, setCertInfo] = useState(null);
+  const [acmeStatus, setAcmeStatus] = useState("unconfigured");
+  const [acmeError, setAcmeError] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const loadTLS = () => {
     api.getTLS()
       .then((data) => {
         setProvider(data.provider || "");
@@ -1659,11 +1661,22 @@ function TLSSection() {
         setCredentialsSet(data.credentials_set || false);
         setManageA(data.manage_a !== false);
         setIp(data.ip || "");
-        if (data.certificate) setCertInfo(data.certificate);
+        setCertInfo(data.certificate || null);
+        setAcmeStatus(data.acme_status || "unconfigured");
+        setAcmeError(data.acme_error || "");
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-  }, []);
+  };
+
+  useEffect(() => {
+    loadTLS();
+    // Poll while ACME is obtaining a cert
+    const interval = setInterval(() => {
+      if (acmeStatus === "obtaining") loadTLS();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [acmeStatus]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1780,13 +1793,6 @@ function TLSSection() {
             </FormField>
           )}
 
-          {certInfo && (
-            <div className="settings-hint" style={{ color: "#00b894", marginTop: 8 }}>
-              ✓ Certificate valid until {new Date(certInfo.expires).toLocaleDateString()}
-              {certInfo.issuer && ` (${certInfo.issuer})`}
-            </div>
-          )}
-
           {message && (
             <p className="settings-hint" style={{ color: message.type === "success" ? "#00b894" : "#e74c3c" }}>
               {message.text}
@@ -1794,10 +1800,44 @@ function TLSSection() {
           )}
 
           <FormButton color="#6C5CE7" disabled={saving || !domain.trim()} onClick={handleSave}>
-            {saving ? "Obtaining certificate..." : certInfo ? "Update Certificate" : "Save & Obtain Certificate"}
+            {saving ? "Saving..." : certInfo ? "Update Certificate" : "Save & Obtain Certificate"}
           </FormButton>
         </>
       )}
+
+      {/* Certificate status — always shown */}
+      <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 8, background: "var(--card-bg)", border: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
+          Certificate Status
+        </div>
+        {certInfo ? (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ color: "#00b894", marginBottom: 4 }}>
+              Valid until {new Date(certInfo.expires).toLocaleDateString()}
+              {certInfo.issuer ? ` — issued by ${certInfo.issuer}` : " — self-signed"}
+            </div>
+            {certInfo.issuer && (
+              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                Renewed automatically 30 days before expiry.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+            Using self-signed certificate.
+          </div>
+        )}
+        {acmeStatus === "obtaining" && (
+          <div style={{ fontSize: 12, color: "#f39c12", marginTop: 6 }}>
+            Obtaining Let's Encrypt certificate...
+          </div>
+        )}
+        {acmeStatus === "error" && acmeError && (
+          <div style={{ fontSize: 12, color: "#e74c3c", marginTop: 6 }}>
+            ACME error: {acmeError}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -55,11 +55,18 @@ func (h *TLSHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"ip":              cfg.IP,
 	}
 
-	// Add current certificate info if available
+	// ACME status and certificate info
 	if h.mgr != nil {
+		status, lastErr := h.mgr.Status()
+		resp["acme_status"] = status
+		if lastErr != "" {
+			resp["acme_error"] = lastErr
+		}
 		if info := h.mgr.CertInfo(); info != nil {
 			resp["certificate"] = info
 		}
+	} else {
+		resp["acme_status"] = "unconfigured"
 	}
 
 	pagination.WriteJSON(w, http.StatusOK, resp)
