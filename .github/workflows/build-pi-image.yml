@@ -79,7 +79,7 @@ jobs:
       - name: Inspect output
         run: |
           echo "=== All candidate files in work dir ==="
-          find /tmp/rpi-image-gen/work -type f \( -name '*.img*' -o -name '*.zst' -o -name '*.xz' -o -name '*.ext4' -o -name '*.vfat' \) -printf '%10s\t%p\n' | sort -rn
+          sudo find /tmp/rpi-image-gen/work -type f \( -name '*.img*' -o -name '*.zst' -o -name '*.xz' -o -name '*.ext4' -o -name '*.vfat' \) -printf '%10s\t%p\n' 2>/dev/null | sort -rn
           echo
           echo "=== Image output dir ==="
           ls -lah /tmp/rpi-image-gen/work/image-babytracker/ 2>/dev/null || echo "(no image dir)"
