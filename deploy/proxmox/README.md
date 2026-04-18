@@ -71,7 +71,7 @@ pct exec <vmid> -- journalctl -u babytracker-firstboot -f
 pct exec <vmid> -- systemctl status babytracker
 
 # Access the app
-pct exec <vmid> -- curl -k https://localhost:8099
+pct exec <vmid> -- curl -k https://localhost
 ```
 
 ## VM (Packer)
@@ -125,4 +125,4 @@ qm start <new-id>
 ```
 
 The VM's first boot initializes PostgreSQL, generates a TLS cert, and starts BabyTracker.
-Access at `https://<vm-ip>:8099`.
+Access at `https://<vm-ip>`.

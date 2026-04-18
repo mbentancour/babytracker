@@ -7,8 +7,7 @@ echo "[setup-ufw] Configuring production firewall..."
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow 8099/tcp comment "BabyTracker HTTPS"
-ufw allow 443/tcp comment "BabyTracker ACME"
+ufw allow 443/tcp comment "BabyTracker HTTPS"
 ufw --force enable
 
 echo "[setup-ufw] Firewall configured."

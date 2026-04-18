@@ -57,7 +57,7 @@ func New() *Config {
 	warnIfInsecureDatabaseURL(databaseURL)
 
 	return &Config{
-		Port:            envOrDefault("PORT", "8099"),
+		Port:            envOrDefault("PORT", "443"),
 		DataDir:         dataDir,
 		DatabaseURL:     databaseURL,
 		JWTSecret:       jwtSecret,

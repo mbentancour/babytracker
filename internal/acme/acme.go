@@ -24,6 +24,7 @@ import (
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/duckdns"
@@ -304,7 +305,11 @@ func (m *Manager) newClient() (*lego.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create DNS provider: %w", err)
 	}
-	if err := client.Challenge.SetDNS01Provider(provider); err != nil {
+	// Use public DNS servers for propagation checks instead of the local
+	// resolver, which often caches negative responses and causes timeouts.
+	if err := client.Challenge.SetDNS01Provider(provider,
+		dns01.AddRecursiveNameservers([]string{"1.1.1.1:53", "8.8.8.8:53"}),
+	); err != nil {
 		return nil, fmt.Errorf("set DNS provider: %w", err)
 	}
 

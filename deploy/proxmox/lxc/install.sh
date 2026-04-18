@@ -82,9 +82,9 @@ echo ""
 echo "=== BabyTracker is running ==="
 echo "  Container ID: ${VMID}"
 if [ -n "${IP}" ]; then
-    echo "  URL:          https://${IP}:8099"
+    echo "  URL:          https://${IP}"
 else
-    echo "  URL:          https://<container-ip>:8099"
+    echo "  URL:          https://<container-ip>"
     echo "  (Could not detect IP — check: pct exec ${VMID} -- cat /proc/net/fib_trie)"
 fi
 

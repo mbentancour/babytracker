@@ -51,8 +51,8 @@ echo "Configuring firewall..."
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow 8099/tcp comment "BabyTracker HTTPS"
-ufw allow 443/tcp comment "BabyTracker Let's Encrypt"
+ufw allow 443/tcp comment "BabyTracker HTTPS"
+ufw allow 80/tcp comment "BabyTracker HTTP redirect"
 ufw --force enable
 
 echo "=== Setup complete ==="

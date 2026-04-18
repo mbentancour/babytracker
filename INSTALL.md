@@ -13,7 +13,7 @@ The simplest way to run BabyTracker. Download a pre-built image, flash it, and g
 3. Insert the SD card into your Pi and power it on.
 4. On your phone, connect to the **BabyTracker-Setup** Wi-Fi hotspot.
 5. Follow the setup wizard to connect the Pi to your home Wi-Fi network.
-6. Once connected, visit **https://babytracker.local:8099** in your browser to create your account.
+6. Once connected, visit **https://babytracker.local** in your browser to create your account.
 
 ### Notes
 
@@ -56,7 +56,7 @@ Use this if you already have BabyTracker running elsewhere and want HA ingress a
 
 1. Install the BabyTracker add-on as above.
 2. In the add-on configuration, set `mode` to `external`.
-3. Set `external_url` to your existing BabyTracker instance URL (e.g., `https://192.168.1.50:8099`).
+3. Set `external_url` to your existing BabyTracker instance URL (e.g., `https://192.168.1.50`).
 4. Start the add-on. It proxies all requests to your external instance.
 
 ### Home Assistant integration (sensors, events, services)
@@ -128,7 +128,7 @@ docker compose -f deploy/docker/docker-compose.yml up -d
 
 This starts two containers: the BabyTracker app and PostgreSQL 18.
 
-- Default port: **8099**
+- Default port: **443** (HTTPS)
 - Database data persisted in the `pgdata` volume.
 
 To set a JWT secret (recommended for production):
@@ -178,7 +178,7 @@ createdb babytracker
 DATABASE_URL="postgres://localhost/babytracker?sslmode=disable" ./babytracker
 ```
 
-BabyTracker will be available at `http://localhost:8099`.
+BabyTracker will be available at `https://localhost`.
 
 ---
 
@@ -188,7 +188,7 @@ All configuration is done through environment variables.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8099` | HTTP listen port |
+| `PORT` | `443` | HTTPS listen port |
 | `DATA_DIR` | `/var/lib/babytracker` | Directory for photos, backups, and JWT secret |
 | `DATABASE_URL` | `postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=disable` | PostgreSQL connection string |
 | `JWT_SECRET` | (auto-generated) | Session signing key. If not set, auto-created and persisted in `DATA_DIR/.jwt_secret` |
@@ -250,7 +250,7 @@ Backups are configured per-destination from **Settings > Data > Backup destinati
 
 ### Self-signed (default on Pi image)
 
-A self-signed certificate is generated on first boot. Access BabyTracker at `https://babytracker.local:8099`. Your browser will show a certificate warning -- accept it to proceed.
+A self-signed certificate is generated on first boot. Access BabyTracker at `https://babytracker.local`. Your browser will show a certificate warning -- accept it to proceed.
 
 ### Let's Encrypt with DNS-01 (recommended for LAN)
 

@@ -40,7 +40,7 @@ cd babytracker
 docker compose -f deploy/docker/docker-compose.yml up
 ```
 
-Then visit [http://localhost:8099](http://localhost:8099).
+Then visit [https://localhost](https://localhost).
 
 ## Installation
 

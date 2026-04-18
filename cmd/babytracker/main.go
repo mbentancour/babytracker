@@ -156,18 +156,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Additional listeners based on mode
-	var httpSrv *http.Server
-	var autocertSrv *http.Server
-
-	// Determine main server config: when DNS-01 ACME is active, serve on :443
-	// with the ACME cert as the primary listener (no separate :8099).
-	var acmeMgr *btacme.Manager
-	if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
-		acmeMgr, _ = cfg.ACMEManager.(*btacme.Manager)
-	}
-
 	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       5 * time.Minute,
@@ -176,59 +166,88 @@ func main() {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	if acmeMgr != nil {
-		// DNS-01 ACME: serve on :443 with the managed certificate
+	// Determine TLS mode for the main server:
+	//   1. DNS-01 ACME (managed cert from Let's Encrypt)
+	//   2. HTTP-01 ACME (autocert, needs port 443 reachable from internet)
+	//   3. Self-signed or manual cert files (TLS_CERT + TLS_KEY)
+	//   4. Plain HTTP (no TLS)
+	var httpSrv *http.Server // secondary listener (:80 redirect or captive portal)
+	var acmeMgr *btacme.Manager
+
+	if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
+		// DNS-01: obtain cert, serve with it on :PORT (default 443)
+		acmeMgr, _ = cfg.ACMEManager.(*btacme.Manager)
+		if acmeMgr == nil {
+			slog.Error("ACME manager not initialized")
+			os.Exit(1)
+		}
 		if err := acmeMgr.Run(); err != nil {
 			slog.Error("failed to obtain certificate via DNS-01", "error", err)
 			os.Exit(1)
 		}
-		srv.Addr = ":443"
 		srv.TLSConfig = acmeMgr.TLSConfig()
 		go func() {
-			slog.Info("starting HTTPS server (DNS-01 cert)", "domain", tlsDomain, "provider", cfg.ACMEDNSProvider, "port", 443)
+			slog.Info("starting HTTPS server (DNS-01)", "domain", tlsDomain, "port", cfg.Port)
 			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 				slog.Error("server error", "error", err)
 				os.Exit(1)
 			}
 		}()
-
-		// HTTP :80 redirects to HTTPS
+	} else if tlsDomain != "" {
+		// HTTP-01: autocert on :PORT (default 443)
+		os.MkdirAll(cfg.CertsDir, 0700)
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(tlsDomain),
+			Cache:      autocert.DirCache(cfg.CertsDir),
+		}
+		srv.TLSConfig = &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+		}
+		go func() {
+			slog.Info("starting HTTPS server (HTTP-01)", "domain", tlsDomain, "port", cfg.Port)
+			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
+			}
+		}()
+		// :80 handles ACME HTTP-01 challenges + redirects
 		httpSrv = &http.Server{
 			Addr:              ":80",
-			Handler:           http.HandlerFunc(httpToHTTPSRedirect(tlsDomain)),
+			Handler:           certManager.HTTPHandler(http.HandlerFunc(httpToHTTPSRedirect(tlsDomain))),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       30 * time.Second,
 			WriteTimeout:      30 * time.Second,
 		}
 		go func() {
-			slog.Info("starting HTTP->HTTPS redirect", "port", 80)
+			slog.Info("starting HTTP-01 challenge + redirect listener", "port", 80)
 			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				slog.Warn("HTTP redirect listener error", "error", err)
+				slog.Warn("HTTP listener error", "error", err)
+			}
+		}()
+	} else if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		// Self-signed or manual cert
+		go func() {
+			slog.Info("starting HTTPS server", "port", cfg.Port)
+			if err := srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
 			}
 		}()
 	} else {
-		// No ACME: serve on the configured port (default :8099)
-		srv.Addr = ":" + cfg.Port
-		useTLS := cfg.TLSCert != "" && cfg.TLSKey != ""
+		// Plain HTTP
 		go func() {
-			if useTLS {
-				slog.Info("starting HTTPS server", "port", cfg.Port)
-				if err := srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
-					slog.Error("server error", "error", err)
-					os.Exit(1)
-				}
-			} else {
-				slog.Info("starting HTTP server", "port", cfg.Port)
-				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					slog.Error("server error", "error", err)
-					os.Exit(1)
-				}
+			slog.Info("starting HTTP server", "port", cfg.Port)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("server error", "error", err)
+				os.Exit(1)
 			}
 		}()
 	}
 
+	// Setup mode: captive portal on :80
 	if cfg.SetupMode {
-		// In setup mode, listen on port 80 for captive portal (HTTP, no redirect)
 		httpSrv = &http.Server{
 			Addr:              ":80",
 			Handler:           handler,
@@ -242,48 +261,6 @@ func main() {
 				slog.Warn("captive portal listener error", "error", err)
 			}
 		}()
-	} else if tlsDomain != "" && acmeMgr == nil {
-		// HTTP-01 challenge via autocert — requires port 443 reachable from the internet.
-		os.MkdirAll(cfg.CertsDir, 0700)
-		certManager := autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(tlsDomain),
-			Cache:      autocert.DirCache(cfg.CertsDir),
-		}
-
-		autocertSrv = &http.Server{
-			Addr:    ":443",
-			Handler: handler,
-			TLSConfig: &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-				MinVersion:     tls.VersionTLS12,
-			},
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       5 * time.Minute,
-			WriteTimeout:      5 * time.Minute,
-			IdleTimeout:       120 * time.Second,
-		}
-		go func() {
-			slog.Info("starting Let's Encrypt HTTPS server (HTTP-01)", "domain", tlsDomain, "port", 443)
-			if err := autocertSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				slog.Error("autocert server error", "error", err)
-			}
-		}()
-
-		// HTTP :80 handles ACME challenges and redirects everything else to HTTPS
-		httpSrv = &http.Server{
-			Addr:              ":80",
-			Handler:           certManager.HTTPHandler(http.HandlerFunc(httpToHTTPSRedirect(tlsDomain))),
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      30 * time.Second,
-		}
-		go func() {
-			slog.Info("starting HTTP->HTTPS redirect + ACME listener", "port", 80)
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				slog.Warn("HTTP redirect listener error", "error", err)
-			}
-		}()
 	}
 
 	<-ctx.Done()
@@ -294,9 +271,6 @@ func main() {
 
 	if httpSrv != nil {
 		httpSrv.Shutdown(shutdownCtx)
-	}
-	if autocertSrv != nil {
-		autocertSrv.Shutdown(shutdownCtx)
 	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)

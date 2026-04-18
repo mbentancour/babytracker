@@ -41,7 +41,7 @@ if ! ufw status | grep -q "Status: active"; then
     ufw allow 53/udp comment "DNS captive portal"
     ufw allow 67/udp comment "DHCP captive portal"
     ufw allow 80/tcp comment "HTTP captive portal"
-    ufw allow 8099/tcp comment "BabyTracker HTTPS"
+    ufw allow 443/tcp comment "BabyTracker HTTPS"
     ufw allow 443/tcp comment "BabyTracker ACME"
     ufw --force enable
 fi
