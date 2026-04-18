@@ -17,12 +17,15 @@ const UNIT_OPTIONS = [
 ];
 
 const NAV_ITEMS = [
-  { id: "general", label: "settings.general", icon: <Icons.Settings /> },
+  { id: "appearance", label: "settings.appearance", icon: <Icons.Settings /> },
+  { id: "pictureframe", label: "settings.pictureFrame", icon: <Icons.Sun /> },
   { id: "features", label: "settings.features", icon: <Icons.Activity /> },
   { id: "defaults", label: "settings.defaults", icon: <Icons.Clock /> },
   { id: "data", label: "settings.data", icon: <Icons.Download /> },
   { id: "integrations", label: "settings.integrations", icon: <Icons.Link /> },
-  { id: "users", label: "settings.users", icon: <Icons.Baby /> },
+  { id: "server", label: "settings.server", icon: <Icons.Link />, adminOnly: true },
+  { id: "account", label: "settings.account", icon: <Icons.Logout /> },
+  { id: "users", label: "settings.users", icon: <Icons.Baby />, adminOnly: true },
 ];
 
 // formatBackupDate renders the backup list's `date` field. The backend emits
@@ -38,7 +41,7 @@ function formatBackupDate(raw) {
 
 export default function SettingsModal({ childId, unitSystem, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
   const { t, locale, setLocale } = useI18n();
-  const [section, setSection] = useState("general");
+  const [section, setSection] = useState("appearance");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
   const { prefs, setFeatureEnabled, setFormDefault, setPref } = usePreferences();
@@ -70,7 +73,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
         <div className="settings-body">
           {/* Sidebar navigation */}
           <nav className="settings-nav">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
               <button
                 key={item.id}
                 className={`settings-nav-item ${section === item.id ? "settings-nav-active" : ""}`}
@@ -84,10 +87,10 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
           {/* Content */}
           <div className="settings-content">
-            {/* General */}
-            {section === "general" && (
+            {/* Appearance */}
+            {section === "appearance" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.general")}</h3>
+                <h3 className="settings-section-title">{t("settings.appearance")}</h3>
 
                 <div className="settings-card">
                   <FormField label={t("settings.unitSystem")}>
@@ -120,6 +123,13 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     />
                   </FormField>
                 </div>
+              </div>
+            )}
+
+            {/* Picture Frame */}
+            {section === "pictureframe" && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.pictureFrame")}</h3>
 
                 <div className="settings-card">
                   <FormField label={t("settings.pictureFrame")}>
@@ -260,7 +270,19 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </div>
                 </div>
 
-                <div className="settings-card">
+              </div>
+            )}
+
+            {/* Server (admin only) */}
+            {section === "server" && isAdmin && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.server")}</h3>
+
+                <TLSSection />
+
+                {applianceMode && <DomainSection />}
+
+                <div className="settings-card" style={{ marginTop: 16 }}>
                   <FormField label={t("settings.deviceName")}>
                     <FormInput
                       type="text"
@@ -279,20 +301,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </p>
                 </div>
 
-                {onLogout && applianceMode && <DomainSection />}
-
-                {onLogout && <TLSSection />}
-
-                {onLogout && <ChangePasswordSection />}
-
-                {onLogout && (
-                  <button onClick={onLogout} className="settings-signout">
-                    <Icons.Logout />
-                    {t("settings.signOut")}
-                  </button>
-                )}
-
-                {onLogout && applianceMode && (
+                {applianceMode && (
                   <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
                     <button
                       className="settings-system-btn"
@@ -315,6 +324,22 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       {t("settings.shutdown")}
                     </button>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Account */}
+            {section === "account" && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.account")}</h3>
+
+                {onLogout && <ChangePasswordSection />}
+
+                {onLogout && (
+                  <button onClick={onLogout} className="settings-signout">
+                    <Icons.Logout />
+                    {t("settings.signOut")}
+                  </button>
                 )}
               </div>
             )}
