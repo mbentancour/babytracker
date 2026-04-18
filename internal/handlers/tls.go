@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -142,15 +141,7 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if h.mgr != nil {
-			if err := h.mgr.Reconfigure(acmeCfg); err != nil {
-				slog.Error("TLS config saved but certificate failed", "error", err)
-				pagination.WriteJSON(w, http.StatusOK, map[string]any{
-					"saved":   true,
-					"error":   err.Error(),
-					"message": "Configuration saved but certificate issuance failed. Check your DNS provider credentials.",
-				})
-				return
-			}
+			h.mgr.Reconfigure(acmeCfg)
 		} else {
 			// ACME manager wasn't started at boot — create and start one
 			mgr, err := btacme.NewManager(acmeCfg)
@@ -162,20 +153,13 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
-			if err := mgr.Run(); err != nil {
-				pagination.WriteJSON(w, http.StatusOK, map[string]any{
-					"saved":   true,
-					"error":   err.Error(),
-					"message": "Configuration saved but certificate issuance failed.",
-				})
-				return
-			}
+			mgr.Run()
 			h.mgr = mgr
 		}
 
 		resp := map[string]any{
 			"saved":   true,
-			"message": "TLS certificate obtained successfully.",
+			"message": "Configuration saved. Certificate will be obtained in the background.",
 		}
 		if info := h.mgr.CertInfo(); info != nil {
 			resp["certificate"] = info

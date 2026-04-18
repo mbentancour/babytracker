@@ -144,39 +144,47 @@ func (m *Manager) CertInfo() *CertInfo {
 	}
 }
 
-// Run obtains a certificate (or loads a cached one) and starts a background
-// goroutine that renews it before expiry. This method blocks until the initial
-// certificate is ready, then returns.
-func (m *Manager) Run() error {
+// Run starts the certificate lifecycle. It never blocks and never fails:
+//   - If a cached certificate exists on disk, it's loaded immediately.
+//   - A background goroutine obtains a new cert (if needed) and handles renewals.
+//   - The managed TLSConfig serves whatever cert is currently available.
+//
+// The server can start immediately with a self-signed cert as fallback;
+// once the ACME cert is ready, it's swapped in via GetCertificate.
+func (m *Manager) Run() {
 	os.MkdirAll(m.cfg.CertsDir, 0700)
 
-	// Try loading a cached certificate first
+	// Try loading a cached certificate (non-blocking best-effort)
 	if err := m.loadCached(); err == nil {
 		slog.Info("acme: loaded cached certificate", "domain", m.cfg.Domain)
 	} else {
-		slog.Info("acme: no cached certificate, obtaining new one", "domain", m.cfg.Domain)
-		if err := m.obtain(); err != nil {
-			return fmt.Errorf("acme: failed to obtain certificate: %w", err)
-		}
+		slog.Info("acme: no cached certificate, will obtain in background", "domain", m.cfg.Domain)
 	}
 
-	// Start cancellable renewal loop
+	// Start background obtain + renewal loop
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
 	m.cancelFn = cancel
 	m.mu.Unlock()
-	go m.renewLoop(ctx)
-	return nil
+	go m.obtainAndRenewLoop(ctx)
 }
 
-// Reconfigure updates the ACME configuration, obtains a new certificate, and
-// restarts the renewal loop. Called when the user changes TLS settings via the UI.
-func (m *Manager) Reconfigure(cfg Config) error {
+// HasCert returns true if the manager has a certificate loaded (cached or newly obtained).
+func (m *Manager) HasCert() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cert != nil
+}
+
+// Reconfigure updates the ACME configuration and restarts the background
+// obtain/renewal loop. Called when the user changes TLS settings via the UI.
+// The new certificate is obtained in the background — this method returns immediately.
+func (m *Manager) Reconfigure(cfg Config) {
 	if cfg.Email == "" {
 		cfg.Email = "admin@" + cfg.Domain
 	}
 
-	// Stop existing renewal loop
+	// Stop existing loop
 	m.mu.Lock()
 	if m.cancelFn != nil {
 		m.cancelFn()
@@ -188,19 +196,13 @@ func (m *Manager) Reconfigure(cfg Config) error {
 	os.MkdirAll(cfg.CertsDir, 0700)
 
 	slog.Info("acme: reconfiguring", "domain", cfg.Domain, "provider", cfg.Provider)
-	if err := m.obtain(); err != nil {
-		return fmt.Errorf("acme: failed to obtain certificate: %w", err)
-	}
 
-	// Start new renewal loop
+	// Start new background loop (will obtain + renew)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
 	m.cancelFn = cancel
 	m.mu.Unlock()
-	go m.renewLoop(ctx)
-
-	slog.Info("acme: reconfigured successfully", "domain", cfg.Domain)
-	return nil
+	go m.obtainAndRenewLoop(ctx)
 }
 
 func (m *Manager) obtain() error {
@@ -224,22 +226,39 @@ func (m *Manager) obtain() error {
 	return m.loadCached()
 }
 
-func (m *Manager) renewLoop(ctx context.Context) {
+// obtainAndRenewLoop runs in the background. It obtains a certificate if none
+// is loaded, then sleeps until renewal is needed. Failures are retried with
+// increasing backoff. The server keeps running with whatever cert it has
+// (self-signed or previous ACME cert) while this loop works.
+func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
+	retryDelay := 5 * time.Minute
+
 	for {
 		m.mu.RLock()
 		cert := m.cert
 		m.mu.RUnlock()
 
 		if cert == nil {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Minute):
+			// No certificate — try to obtain one
+			slog.Info("acme: obtaining certificate", "domain", m.cfg.Domain, "provider", m.cfg.Provider)
+			if err := m.obtain(); err != nil {
+				slog.Error("acme: failed to obtain certificate, will retry",
+					"error", err, "retry_in", retryDelay)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(retryDelay):
+				}
+				// Back off: 5m → 10m → 20m → ... capped at 1h
+				retryDelay = min(retryDelay*2, time.Hour)
 				continue
 			}
+			slog.Info("acme: certificate obtained", "domain", m.cfg.Domain)
+			retryDelay = 5 * time.Minute // reset on success
+			continue                     // re-enter loop to check expiry
 		}
 
-		// Parse the leaf certificate to check expiry
+		// Certificate loaded — figure out when to renew
 		leaf := cert.Leaf
 		if leaf == nil && len(cert.Certificate) > 0 {
 			parsed, err := x509.ParseCertificate(cert.Certificate[0])
@@ -261,7 +280,7 @@ func (m *Manager) renewLoop(ctx context.Context) {
 		renewAt := leaf.NotAfter.Add(-30 * 24 * time.Hour)
 		sleepDur := time.Until(renewAt)
 		if sleepDur > 0 {
-			slog.Info("acme: certificate valid, next renewal check",
+			slog.Info("acme: certificate valid, next renewal",
 				"domain", m.cfg.Domain,
 				"expires", leaf.NotAfter,
 				"renew_at", renewAt,
