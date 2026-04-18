@@ -17,13 +17,10 @@ const UNIT_OPTIONS = [
 ];
 
 const NAV_ITEMS = [
-  { id: "appearance", label: "settings.appearance", icon: <Icons.Settings /> },
-  { id: "pictureframe", label: "settings.pictureFrame", icon: <Icons.Sun /> },
-  { id: "features", label: "settings.features", icon: <Icons.Activity /> },
-  { id: "defaults", label: "settings.defaults", icon: <Icons.Clock /> },
+  { id: "preferences", label: "settings.preferences", icon: <Icons.Settings /> },
   { id: "data", label: "settings.data", icon: <Icons.Download /> },
   { id: "integrations", label: "settings.integrations", icon: <Icons.Link /> },
-  { id: "server", label: "settings.server", icon: <Icons.Link />, adminOnly: true },
+  { id: "server", label: "settings.server", icon: <Icons.Activity />, adminOnly: true },
   { id: "account", label: "settings.account", icon: <Icons.Logout /> },
   { id: "users", label: "settings.users", icon: <Icons.Baby />, adminOnly: true },
 ];
@@ -41,7 +38,7 @@ function formatBackupDate(raw) {
 
 export default function SettingsModal({ childId, unitSystem, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
   const { t, locale, setLocale } = useI18n();
-  const [section, setSection] = useState("appearance");
+  const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
   const { prefs, setFeatureEnabled, setFormDefault, setPref } = usePreferences();
@@ -100,10 +97,13 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
           {/* Content */}
           <div className="settings-content">
-            {/* Appearance */}
-            {section === "appearance" && (
+            {/* Device Preferences */}
+            {section === "preferences" && (
               <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.appearance")}</h3>
+                <h3 className="settings-section-title">{t("settings.preferences")}</h3>
+                <p className="settings-hint" style={{ marginBottom: 16 }}>
+                  {t("settings.preferencesHint")}
+                </p>
 
                 <div className="settings-card">
                   <FormField label={t("settings.unitSystem")}>
@@ -135,9 +135,6 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       onChange={(e) => setLocale(e.target.value)}
                     />
                   </FormField>
-                </div>
-
-                <div className="settings-card">
                   <FormField label={t("settings.deviceName")}>
                     <FormInput
                       type="text"
@@ -155,13 +152,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     {t("settings.deviceNameHint")}
                   </p>
                 </div>
-              </div>
-            )}
 
-            {/* Picture Frame */}
-            {section === "pictureframe" && (
-              <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.pictureFrame")}</h3>
+                <h4 className="settings-section-subtitle" style={{ marginTop: 20 }}>{t("settings.pictureFrame")}</h4>
 
                 <div className="settings-card">
                   <FormField label={t("settings.pictureFrame")}>
@@ -302,66 +294,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </div>
                 </div>
 
-              </div>
-            )}
-
-            {/* Server (admin only) */}
-            {section === "server" && isAdmin && (
-              <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.server")}</h3>
-
-                <TLSSection />
-
-                {applianceMode && <DomainSection />}
-
-                {applianceMode && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-                    <button
-                      className="settings-system-btn"
-                      onClick={() => {
-                        if (confirm(t("settings.restartConfirm"))) {
-                          api.restartSystem().catch(() => {});
-                        }
-                      }}
-                    >
-                      {t("settings.restart")}
-                    </button>
-                    <button
-                      className="settings-system-btn settings-system-btn-danger"
-                      onClick={() => {
-                        if (confirm(t("settings.shutdownConfirm"))) {
-                          api.shutdownSystem().catch(() => {});
-                        }
-                      }}
-                    >
-                      {t("settings.shutdown")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Account */}
-            {section === "account" && (
-              <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.account")}</h3>
-
-                {onLogout && <ChangePasswordSection />}
-
-                {onLogout && (
-                  <button onClick={onLogout} className="settings-signout">
-                    <Icons.Logout />
-                    {t("settings.signOut")}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Features */}
-            {section === "features" && (
-              <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.features")}</h3>
-                <p className="settings-hint" style={{ marginBottom: 16 }}>
+                <h4 className="settings-section-subtitle" style={{ marginTop: 20 }}>{t("settings.features")}</h4>
+                <p className="settings-hint" style={{ marginBottom: 8 }}>
                   {t("settings.featuresHint")}
                 </p>
                 <div className="settings-card">
@@ -384,14 +318,9 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     </label>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {/* Defaults */}
-            {section === "defaults" && (
-              <div className="settings-section">
-                <h3 className="settings-section-title">{t("settings.defaults")}</h3>
-                <p className="settings-hint" style={{ marginBottom: 16 }}>
+                <h4 className="settings-section-subtitle" style={{ marginTop: 20 }}>{t("settings.defaults")}</h4>
+                <p className="settings-hint" style={{ marginBottom: 8 }}>
                   {t("settings.defaultsHint")}
                 </p>
 
@@ -465,6 +394,58 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                     />
                   </label>
                 </div>
+              </div>
+            )}
+
+            {/* Server (admin only) */}
+            {section === "server" && isAdmin && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.server")}</h3>
+
+                <TLSSection />
+
+                {applianceMode && <DomainSection />}
+
+                {applianceMode && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                    <button
+                      className="settings-system-btn"
+                      onClick={() => {
+                        if (confirm(t("settings.restartConfirm"))) {
+                          api.restartSystem().catch(() => {});
+                        }
+                      }}
+                    >
+                      {t("settings.restart")}
+                    </button>
+                    <button
+                      className="settings-system-btn settings-system-btn-danger"
+                      onClick={() => {
+                        if (confirm(t("settings.shutdownConfirm"))) {
+                          api.shutdownSystem().catch(() => {});
+                        }
+                      }}
+                    >
+                      {t("settings.shutdown")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Account */}
+            {section === "account" && (
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t("settings.account")}</h3>
+
+                {onLogout && <ChangePasswordSection />}
+
+                {onLogout && (
+                  <button onClick={onLogout} className="settings-signout">
+                    <Icons.Logout />
+                    {t("settings.signOut")}
+                  </button>
+                )}
               </div>
             )}
 
