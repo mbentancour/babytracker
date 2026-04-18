@@ -132,16 +132,19 @@ func main() {
 			}
 		}
 
-		// Pre-create ACME manager (if DNS-01 configured) so the TLS handler can use it
-		if cfg.TLSDomain != "" && cfg.ACMEDNSProvider != "" {
-			mgr, err := btacme.NewManager(btacme.Config{
-				Domain:   cfg.TLSDomain,
-				Email:    cfg.ACMEEmail,
-				Provider: cfg.ACMEDNSProvider,
-				CertsDir: cfg.CertsDir,
-				ManageA:  cfg.ACMEManageA,
-				IP:       cfg.ACMEIP,
-			})
+		// Always create an ACME manager so the TLS handler and Settings UI
+		// can configure/reconfigure it at runtime. If DNS-01 config exists,
+		// it will start obtaining a cert in the background.
+		acmeCfg := btacme.Config{
+			Domain:   cfg.TLSDomain,
+			Email:    cfg.ACMEEmail,
+			Provider: cfg.ACMEDNSProvider,
+			CertsDir: cfg.CertsDir,
+			ManageA:  cfg.ACMEManageA,
+			IP:       cfg.ACMEIP,
+		}
+		if acmeCfg.Domain != "" && acmeCfg.Provider != "" {
+			mgr, err := btacme.NewManager(acmeCfg)
 			if err != nil {
 				slog.Error("failed to create ACME manager", "error", err)
 			} else {
@@ -177,108 +180,81 @@ func main() {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	// Determine TLS mode for the main server:
-	//   1. DNS-01 ACME (managed cert from Let's Encrypt)
-	//   2. HTTP-01 ACME (autocert, needs port 443 reachable from internet)
-	//   3. Self-signed or manual cert files (TLS_CERT + TLS_KEY)
-	//   4. Plain HTTP (no TLS)
-	var httpSrv *http.Server // secondary listener (:80 redirect or captive portal)
-	var acmeMgr *btacme.Manager
+	var httpSrv *http.Server
+	acmeMgr, _ := cfg.ACMEManager.(*btacme.Manager)
 
-	// DNS-01 ACME: start the background obtain/renew loop. The manager's
-	// GetCertificate will serve the ACME cert once available; until then
-	// the self-signed fallback below handles TLS.
-	if tlsDomain != "" && cfg.ACMEDNSProvider != "" {
-		acmeMgr, _ = cfg.ACMEManager.(*btacme.Manager)
-		if acmeMgr != nil {
-			acmeMgr.Run() // non-blocking: obtains cert in background
+	// Start ACME background loop if configured
+	if acmeMgr != nil {
+		acmeMgr.Run() // non-blocking
+	}
+
+	// Build the self-signed fallback certificate (used until ACME succeeds,
+	// or permanently if ACME is never configured).
+	var fallbackCert *tls.Certificate
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		c, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		if err == nil {
+			fallbackCert = &c
+		}
+	}
+	if fallbackCert == nil {
+		domain := tlsDomain
+		if domain == "" {
+			domain = "babytracker.local"
+		}
+		c, err := btacme.GenerateSelfSignedCert(domain)
+		if err != nil {
+			slog.Error("failed to generate self-signed cert", "error", err)
+		} else {
+			fallbackCert = c
+			slog.Info("generated self-signed fallback certificate", "domain", domain)
 		}
 	}
 
-	// Build a GetCertificate chain: ACME cert (if available) → self-signed fallback
-	if acmeMgr != nil || (tlsDomain != "" && cfg.ACMEDNSProvider == "") {
-		// We have some form of managed TLS
-		if tlsDomain != "" && cfg.ACMEDNSProvider == "" {
-			// HTTP-01 autocert
-			os.MkdirAll(cfg.CertsDir, 0700)
-			certManager := autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(tlsDomain),
-				Cache:      autocert.DirCache(cfg.CertsDir),
+	// Always serve HTTPS. GetCertificate checks ACME first, then falls back
+	// to self-signed. This means ACME can be configured later via Settings
+	// and the cert will be picked up without a restart.
+	srv.TLSConfig = &tls.Config{
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			// 1. ACME cert (if manager exists and has obtained one)
+			if acmeMgr != nil && acmeMgr.HasCert() {
+				return acmeMgr.TLSConfig().GetCertificate(hello)
 			}
-			srv.TLSConfig = &tls.Config{
-				GetCertificate: certManager.GetCertificate,
-				MinVersion:     tls.VersionTLS12,
+			// 2. Self-signed fallback
+			if fallbackCert != nil {
+				return fallbackCert, nil
 			}
-			// :80 handles ACME HTTP-01 challenges + redirects
-			httpSrv = &http.Server{
-				Addr:              ":80",
-				Handler:           certManager.HTTPHandler(http.HandlerFunc(httpToHTTPSRedirect(tlsDomain))),
-				ReadHeaderTimeout: 10 * time.Second,
-				ReadTimeout:       30 * time.Second,
-				WriteTimeout:      30 * time.Second,
-			}
-			go func() {
-				slog.Info("starting HTTP-01 challenge + redirect listener", "port", 80)
-				if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					slog.Warn("HTTP listener error", "error", err)
-				}
-			}()
-		} else if acmeMgr != nil {
-			// DNS-01: use ACME manager's GetCertificate with self-signed fallback
-			var fallbackCert *tls.Certificate
-			if cfg.TLSCert != "" && cfg.TLSKey != "" {
-				c, err := tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
-				if err == nil {
-					fallbackCert = &c
-				}
-			}
-			if fallbackCert == nil {
-				// No cert files — generate an in-memory self-signed cert
-				c, err := btacme.GenerateSelfSignedCert(tlsDomain)
-				if err != nil {
-					slog.Error("failed to generate self-signed cert", "error", err)
-				} else {
-					fallbackCert = c
-					slog.Info("generated self-signed fallback certificate", "domain", tlsDomain)
-				}
-			}
-			srv.TLSConfig = &tls.Config{
-				GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-					if acmeMgr.HasCert() {
-						return acmeMgr.TLSConfig().GetCertificate(hello)
-					}
-					if fallbackCert != nil {
-						return fallbackCert, nil
-					}
-					return nil, fmt.Errorf("no certificate available yet")
-				},
-				MinVersion: tls.VersionTLS12,
-			}
+			return nil, fmt.Errorf("no certificate available")
+		},
+		MinVersion: tls.VersionTLS12,
+	}
+	go func() {
+		slog.Info("starting HTTPS server", "port", cfg.Port)
+		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// HTTP-01 autocert listener (only if TLS_DOMAIN is set without DNS provider)
+	if tlsDomain != "" && cfg.ACMEDNSProvider == "" {
+		os.MkdirAll(cfg.CertsDir, 0700)
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(tlsDomain),
+			Cache:      autocert.DirCache(cfg.CertsDir),
+		}
+		httpSrv = &http.Server{
+			Addr:              ":80",
+			Handler:           certManager.HTTPHandler(http.HandlerFunc(httpToHTTPSRedirect(tlsDomain))),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
 		}
 		go func() {
-			slog.Info("starting HTTPS server", "port", cfg.Port, "domain", tlsDomain)
-			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				slog.Error("server error", "error", err)
-				os.Exit(1)
-			}
-		}()
-	} else if cfg.TLSCert != "" && cfg.TLSKey != "" {
-		// Self-signed / manual cert only (no ACME configured)
-		go func() {
-			slog.Info("starting HTTPS server (self-signed)", "port", cfg.Port)
-			if err := srv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey); err != nil && err != http.ErrServerClosed {
-				slog.Error("server error", "error", err)
-				os.Exit(1)
-			}
-		}()
-	} else {
-		// Plain HTTP
-		go func() {
-			slog.Info("starting HTTP server", "port", cfg.Port)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				slog.Error("server error", "error", err)
-				os.Exit(1)
+			slog.Info("starting HTTP-01 challenge + redirect listener", "port", 80)
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Warn("HTTP listener error", "error", err)
 			}
 		}()
 	}
