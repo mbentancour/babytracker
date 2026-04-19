@@ -34,13 +34,25 @@ rm -f /etc/NetworkManager/conf.d/99-babytracker-setup.conf
 systemctl restart NetworkManager
 systemctl start wpa_supplicant 2>/dev/null || true
 
-# Bring interface up and wait for NM to register it
+# Wait for NetworkManager to be ready before issuing nmcli commands
+echo "Waiting for NetworkManager to be ready..."
+for i in $(seq 1 30); do
+    if nmcli general status 2>/dev/null | grep -q connected; then
+        break
+    fi
+    sleep 1
+done
+
+# Explicitly mark wlan0 as managed (belt and suspenders — the conf file removal
+# above should be enough, but timing can be flaky right after restart)
+nmcli device set wlan0 managed yes 2>/dev/null || true
 ip link set wlan0 up 2>/dev/null || true
-echo "Waiting for NetworkManager to detect wlan0..."
-for i in $(seq 1 20); do
+
+echo "Waiting for wlan0 to become disconnected..."
+for i in $(seq 1 30); do
     state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: '$1=="wlan0"{print $2}')
-    if [ "${state}" = "disconnected" ] || [ "${state}" = "connecting" ]; then
-        echo "wlan0 is ${state}"
+    echo "  wlan0 state: ${state}"
+    if [ "${state}" = "disconnected" ]; then
         break
     fi
     sleep 1
