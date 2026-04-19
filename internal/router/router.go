@@ -310,6 +310,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			r.Use(middleware.RequireFreshAdmin(db))
 			r.Post("/api/system/restart", systemH.Restart)
 			r.Post("/api/system/shutdown", systemH.Shutdown)
+			r.Get("/api/system/storage", systemH.Storage)
 		})
 	})
 

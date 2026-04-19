@@ -466,6 +466,7 @@ export const api = {
   // System controls (admin)
   restartSystem: () => request("system/restart", { method: "POST" }),
   shutdownSystem: () => request("system/shutdown", { method: "POST" }),
+  getStorage: () => request("system/storage"),
 
   // User management (admin)
   getUsers: () => request("users/"),

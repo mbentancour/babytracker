@@ -402,6 +402,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.server")}</h3>
 
+                <StorageSection />
+
                 <TLSSection />
 
                 {applianceMode && <DomainSection />}
@@ -1636,6 +1638,48 @@ const PROVIDER_FIELDS = {
     { key: "SIMPLY_API_KEY", label: "API Key" },
   ],
 };
+
+function StorageSection() {
+  const [info, setInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getStorage()
+      .then(setInfo)
+      .catch(() => setInfo(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+  if (!info || (!info.root && !info.data)) return null;
+
+  const renderRow = (label, d) => {
+    if (!d) return null;
+    const pct = Math.round(d.used_percent);
+    const barColor = pct > 90 ? "#e74c3c" : pct > 75 ? "#f39c12" : "#00b894";
+    return (
+      <div style={{ marginBottom: 12 }} key={label}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+          <span style={{ color: "var(--text)" }}>
+            {formatBytes(d.used_bytes)} / {formatBytes(d.total_bytes)} ({pct}%)
+          </span>
+        </div>
+        <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: barColor, transition: "width 0.3s" }} />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="settings-card" style={{ marginBottom: 16 }}>
+      <h4 className="settings-card-title">Storage</h4>
+      {renderRow("System", info.root)}
+      {info.data && info.data.path !== info.root?.path && renderRow("BabyTracker data", info.data)}
+    </div>
+  );
+}
 
 function TLSSection() {
   const [provider, setProvider] = useState("");
