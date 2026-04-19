@@ -61,6 +61,22 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Trigger a fresh scan and wait for the SSID to appear in results.
+# Without this, nmcli dev wifi connect can fail with "No network with SSID
+# '...' found" because NM has no scan cache yet (hostapd was holding wlan0).
+echo "Scanning for networks..."
+nmcli dev wifi rescan ifname wlan0 2>/dev/null || true
+for i in $(seq 1 20); do
+    if nmcli -t -f SSID dev wifi list ifname wlan0 2>/dev/null | grep -Fxq "${SSID}"; then
+        echo "Found ${SSID} in scan results."
+        break
+    fi
+    if [ "$i" -eq 20 ]; then
+        echo "Warning: ${SSID} not seen in scan after 20s; trying connect anyway."
+    fi
+    sleep 1
+done
+
 # Connect to Wi-Fi using NetworkManager
 if [ -n "${PASSWORD}" ]; then
     nmcli dev wifi connect "${SSID}" password "${PASSWORD}" ifname wlan0
