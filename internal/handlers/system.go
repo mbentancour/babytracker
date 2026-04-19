@@ -25,25 +25,51 @@ func (h *SystemHandler) Storage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{}
-	rootUsage, rootStat, rootErr := diskUsage("/")
+	rootUsage, rootDev, rootErr := diskUsage("/")
 	if rootErr == nil {
 		resp["root"] = rootUsage
 	}
-	dataUsage, dataStat, dataErr := diskUsage("/var/lib/babytracker")
-	// Only return data usage if it's on a different filesystem than root.
-	if dataErr == nil && (rootErr != nil || !sameFilesystem(rootStat, dataStat)) {
+	dataUsage, dataDev, dataErr := diskUsage("/var/lib/babytracker")
+	if dataErr == nil && rootErr == nil && !sameVolume(rootUsage, rootDev, dataUsage, dataDev) {
+		resp["data"] = dataUsage
+	} else if dataErr == nil && rootErr != nil {
 		resp["data"] = dataUsage
 	}
 	pagination.WriteJSON(w, http.StatusOK, resp)
 }
 
-func diskUsage(path string) (map[string]any, *syscall.Statfs_t, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return nil, nil, err
+// sameVolume returns true when two paths effectively share storage. We check
+// both the device number AND the reported capacity — macOS APFS reports
+// different device numbers for the system and data volumes even though they
+// share the same APFS container (and thus the same total/used bytes).
+func sameVolume(a map[string]any, aDev uint64, b map[string]any, bDev uint64) bool {
+	if aDev == bDev {
+		return true
 	}
-	total := stat.Blocks * uint64(stat.Bsize)
-	free := stat.Bavail * uint64(stat.Bsize)
+	// Fall back to value comparison: same total AND same used means same
+	// underlying space (APFS firmlinks, btrfs subvolumes, etc.)
+	at, _ := a["total_bytes"].(uint64)
+	bt, _ := b["total_bytes"].(uint64)
+	au, _ := a["used_bytes"].(uint64)
+	bu, _ := b["used_bytes"].(uint64)
+	return at == bt && au == bu && at > 0
+}
+
+// diskUsage returns disk usage info plus the device number of the path's
+// containing filesystem. Two paths with the same device number share the
+// same underlying storage even when statfs reports different Fsid values
+// (e.g. macOS firmlinks between system and data volumes).
+func diskUsage(path string) (map[string]any, uint64, error) {
+	var sfs syscall.Statfs_t
+	if err := syscall.Statfs(path, &sfs); err != nil {
+		return nil, 0, err
+	}
+	var st syscall.Stat_t
+	if err := syscall.Stat(path, &st); err != nil {
+		return nil, 0, err
+	}
+	total := sfs.Blocks * uint64(sfs.Bsize)
+	free := sfs.Bavail * uint64(sfs.Bsize)
 	used := total - free
 	return map[string]any{
 		"path":         path,
@@ -51,16 +77,7 @@ func diskUsage(path string) (map[string]any, *syscall.Statfs_t, error) {
 		"used_bytes":   used,
 		"free_bytes":   free,
 		"used_percent": percent(used, total),
-	}, &stat, nil
-}
-
-// sameFilesystem returns true if two Statfs_t describe the same underlying
-// filesystem (i.e. paths are mounted from the same source).
-func sameFilesystem(a, b *syscall.Statfs_t) bool {
-	if a == nil || b == nil {
-		return false
-	}
-	return a.Fsid == b.Fsid
+	}, uint64(st.Dev), nil
 }
 
 func percent(used, total uint64) float64 {
