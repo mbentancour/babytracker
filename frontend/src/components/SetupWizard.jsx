@@ -1,40 +1,24 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useI18n } from "../utils/i18n";
 
-const STEPS = { WELCOME: 0, SCAN: 1, CONNECT: 2, CONNECTING: 3, SUCCESS: 4, ERROR: 5 };
+const STEPS = { WELCOME: 0, CONNECT: 1, CONNECTING: 2, SUCCESS: 3, ERROR: 4 };
 
 export default function SetupWizard() {
   const { t } = useI18n();
   const [step, setStep] = useState(STEPS.WELCOME);
-  const [networks, setNetworks] = useState([]);
-  const [scanning, setScanning] = useState(false);
-  const [selectedSSID, setSelectedSSID] = useState("");
+  const [ssid, setSsid] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const scanNetworks = useCallback(async () => {
-    setScanning(true);
-    try {
-      const res = await fetch("./api/setup/wifi/scan");
-      if (res.ok) {
-        const data = await res.json();
-        setNetworks(data || []);
-      }
-    } catch {
-      // ignore scan errors
-    }
-    setScanning(false);
-  }, []);
-
   const handleConnect = async () => {
-    if (!selectedSSID) return;
+    if (!ssid.trim()) return;
     setStep(STEPS.CONNECTING);
     setError("");
     try {
       const res = await fetch("./api/setup/wifi/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ssid: selectedSSID, password }),
+        body: JSON.stringify({ ssid: ssid.trim(), password }),
       });
       if (res.ok) {
         setStep(STEPS.SUCCESS);
@@ -48,12 +32,6 @@ export default function SetupWizard() {
       setStep(STEPS.ERROR);
     }
   };
-
-  useEffect(() => {
-    if (step === STEPS.SCAN) {
-      scanNetworks();
-    }
-  }, [step, scanNetworks]);
 
   return (
     <div style={styles.container}>
@@ -70,82 +48,42 @@ export default function SetupWizard() {
           <div style={styles.content}>
             <p style={styles.text}>{t("setup.welcome")}</p>
             <p style={styles.subtext}>{t("setup.welcomeDesc")}</p>
-            <button style={styles.button} onClick={() => setStep(STEPS.SCAN)}>
+            <button style={styles.button} onClick={() => setStep(STEPS.CONNECT)}>
               {t("setup.getStarted")}
             </button>
           </div>
         )}
 
-        {step === STEPS.SCAN && (
-          <div style={styles.content}>
-            <p style={styles.text}>{t("setup.selectNetwork")}</p>
-            {scanning ? (
-              <div style={styles.spinnerWrap}>
-                <div className="loading-spinner" />
-                <span style={styles.subtext}>{t("setup.scanning")}</span>
-              </div>
-            ) : (
-              <>
-                <div style={styles.networkList}>
-                  {networks.map((n) => (
-                    <button
-                      key={n.ssid}
-                      style={{
-                        ...styles.networkItem,
-                        ...(selectedSSID === n.ssid ? styles.networkSelected : {}),
-                      }}
-                      onClick={() => setSelectedSSID(n.ssid)}
-                    >
-                      <div style={styles.networkName}>
-                        {n.security && n.security !== "--" && (
-                          <span style={styles.lockIcon}>&#128274;</span>
-                        )}
-                        {n.ssid}
-                      </div>
-                      <div style={styles.signal}>{n.signal}%</div>
-                    </button>
-                  ))}
-                  {networks.length === 0 && (
-                    <p style={styles.subtext}>{t("setup.noNetworks")}</p>
-                  )}
-                </div>
-                <div style={styles.actions}>
-                  <button style={styles.secondaryBtn} onClick={scanNetworks}>
-                    {t("setup.rescan")}
-                  </button>
-                </div>
-                {selectedSSID && (
-                  <button style={styles.button} onClick={() => setStep(STEPS.CONNECT)}>
-                    {t("setup.next")}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
         {step === STEPS.CONNECT && (
           <div style={styles.content}>
-            <p style={styles.text}>
-              {t("setup.connectTo")} <strong>{selectedSSID}</strong>
-            </p>
+            <p style={styles.text}>{t("setup.enterWifi")}</p>
+            <p style={styles.subtext}>{t("setup.enterWifiHint")}</p>
+            <input
+              type="text"
+              value={ssid}
+              onChange={(e) => setSsid(e.target.value)}
+              placeholder={t("setup.wifiSsid")}
+              style={styles.input}
+              autoFocus
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("setup.wifiPassword")}
               style={styles.input}
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+              onKeyDown={(e) => e.key === "Enter" && ssid.trim() && handleConnect()}
             />
-            <div style={styles.actions}>
-              <button style={styles.secondaryBtn} onClick={() => setStep(STEPS.SCAN)}>
-                {t("setup.back")}
-              </button>
-              <button style={styles.button} onClick={handleConnect}>
-                {t("setup.connect")}
-              </button>
-            </div>
+            <button
+              style={{ ...styles.button, opacity: ssid.trim() ? 1 : 0.5, cursor: ssid.trim() ? "pointer" : "not-allowed" }}
+              disabled={!ssid.trim()}
+              onClick={handleConnect}
+            >
+              {t("setup.connect")}
+            </button>
           </div>
         )}
 
@@ -171,7 +109,7 @@ export default function SetupWizard() {
           <div style={styles.content}>
             <p style={{ ...styles.text, color: "#e74c3c" }}>{t("setup.error")}</p>
             <p style={styles.subtext}>{error}</p>
-            <button style={styles.button} onClick={() => setStep(STEPS.SCAN)}>
+            <button style={styles.button} onClick={() => setStep(STEPS.CONNECT)}>
               {t("setup.tryAgain")}
             </button>
           </div>

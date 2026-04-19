@@ -63,6 +63,10 @@ mmdebstrap:
     - chroot $1 systemctl disable systemd-networkd
     - chroot $1 systemctl disable systemd-networkd-wait-online
     - chroot $1 systemctl enable NetworkManager
+    # systemd-resolved binds :53, blocking dnsmasq's captive portal DNS.
+    # Disable it; NetworkManager has its own DNS handling.
+    - chroot $1 systemctl disable systemd-resolved || true
+    - chroot $1 systemctl mask systemd-resolved || true
     # dhcpcd may not be installed in Trixie minbase — ignore "unit not found"
     - chroot $1 systemctl disable dhcpcd || true
 
