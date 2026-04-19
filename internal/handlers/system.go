@@ -25,30 +25,42 @@ func (h *SystemHandler) Storage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{}
-	if usage, err := diskUsage("/"); err == nil {
-		resp["root"] = usage
+	rootUsage, rootStat, rootErr := diskUsage("/")
+	if rootErr == nil {
+		resp["root"] = rootUsage
 	}
-	if usage, err := diskUsage("/var/lib/babytracker"); err == nil {
-		resp["data"] = usage
+	dataUsage, dataStat, dataErr := diskUsage("/var/lib/babytracker")
+	// Only return data usage if it's on a different filesystem than root.
+	if dataErr == nil && (rootErr != nil || !sameFilesystem(rootStat, dataStat)) {
+		resp["data"] = dataUsage
 	}
 	pagination.WriteJSON(w, http.StatusOK, resp)
 }
 
-func diskUsage(path string) (map[string]any, error) {
+func diskUsage(path string) (map[string]any, *syscall.Statfs_t, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	total := stat.Blocks * uint64(stat.Bsize)
 	free := stat.Bavail * uint64(stat.Bsize)
 	used := total - free
 	return map[string]any{
-		"path":          path,
-		"total_bytes":   total,
-		"used_bytes":    used,
-		"free_bytes":    free,
-		"used_percent":  percent(used, total),
-	}, nil
+		"path":         path,
+		"total_bytes":  total,
+		"used_bytes":   used,
+		"free_bytes":   free,
+		"used_percent": percent(used, total),
+	}, &stat, nil
+}
+
+// sameFilesystem returns true if two Statfs_t describe the same underlying
+// filesystem (i.e. paths are mounted from the same source).
+func sameFilesystem(a, b *syscall.Statfs_t) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Fsid == b.Fsid
 }
 
 func percent(used, total uint64) float64 {

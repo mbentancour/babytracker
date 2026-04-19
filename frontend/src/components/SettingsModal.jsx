@@ -1675,8 +1675,8 @@ function StorageSection() {
   return (
     <div className="settings-card" style={{ marginBottom: 16 }}>
       <h4 className="settings-card-title">Storage</h4>
-      {renderRow("System", info.root)}
-      {info.data && info.data.path !== info.root?.path && renderRow("BabyTracker data", info.data)}
+      {renderRow(info.data ? "System" : "Storage", info.root)}
+      {info.data && renderRow("BabyTracker data", info.data)}
     </div>
   );
 }
