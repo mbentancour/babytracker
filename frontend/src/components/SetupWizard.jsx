@@ -22,6 +22,7 @@ export default function SetupWizard() {
   const [staticDns, setStaticDns] = useState("1.1.1.1,8.8.8.8");
   const [error, setError] = useState("");
   const [status, setStatus] = useState({});
+  const [successInfo, setSuccessInfo] = useState({}); // { ip, hostname }
 
   // Poll status to learn what interfaces are available and which are connected
   useEffect(() => {
@@ -51,10 +52,11 @@ export default function SetupWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        setSuccessInfo({ ip: data.ip, hostname: data.hostname });
         setStep(STEPS.SUCCESS);
       } else {
-        const data = await res.json().catch(() => ({}));
         setError(data.error || t("setup.connectFailed"));
         setStep(STEPS.ERROR);
       }
@@ -77,10 +79,11 @@ export default function SetupWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        setSuccessInfo({ ip: data.ip, hostname: data.hostname });
         setStep(STEPS.SUCCESS);
       } else {
-        const data = await res.json().catch(() => ({}));
         setError(data.error || t("setup.connectFailed"));
         setStep(STEPS.ERROR);
       }
@@ -231,6 +234,22 @@ export default function SetupWizard() {
             <div style={styles.successIcon}>&#10003;</div>
             <p style={styles.text}>{t("setup.success")}</p>
             <p style={styles.subtext}>{t("setup.successDesc")}</p>
+            {(successInfo.hostname || successInfo.ip) && (
+              <div style={styles.successUrls}>
+                <p style={styles.subtext}>{t("setup.successReachableAt")}</p>
+                {successInfo.hostname && (
+                  <a href={`https://${successInfo.hostname}`} style={styles.successUrl}>
+                    https://{successInfo.hostname}
+                  </a>
+                )}
+                {successInfo.ip && (
+                  <a href={`https://${successInfo.ip}`} style={styles.successUrl}>
+                    https://{successInfo.ip}
+                  </a>
+                )}
+                <p style={styles.subtextSmall}>{t("setup.successReconnect")}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -396,6 +415,29 @@ const styles = {
     fontSize: 48,
     color: "#00b894",
     marginBottom: 8,
+  },
+  successUrls: {
+    marginTop: 16,
+    padding: 16,
+    background: "#f8f9fa",
+    borderRadius: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  successUrl: {
+    fontFamily: "monospace",
+    fontSize: 14,
+    color: "#6C5CE7",
+    fontWeight: 600,
+    textDecoration: "none",
+    wordBreak: "break-all",
+  },
+  subtextSmall: {
+    fontSize: 12,
+    color: "#636e72",
+    margin: "8px 0 0 0",
+    fontStyle: "italic",
   },
   advancedWrap: {
     marginTop: 8,

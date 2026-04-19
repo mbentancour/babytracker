@@ -7,12 +7,10 @@ ConditionPathExists=/var/lib/babytracker/.needs-setup
 [Service]
 Type=simple
 
-# Start AP infrastructure before the app.
-# `+` prefix → run as root (overrides User= for that command).
-# `-` prefix → ignore non-zero exit (best-effort).
-ExecStartPre=+-/usr/bin/ip addr add 192.168.4.1/24 dev wlan0
-ExecStartPre=+/usr/bin/systemctl start hostapd
-ExecStartPre=+/usr/bin/systemctl start dnsmasq
+# Conditionally start the captive portal AP — skipped if the device already
+# has a network connection (e.g. Ethernet with DHCP). `+` prefix runs as root.
+ExecStartPre=+/usr/local/bin/babytracker-maybe-start-ap.sh
+
 # Run the BabyTracker binary in setup mode (serves setup wizard on :443 + :80)
 User=babytracker
 Group=babytracker
@@ -25,10 +23,8 @@ ExecStart=/usr/local/bin/babytracker
 # which a restrictive bounding set would block.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
-# Cleanup when stopped
-ExecStopPost=+-/usr/bin/systemctl stop hostapd
-ExecStopPost=+-/usr/bin/systemctl stop dnsmasq
-ExecStopPost=+-/usr/bin/ip addr del 192.168.4.1/24 dev wlan0
+# Cleanup when stopped (only tears down what was brought up)
+ExecStopPost=+/usr/local/bin/babytracker-maybe-stop-ap.sh
 
 Restart=no
 

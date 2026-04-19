@@ -163,6 +163,8 @@ func (h *SetupHandler) WifiConnect(w http.ResponseWriter, r *http.Request) {
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Wi-Fi connected. BabyTracker is now available on your network.",
+		"ip":      detectLANIP(),
+		"hostname": detectHostname(),
 	})
 }
 
@@ -200,9 +202,54 @@ func (h *SetupHandler) EthernetSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"message": "Ethernet configured. BabyTracker is now available on your network.",
+		"success":  true,
+		"message":  "Ethernet configured. BabyTracker is now available on your network.",
+		"ip":       detectLANIP(),
+		"hostname": detectHostname(),
 	})
+}
+
+// detectLANIP returns the first non-loopback, non-wireless IPv4 address.
+// Used to tell the user where to reach the device after setup completes.
+func detectLANIP() string {
+	out, err := exec.Command("ip", "-4", "-o", "addr", "show", "scope", "global").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		dev := fields[1]
+		if dev == "lo" || strings.HasPrefix(dev, "wl") {
+			// Prefer ethernet over wifi, but fall back to wifi if that's all there is
+			continue
+		}
+		addr := strings.SplitN(fields[3], "/", 2)[0]
+		return addr
+	}
+	// Second pass: accept wifi if no ethernet was found
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[1] == "lo" {
+			continue
+		}
+		return strings.SplitN(fields[3], "/", 2)[0]
+	}
+	return ""
+}
+
+func detectHostname() string {
+	out, err := exec.Command("hostname").Output()
+	if err != nil {
+		return ""
+	}
+	h := strings.TrimSpace(string(out))
+	if h == "" {
+		return ""
+	}
+	return h + ".local"
 }
 
 // Complete marks setup as done by removing the flag file.

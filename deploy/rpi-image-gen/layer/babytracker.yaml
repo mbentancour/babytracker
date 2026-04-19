@@ -39,7 +39,7 @@ mmdebstrap:
     # Install the binary (mv preserves nothing, so chmod after)
     - mv $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker
-    - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh $1/usr/local/bin/babytracker-setup-ethernet.sh
+    - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh $1/usr/local/bin/babytracker-setup-ethernet.sh $1/usr/local/bin/babytracker-network-check.sh $1/usr/local/bin/babytracker-maybe-start-ap.sh $1/usr/local/bin/babytracker-maybe-stop-ap.sh
 
     # Make common scripts executable
     - chmod 755 $1/usr/lib/babytracker/common/*.sh
