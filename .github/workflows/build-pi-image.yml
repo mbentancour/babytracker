@@ -2,6 +2,11 @@ name: Build Pi Image
 
 on:
   workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable SSH and pi user (password: babytracker) for debugging'
+        type: boolean
+        default: false
   push:
     tags:
       - 'v*'
@@ -70,6 +75,8 @@ jobs:
           cd /tmp/rpi-image-gen && sudo ./install_deps.sh
 
       - name: Build BabyTracker Pi image
+        env:
+          BABYTRACKER_DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
           cd /tmp/rpi-image-gen
           ./rpi-image-gen build \

@@ -66,12 +66,19 @@ mmdebstrap:
     # dhcpcd may not be installed in Trixie minbase — ignore "unit not found"
     - chroot $1 systemctl disable dhcpcd || true
 
-    # Lock the default 'pi' user — image must not be exploitable via console/SSH
-    - chroot $1 passwd -l pi
-    - chroot $1 usermod -s /usr/sbin/nologin pi
-
-    # Disable SSH — appliance is managed via the web UI only
-    - chroot $1 systemctl disable ssh
+    # In debug mode, keep the pi user usable and SSH enabled for first-boot
+    # troubleshooting. In production builds, lock pi and disable SSH.
+    # Toggle via BABYTRACKER_DEBUG=1 env var when running rpi-image-gen.
+    - |
+        if [ "${BABYTRACKER_DEBUG:-0}" = "1" ]; then
+          chroot "$1" sh -c 'echo "pi:babytracker" | chpasswd'
+          chroot "$1" usermod -s /bin/bash pi
+          chroot "$1" systemctl enable ssh
+        else
+          chroot "$1" passwd -l pi
+          chroot "$1" usermod -s /usr/sbin/nologin pi
+          chroot "$1" systemctl disable ssh
+        fi
 
     # UFW is configured on first boot by firstboot.sh — can't run ufw inside
     # the chroot because it needs kernel netfilter access (unavailable in the
