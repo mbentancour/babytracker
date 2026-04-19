@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       debug:
-        description: 'Enable SSH and pi user (password: babytracker) for debugging'
+        description: 'Enable pi user console login (password: babytracker) for debugging'
         type: boolean
         default: false
   push:
