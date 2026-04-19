@@ -19,9 +19,11 @@ Group=babytracker
 EnvironmentFile=/etc/babytracker/babytracker.env
 ExecStart=/usr/local/bin/babytracker
 
-# Allow binding to privileged ports (:443 and :80)
+# Allow binding to privileged ports (:443 and :80).
+# CapabilityBoundingSet is intentionally NOT set: setup mode invokes sudo to
+# call setup-wifi.sh / setup-ethernet.sh, and sudo needs CAP_SETUID/CAP_SETGID
+# which a restrictive bounding set would block.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 # Cleanup when stopped
 ExecStopPost=+-/usr/bin/systemctl stop hostapd
