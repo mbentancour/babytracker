@@ -1,0 +1,18 @@
+[Unit]
+Description=Resize BabyTracker root partition to fill the SD card
+DefaultDependencies=no
+Conflicts=shutdown.target
+After=systemd-remount-fs.service
+Before=local-fs.target shutdown.target babytracker-firstboot.service
+ConditionPathExists=/var/lib/babytracker/.needs-resize
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/babytracker-resize-rootfs.sh
+ExecStartPost=/usr/bin/rm -f /var/lib/babytracker/.needs-resize
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

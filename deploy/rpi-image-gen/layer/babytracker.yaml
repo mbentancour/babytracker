@@ -9,6 +9,7 @@ mmdebstrap:
   packages:
     - postgresql
     - postgresql-client
+    - cloud-guest-utils
     - hostapd
     - dnsmasq
     - avahi-daemon
@@ -39,7 +40,7 @@ mmdebstrap:
     # Install the binary (mv preserves nothing, so chmod after)
     - mv $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker
-    - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh $1/usr/local/bin/babytracker-setup-ethernet.sh $1/usr/local/bin/babytracker-network-check.sh $1/usr/local/bin/babytracker-maybe-start-ap.sh $1/usr/local/bin/babytracker-maybe-stop-ap.sh
+    - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh $1/usr/local/bin/babytracker-setup-ethernet.sh $1/usr/local/bin/babytracker-network-check.sh $1/usr/local/bin/babytracker-maybe-start-ap.sh $1/usr/local/bin/babytracker-maybe-stop-ap.sh $1/usr/local/bin/babytracker-resize-rootfs.sh
 
     # Make common scripts executable
     - chmod 755 $1/usr/lib/babytracker/common/*.sh
@@ -53,6 +54,8 @@ mmdebstrap:
 
     # Mark the device as needing first-boot setup
     - touch $1/var/lib/babytracker/.needs-setup
+    # Mark the device as needing root FS expansion on first boot
+    - touch $1/var/lib/babytracker/.needs-resize
     - chroot $1 chown -R babytracker:babytracker /var/lib/babytracker
     - chmod 750 $1/var/lib/babytracker
 
@@ -91,7 +94,9 @@ mmdebstrap:
     # the chroot because it needs kernel netfilter access (unavailable in the
     # bdebstrap unshare namespace).
 
-    # Enable our systemd units. Both have ConditionPathExists guards on .needs-setup.
+    # Enable our systemd units. Both setup units have ConditionPathExists
+    # guards on .needs-setup; resize-rootfs has a guard on .needs-resize.
+    - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-resize-rootfs
     - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-firstboot
     - $BDEBSTRAP_HOOKS/enable-units "$1" babytracker-setup-ap
     - $BDEBSTRAP_HOOKS/enable-units "$1" postgresql
