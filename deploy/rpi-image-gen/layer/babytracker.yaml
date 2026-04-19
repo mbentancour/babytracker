@@ -17,6 +17,8 @@ mmdebstrap:
     - openssl
     - ssl-cert
     - network-manager
+    - wpasupplicant
+    - rfkill
     - iptables
     - unattended-upgrades
     - apt-listchanges
@@ -63,6 +65,8 @@ mmdebstrap:
     - chroot $1 systemctl disable systemd-networkd
     - chroot $1 systemctl disable systemd-networkd-wait-online
     - chroot $1 systemctl enable NetworkManager
+    # NetworkManager uses wpa_supplicant to connect to encrypted networks
+    - chroot $1 systemctl enable wpa_supplicant || true
     # systemd-resolved binds :53, blocking dnsmasq's captive portal DNS.
     # Disable it; NetworkManager has its own DNS handling.
     - chroot $1 systemctl disable systemd-resolved || true

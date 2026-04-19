@@ -13,14 +13,33 @@ echo "Connecting to SSID: ${SSID}"
 
 # Stop the setup AP service (this also stops hostapd, dnsmasq, cleans iptables)
 systemctl stop babytracker-setup-ap.service || true
+systemctl stop hostapd dnsmasq 2>/dev/null || true
 
-# Remove AP static IP
+# Remove AP static IP and bring wlan0 down so it's clean for NM
 ip addr del 192.168.4.1/24 dev wlan0 2>/dev/null || true
+ip link set wlan0 down 2>/dev/null || true
 
-# Hand wlan0 over to NetworkManager (during setup, hostapd owned it)
+# Unblock the radio in case hostapd left it soft-blocked
+rfkill unblock wlan 2>/dev/null || true
+rfkill unblock all 2>/dev/null || true
+
+# Hand wlan0 over to NetworkManager. We need a full restart, not a reload —
+# changes in conf.d/ aren't picked up by `nmcli general reload`.
 rm -f /etc/NetworkManager/conf.d/99-babytracker-setup.conf
-nmcli general reload || systemctl reload NetworkManager || systemctl restart NetworkManager
-sleep 2
+systemctl restart NetworkManager
+systemctl start wpa_supplicant 2>/dev/null || true
+
+# Bring interface up and wait for NM to register it
+ip link set wlan0 up 2>/dev/null || true
+echo "Waiting for NetworkManager to detect wlan0..."
+for i in $(seq 1 20); do
+    state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: '$1=="wlan0"{print $2}')
+    if [ "${state}" = "disconnected" ] || [ "${state}" = "connecting" ]; then
+        echo "wlan0 is ${state}"
+        break
+    fi
+    sleep 1
+done
 
 # Connect to Wi-Fi using NetworkManager
 if [ -n "${PASSWORD}" ]; then
