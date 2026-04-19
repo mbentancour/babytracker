@@ -103,6 +103,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Use(setupH.RequireSetupMode)
 		r.Get("/api/setup/wifi/scan", setupH.WifiScan)
 		r.Post("/api/setup/wifi/connect", setupH.WifiConnect)
+		r.Post("/api/setup/ethernet", setupH.EthernetSetup)
 		r.Post("/api/setup/complete", setupH.Complete)
 	})
 

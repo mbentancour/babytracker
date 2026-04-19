@@ -1,12 +1,17 @@
 #!/bin/bash
 # Called by the BabyTracker Go binary to connect to Wi-Fi and complete setup.
-# Usage: setup-wifi.sh <SSID> <PASSWORD>
+# Usage:
+#   setup-wifi.sh <SSID> <PASSWORD>
+#   setup-wifi.sh <SSID> <PASSWORD> <addr/cidr> <gateway> [dns,csv]   (static IP)
 # Must be run as root (via sudoers entry for babytracker user).
 set -euo pipefail
 exec >> /var/log/babytracker-setup.log 2>&1
 
 SSID="${1:?SSID required}"
 PASSWORD="${2:-}"
+STATIC_ADDR="${3:-}"
+STATIC_GATEWAY="${4:-}"
+STATIC_DNS="${5:-1.1.1.1,8.8.8.8}"
 
 echo "=== Wi-Fi Setup: $(date) ==="
 echo "Connecting to SSID: ${SSID}"
@@ -57,6 +62,17 @@ for i in $(seq 1 30); do
     fi
     sleep 1
 done
+
+# If a static IP was requested, reconfigure the connection that was just created
+if [ -n "${STATIC_ADDR}" ] && [ -n "${STATIC_GATEWAY}" ]; then
+    echo "Applying static IP ${STATIC_ADDR} via ${STATIC_GATEWAY}..."
+    nmcli connection modify "${SSID}" \
+        ipv4.method manual \
+        ipv4.addresses "${STATIC_ADDR}" \
+        ipv4.gateway "${STATIC_GATEWAY}" \
+        ipv4.dns "${STATIC_DNS}"
+    nmcli connection up "${SSID}" || true
+fi
 
 # Remove the setup flag file
 rm -f /var/lib/babytracker/.needs-setup

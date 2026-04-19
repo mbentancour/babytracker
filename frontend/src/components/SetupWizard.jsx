@@ -1,24 +1,81 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useI18n } from "../utils/i18n";
 
-const STEPS = { WELCOME: 0, CONNECT: 1, CONNECTING: 2, SUCCESS: 3, ERROR: 4 };
+const STEPS = {
+  WELCOME: 0,
+  CHOOSE: 1,
+  ETHERNET: 2,
+  WIFI: 3,
+  CONNECTING: 4,
+  SUCCESS: 5,
+  ERROR: 6,
+};
 
 export default function SetupWizard() {
   const { t } = useI18n();
   const [step, setStep] = useState(STEPS.WELCOME);
   const [ssid, setSsid] = useState("");
   const [password, setPassword] = useState("");
+  const [staticEnabled, setStaticEnabled] = useState(false);
+  const [staticAddr, setStaticAddr] = useState("");
+  const [staticGateway, setStaticGateway] = useState("");
+  const [staticDns, setStaticDns] = useState("1.1.1.1,8.8.8.8");
   const [error, setError] = useState("");
+  const [status, setStatus] = useState({});
 
-  const handleConnect = async () => {
-    if (!ssid.trim()) return;
+  // Poll status to learn what interfaces are available and which are connected
+  useEffect(() => {
+    fetch("./api/setup/status")
+      .then((r) => r.json())
+      .then(setStatus)
+      .catch(() => {});
+  }, [step]);
+
+  // staticInvalid returns true when "Use static IP" is checked but the
+  // required fields aren't filled in yet.
+  const staticInvalid = staticEnabled && (!staticAddr.trim() || !staticGateway.trim());
+
+  const handleWifiConnect = async () => {
+    if (!ssid.trim() || staticInvalid) return;
     setStep(STEPS.CONNECTING);
     setError("");
+    const body = { ssid: ssid.trim(), password };
+    if (staticEnabled) {
+      body.address = staticAddr.trim();
+      body.gateway = staticGateway.trim();
+      body.dns = staticDns.trim();
+    }
     try {
       const res = await fetch("./api/setup/wifi/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ssid: ssid.trim(), password }),
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        setStep(STEPS.SUCCESS);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || t("setup.connectFailed"));
+        setStep(STEPS.ERROR);
+      }
+    } catch {
+      setError(t("setup.connectFailed"));
+      setStep(STEPS.ERROR);
+    }
+  };
+
+  const handleEthernetConnect = async () => {
+    if (staticInvalid) return;
+    setStep(STEPS.CONNECTING);
+    setError("");
+    const body = staticEnabled
+      ? { mode: "static", address: staticAddr.trim(), gateway: staticGateway.trim(), dns: staticDns.trim() }
+      : { mode: "dhcp" };
+    try {
+      const res = await fetch("./api/setup/ethernet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setStep(STEPS.SUCCESS);
@@ -48,13 +105,65 @@ export default function SetupWizard() {
           <div style={styles.content}>
             <p style={styles.text}>{t("setup.welcome")}</p>
             <p style={styles.subtext}>{t("setup.welcomeDesc")}</p>
-            <button style={styles.button} onClick={() => setStep(STEPS.CONNECT)}>
+            <button style={styles.button} onClick={() => setStep(STEPS.CHOOSE)}>
               {t("setup.getStarted")}
             </button>
           </div>
         )}
 
-        {step === STEPS.CONNECT && (
+        {step === STEPS.CHOOSE && (
+          <div style={styles.content}>
+            <p style={styles.text}>{t("setup.chooseConnection")}</p>
+            {status.has_ethernet && (
+              <button style={styles.button} onClick={() => { setStaticEnabled(false); setStep(STEPS.ETHERNET); }}>
+                {t("setup.useEthernet")}
+                {status.ethernet_up && status.ethernet_ip ? ` (${status.ethernet_ip})` : ""}
+              </button>
+            )}
+            {status.has_wifi && (
+              <button
+                style={status.has_ethernet ? styles.secondaryBtn : styles.button}
+                onClick={() => { setStaticEnabled(false); setStep(STEPS.WIFI); }}
+              >
+                {t("setup.useWifi")}
+              </button>
+            )}
+          </div>
+        )}
+
+        {step === STEPS.ETHERNET && (
+          <div style={styles.content}>
+            <p style={styles.text}>{t("setup.ethernetTitle")}</p>
+            <p style={styles.subtext}>
+              {t(staticEnabled ? "setup.ethernetStaticHint" : "setup.ethernetDhcpHint")}
+            </p>
+            <StaticIpAdvanced
+              t={t}
+              enabled={staticEnabled}
+              setEnabled={setStaticEnabled}
+              addr={staticAddr}
+              setAddr={setStaticAddr}
+              gateway={staticGateway}
+              setGateway={setStaticGateway}
+              dns={staticDns}
+              setDns={setStaticDns}
+            />
+            <div style={styles.actions}>
+              <button style={styles.secondaryBtn} onClick={() => setStep(STEPS.CHOOSE)}>
+                {t("setup.back")}
+              </button>
+              <button
+                style={{ ...styles.button, opacity: staticInvalid ? 0.5 : 1, cursor: staticInvalid ? "not-allowed" : "pointer" }}
+                disabled={staticInvalid}
+                onClick={handleEthernetConnect}
+              >
+                {t("setup.connect")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === STEPS.WIFI && (
           <div style={styles.content}>
             <p style={styles.text}>{t("setup.enterWifi")}</p>
             <p style={styles.subtext}>{t("setup.enterWifiHint")}</p>
@@ -75,15 +184,35 @@ export default function SetupWizard() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t("setup.wifiPassword")}
               style={styles.input}
-              onKeyDown={(e) => e.key === "Enter" && ssid.trim() && handleConnect()}
+              onKeyDown={(e) => e.key === "Enter" && ssid.trim() && !staticInvalid && handleWifiConnect()}
             />
-            <button
-              style={{ ...styles.button, opacity: ssid.trim() ? 1 : 0.5, cursor: ssid.trim() ? "pointer" : "not-allowed" }}
-              disabled={!ssid.trim()}
-              onClick={handleConnect}
-            >
-              {t("setup.connect")}
-            </button>
+            <StaticIpAdvanced
+              t={t}
+              enabled={staticEnabled}
+              setEnabled={setStaticEnabled}
+              addr={staticAddr}
+              setAddr={setStaticAddr}
+              gateway={staticGateway}
+              setGateway={setStaticGateway}
+              dns={staticDns}
+              setDns={setStaticDns}
+            />
+            <div style={styles.actions}>
+              <button style={styles.secondaryBtn} onClick={() => setStep(STEPS.CHOOSE)}>
+                {t("setup.back")}
+              </button>
+              <button
+                style={{
+                  ...styles.button,
+                  opacity: ssid.trim() && !staticInvalid ? 1 : 0.5,
+                  cursor: ssid.trim() && !staticInvalid ? "pointer" : "not-allowed",
+                }}
+                disabled={!ssid.trim() || staticInvalid}
+                onClick={handleWifiConnect}
+              >
+                {t("setup.connect")}
+              </button>
+            </div>
           </div>
         )}
 
@@ -109,12 +238,61 @@ export default function SetupWizard() {
           <div style={styles.content}>
             <p style={{ ...styles.text, color: "#e74c3c" }}>{t("setup.error")}</p>
             <p style={styles.subtext}>{error}</p>
-            <button style={styles.button} onClick={() => setStep(STEPS.CONNECT)}>
+            <button style={styles.button} onClick={() => setStep(STEPS.CHOOSE)}>
               {t("setup.tryAgain")}
             </button>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StaticIpAdvanced({ t, enabled, setEnabled, addr, setAddr, gateway, setGateway, dns, setDns }) {
+  return (
+    <div style={styles.advancedWrap}>
+      <label style={styles.advancedToggle}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        <span>{t("setup.useStaticIp")}</span>
+      </label>
+      {enabled && (
+        <div style={styles.advancedFields}>
+          <input
+            type="text"
+            value={addr}
+            onChange={(e) => setAddr(e.target.value)}
+            placeholder={t("setup.staticAddrPlaceholder")}
+            style={styles.input}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <input
+            type="text"
+            value={gateway}
+            onChange={(e) => setGateway(e.target.value)}
+            placeholder={t("setup.staticGatewayPlaceholder")}
+            style={styles.input}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <input
+            type="text"
+            value={dns}
+            onChange={(e) => setDns(e.target.value)}
+            placeholder={t("setup.staticDnsPlaceholder")}
+            style={styles.input}
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -218,5 +396,26 @@ const styles = {
     fontSize: 48,
     color: "#00b894",
     marginBottom: 8,
+  },
+  advancedWrap: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTop: "1px solid #ecf0f1",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  advancedToggle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    color: "#636e72",
+    cursor: "pointer",
+  },
+  advancedFields: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
   },
 };

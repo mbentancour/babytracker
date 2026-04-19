@@ -31,17 +31,57 @@ func (h *SetupHandler) RequireSetupMode(next http.Handler) http.Handler {
 	})
 }
 
-// Status returns the current setup state.
+// Status returns the current setup state, including which network interfaces
+// are present and their connectivity status.
 func (h *SetupHandler) Status(w http.ResponseWriter, r *http.Request) {
-	wifiConnected := false
+	connected := false
 	out, err := exec.Command("nmcli", "-t", "-f", "STATE", "general").Output()
 	if err == nil {
-		wifiConnected = strings.Contains(string(out), "connected")
+		connected = strings.Contains(string(out), "connected")
+	}
+
+	// Detect interfaces and their state
+	hasEthernet := false
+	ethernetUp := false
+	ethernetIP := ""
+	hasWifi := false
+
+	devOut, err := exec.Command("nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status").Output()
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(devOut)), "\n") {
+			parts := strings.SplitN(line, ":", 3)
+			if len(parts) < 3 {
+				continue
+			}
+			device, typ, state := parts[0], parts[1], parts[2]
+			switch typ {
+			case "ethernet":
+				hasEthernet = true
+				if state == "connected" {
+					ethernetUp = true
+					ipOut, _ := exec.Command("nmcli", "-t", "-f", "IP4.ADDRESS", "device", "show", device).Output()
+					for _, l := range strings.Split(string(ipOut), "\n") {
+						if strings.HasPrefix(l, "IP4.ADDRESS") {
+							ethernetIP = strings.TrimPrefix(strings.SplitN(l, ":", 2)[1], "")
+							ethernetIP = strings.SplitN(ethernetIP, "/", 2)[0]
+							break
+						}
+					}
+				}
+			case "wifi":
+				hasWifi = true
+			}
+		}
 	}
 
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"setup_mode":     h.cfg.SetupMode,
-		"wifi_connected": wifiConnected,
+		"connected":      connected,
+		"wifi_connected": connected, // backward compat
+		"has_ethernet":   hasEthernet,
+		"ethernet_up":    ethernetUp,
+		"ethernet_ip":    ethernetIP,
+		"has_wifi":       hasWifi,
 	})
 }
 
@@ -90,6 +130,10 @@ func (h *SetupHandler) WifiScan(w http.ResponseWriter, r *http.Request) {
 type wifiConnectRequest struct {
 	SSID     string `json:"ssid"`
 	Password string `json:"password"`
+	// Optional static IP config; empty means DHCP
+	Address string `json:"address,omitempty"`
+	Gateway string `json:"gateway,omitempty"`
+	DNS     string `json:"dns,omitempty"`
 }
 
 // WifiConnect connects to a Wi-Fi network and completes setup.
@@ -104,8 +148,12 @@ func (h *SetupHandler) WifiConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call the setup-wifi script with sudo
-	cmd := exec.Command("sudo", "/usr/local/bin/babytracker-setup-wifi.sh", req.SSID, req.Password)
+	// Call the setup-wifi script with sudo. Trailing args are optional static config.
+	args := []string{"/usr/local/bin/babytracker-setup-wifi.sh", req.SSID, req.Password}
+	if req.Address != "" && req.Gateway != "" {
+		args = append(args, req.Address, req.Gateway, req.DNS)
+	}
+	cmd := exec.Command("sudo", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to connect: "+string(output))
@@ -115,6 +163,45 @@ func (h *SetupHandler) WifiConnect(w http.ResponseWriter, r *http.Request) {
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Wi-Fi connected. BabyTracker is now available on your network.",
+	})
+}
+
+type ethernetRequest struct {
+	Mode    string `json:"mode"`              // "dhcp" or "static"
+	Address string `json:"address,omitempty"` // e.g. "192.168.1.50/24"
+	Gateway string `json:"gateway,omitempty"` // e.g. "192.168.1.1"
+	DNS     string `json:"dns,omitempty"`     // e.g. "1.1.1.1,8.8.8.8"
+}
+
+// EthernetSetup finishes setup using the ethernet connection. With mode=dhcp,
+// nothing changes (NetworkManager already auto-acquired an address). With
+// mode=static, the wired connection is reconfigured before the AP is torn down.
+func (h *SetupHandler) EthernetSetup(w http.ResponseWriter, r *http.Request) {
+	var req ethernetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	args := []string{"/usr/local/bin/babytracker-setup-ethernet.sh", req.Mode}
+	if req.Mode == "static" {
+		if req.Address == "" || req.Gateway == "" {
+			pagination.WriteError(w, http.StatusBadRequest, "address and gateway required for static")
+			return
+		}
+		args = append(args, req.Address, req.Gateway, req.DNS)
+	}
+
+	cmd := exec.Command("sudo", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "ethernet setup failed: "+string(output))
+		return
+	}
+
+	pagination.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Ethernet configured. BabyTracker is now available on your network.",
 	})
 }
 
