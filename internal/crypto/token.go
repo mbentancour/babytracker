@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	AccessTokenExpiry  = 15 * time.Minute
-	RefreshTokenExpiry = 7 * 24 * time.Hour
+	AccessTokenExpiry  = 1 * time.Hour
+	RefreshTokenExpiry = 30 * 24 * time.Hour
 )
 
 type Claims struct {

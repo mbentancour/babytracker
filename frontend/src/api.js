@@ -3,11 +3,37 @@ const CONFIG_PATH = "./api/config";
 const AUTH_BASE = "./api/auth";
 
 // Token management
+//
+// In HA add-on (iframe) contexts, cookies are unreliable, so we persist the
+// access token to localStorage as a workaround. Outside HA, we use in-memory
+// only — the refresh cookie is the canonical session, and we avoid the small
+// XSS risk of localStorage tokens.
+//
+// Persistence is opt-in via enableTokenPersistence(), called by App.jsx once
+// the /api/config response arrives with ha_ingress=true.
+const TOKEN_KEY = "babytracker_access_token";
+let persistTokens = false;
 let accessToken = null;
 let onAuthRequired = null;
 
+export function enableTokenPersistence() {
+  persistTokens = true;
+  // Pick up an existing persisted token (e.g. from a previous page load)
+  if (!accessToken) {
+    try {
+      const stored = localStorage.getItem(TOKEN_KEY);
+      if (stored) accessToken = stored;
+    } catch { /* localStorage may be disabled */ }
+  }
+}
+
 export function setAccessToken(token) {
   accessToken = token;
+  if (!persistTokens) return;
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch { /* localStorage may be disabled */ }
 }
 
 export function getAccessToken() {
@@ -43,7 +69,7 @@ async function doRefresh() {
     });
     if (!response.ok) return false;
     const data = await response.json();
-    accessToken = data.access_token;
+    setAccessToken(data.access_token);
     return true;
   } catch {
     return false;
@@ -66,14 +92,15 @@ async function request(endpoint, options = {}) {
 
   let response = await fetch(url, config);
 
-  // If unauthorized, try to refresh the token
-  if (response.status === 401 && accessToken) {
+  // If unauthorized, try to refresh the token (whether or not we had one).
+  // The refresh cookie may still be valid even if the access token is gone.
+  if (response.status === 401) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       config.headers["Authorization"] = `Bearer ${accessToken}`;
       response = await fetch(url, config);
     } else {
-      accessToken = null;
+      setAccessToken(null);
       if (onAuthRequired) onAuthRequired();
       throw new Error("Authentication required");
     }

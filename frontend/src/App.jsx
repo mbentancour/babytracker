@@ -5,7 +5,7 @@ import { UnitContext } from "./utils/units";
 import { Icons } from "./components/Icons";
 import { colors } from "./utils/colors";
 import { getAge, formatElapsed } from "./utils/formatters";
-import { api, setAccessToken, setOnAuthRequired } from "./api";
+import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPersistence } from "./api";
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "./utils/datetime";
@@ -116,6 +116,9 @@ export default function App() {
     ]).then(([status, config]) => {
       setDemoMode(config.demo_mode);
       setApplianceMode(config.appliance_mode || false);
+      // In HA add-on context, persist tokens to localStorage to work around
+      // unreliable cookies in the iframe.
+      if (config.ha_ingress) enableTokenPersistence();
       if (config.setup_mode) {
         setAuthState("wifi-setup");
         return;
@@ -128,7 +131,13 @@ export default function App() {
         setAuthState("setup-choice");
         return;
       }
-      // Try refreshing token from cookie
+      // If we have a persisted access token, try using it directly. The api
+      // request layer will refresh it if it's expired (or fall back to login).
+      if (getAccessToken()) {
+        setAuthState("authenticated");
+        return;
+      }
+      // No persisted token — try refreshing from the cookie
       fetch("./api/auth/refresh", { method: "POST", credentials: "include" })
         .then((r) => {
           if (r.ok) return r.json();
