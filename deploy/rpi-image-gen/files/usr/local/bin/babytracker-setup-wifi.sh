@@ -61,28 +61,34 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Trigger a fresh scan and wait for the SSID to appear in results.
-# Without this, nmcli dev wifi connect can fail with "No network with SSID
-# '...' found" because NM has no scan cache yet (hostapd was holding wlan0).
-echo "Scanning for networks..."
-nmcli dev wifi rescan ifname wlan0 2>/dev/null || true
-for i in $(seq 1 20); do
-    if nmcli -t -f SSID dev wifi list ifname wlan0 2>/dev/null | grep -Fxq "${SSID}"; then
-        echo "Found ${SSID} in scan results."
-        break
-    fi
-    if [ "$i" -eq 20 ]; then
-        echo "Warning: ${SSID} not seen in scan after 20s; trying connect anyway."
-    fi
-    sleep 1
-done
+# Use the connection-add approach instead of `dev wifi connect` to avoid
+# scan-cache timing issues. `connection add` creates a profile that doesn't
+# require the SSID to be in the current scan results; `connection up` then
+# activates it (NM scans/associates on its own).
+CONN_NAME="babytracker-${SSID}"
+echo "Creating connection profile ${CONN_NAME}..."
+nmcli connection delete "${CONN_NAME}" 2>/dev/null || true
 
-# Connect to Wi-Fi using NetworkManager
 if [ -n "${PASSWORD}" ]; then
-    nmcli dev wifi connect "${SSID}" password "${PASSWORD}" ifname wlan0
+    nmcli connection add type wifi \
+        con-name "${CONN_NAME}" \
+        ifname wlan0 \
+        ssid "${SSID}" \
+        wifi-sec.key-mgmt wpa-psk \
+        wifi-sec.psk "${PASSWORD}"
 else
-    nmcli dev wifi connect "${SSID}" ifname wlan0
+    nmcli connection add type wifi \
+        con-name "${CONN_NAME}" \
+        ifname wlan0 \
+        ssid "${SSID}"
 fi
+
+# Trigger a scan so NM has fresh BSS info before activating
+nmcli dev wifi rescan ifname wlan0 2>/dev/null || true
+sleep 3
+
+echo "Activating connection..."
+nmcli connection up "${CONN_NAME}"
 
 # Wait for connection
 echo "Waiting for network connection..."
@@ -94,15 +100,15 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# If a static IP was requested, reconfigure the connection that was just created
+# If a static IP was requested, reconfigure the connection we just created
 if [ -n "${STATIC_ADDR}" ] && [ -n "${STATIC_GATEWAY}" ]; then
     echo "Applying static IP ${STATIC_ADDR} via ${STATIC_GATEWAY}..."
-    nmcli connection modify "${SSID}" \
+    nmcli connection modify "${CONN_NAME}" \
         ipv4.method manual \
         ipv4.addresses "${STATIC_ADDR}" \
         ipv4.gateway "${STATIC_GATEWAY}" \
         ipv4.dns "${STATIC_DNS}"
-    nmcli connection up "${SSID}" || true
+    nmcli connection up "${CONN_NAME}" || true
 fi
 
 # Remove the setup flag file
