@@ -47,18 +47,14 @@ esac
 # Reapply the connection
 nmcli connection up "${ETH_CONN}"
 
-# Stop the setup AP service (we don't need WiFi anymore)
-systemctl stop babytracker-setup-ap.service || true
+# Stop AP infrastructure. We deliberately do NOT call
+# `systemctl stop babytracker-setup-ap.service` here — this script runs as a
+# child of that service, so stopping it would kill ourselves.
 systemctl stop hostapd dnsmasq 2>/dev/null || true
 ip addr del 192.168.4.1/24 dev wlan0 2>/dev/null || true
 
-# Remove the setup flag and switch to production
+# Remove the setup flag
 rm -f /var/lib/babytracker/.needs-setup
-systemctl daemon-reload
-systemctl disable babytracker-firstboot.service || true
-systemctl disable babytracker-setup-ap.service || true
-systemctl enable babytracker.service
-systemctl start babytracker.service
 
 # Apply production firewall rules
 echo "Configuring firewall..."
@@ -68,5 +64,16 @@ ufw default allow outgoing
 ufw allow 443/tcp comment "BabyTracker HTTPS"
 ufw allow 80/tcp comment "BabyTracker HTTP redirect"
 ufw --force enable
+
+# Disable setup services so they don't run on next boot
+systemctl daemon-reload
+systemctl disable babytracker-firstboot.service || true
+systemctl disable babytracker-setup-ap.service || true
+systemctl enable babytracker.service
+
+# Trigger the swap from setup-ap → babytracker.service in a detached job
+# (see the same logic in babytracker-setup-wifi.sh for why).
+systemd-run --no-block --collect --unit=babytracker-handover \
+    /bin/sh -c "sleep 2 && systemctl stop babytracker-setup-ap.service && systemctl start babytracker.service"
 
 echo "=== Ethernet setup complete ==="

@@ -16,8 +16,11 @@ STATIC_DNS="${5:-1.1.1.1,8.8.8.8}"
 echo "=== Wi-Fi Setup: $(date) ==="
 echo "Connecting to SSID: ${SSID}"
 
-# Stop the setup AP service (this also stops hostapd, dnsmasq, cleans iptables)
-systemctl stop babytracker-setup-ap.service || true
+# Stop the AP infrastructure. We deliberately do NOT call
+# `systemctl stop babytracker-setup-ap.service` here — this script runs as a
+# child of that service, so stopping it would kill ourselves before we finish.
+# The service will exit normally once .needs-setup is removed and babytracker
+# .service takes over via ConditionPathExists.
 systemctl stop hostapd dnsmasq 2>/dev/null || true
 
 # Remove AP static IP and bring wlan0 down so it's clean for NM
@@ -89,15 +92,6 @@ fi
 # Remove the setup flag file
 rm -f /var/lib/babytracker/.needs-setup
 
-# Reload systemd so ConditionPathExists is re-evaluated
-systemctl daemon-reload
-
-# Disable setup services and enable the main service
-systemctl disable babytracker-firstboot.service || true
-systemctl disable babytracker-setup-ap.service || true
-systemctl enable babytracker.service
-systemctl start babytracker.service
-
 # Apply production firewall rules
 echo "Configuring firewall..."
 ufw --force reset
@@ -106,5 +100,19 @@ ufw default allow outgoing
 ufw allow 443/tcp comment "BabyTracker HTTPS"
 ufw allow 80/tcp comment "BabyTracker HTTP redirect"
 ufw --force enable
+
+# Disable setup services so they don't run on next boot
+systemctl daemon-reload
+systemctl disable babytracker-firstboot.service || true
+systemctl disable babytracker-setup-ap.service || true
+systemctl enable babytracker.service
+
+# Trigger the swap from setup-ap → babytracker.service in a detached job.
+# We can't `systemctl stop babytracker-setup-ap` from here (this script runs
+# as a child of that service), and we can't `systemctl start babytracker`
+# either because port 443 is still held until setup-ap actually stops.
+# A detached transient unit handles both after our script returns.
+systemd-run --no-block --collect --unit=babytracker-handover \
+    /bin/sh -c "sleep 2 && systemctl stop babytracker-setup-ap.service && systemctl start babytracker.service"
 
 echo "=== Setup complete ==="
