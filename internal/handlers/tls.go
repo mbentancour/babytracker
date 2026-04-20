@@ -7,6 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	btacme "github.com/mbentancour/babytracker/internal/acme"
+	"github.com/mbentancour/babytracker/internal/crypto"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
@@ -105,7 +106,8 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If no new credentials provided, preserve existing ones
+	// If no new credentials provided, preserve existing ones. loadConfig
+	// already decrypts so we're always holding plaintext in req.Credentials.
 	if len(req.Credentials) == 0 {
 		existing := h.loadConfig()
 		req.Credentials = existing.Credentials
@@ -121,12 +123,15 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		manageA = existing.ManageA
 	}
 
-	// Build config for storage
+	// Two copies of the credentials map: the encrypted copy goes to the DB,
+	// the plaintext copy goes in-memory to the ACME manager. Storing
+	// plaintext in the DB would bypass the whole point of the at-rest layer.
+	plaintextCreds := req.Credentials
 	cfg := tlsConfig{
 		Domain:      req.Domain,
 		Email:       req.Email,
 		Provider:    req.Provider,
-		Credentials: req.Credentials,
+		Credentials: crypto.EncryptMap(plaintextCreds),
 		ManageA:     manageA,
 		IP:          req.IP,
 	}
@@ -150,9 +155,8 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO settings (key, value) VALUES ('tls_domain', $1)
 		 ON CONFLICT (key) DO UPDATE SET value = $1`, cfg.Domain)
 
-	// If provider and domain are set, trigger ACME. Credentials are passed on
-	// the Config struct so they're not stamped into the process environment
-	// (where children inherit them and local procfs reads can leak them).
+	// If provider and domain are set, trigger ACME. Pass plaintext creds —
+	// they stay in-memory only; lego never sees the envelope format.
 	if cfg.Domain != "" && cfg.Provider != "" {
 		acmeCfg := btacme.Config{
 			Domain:      cfg.Domain,
@@ -161,7 +165,7 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 			CertsDir:    h.certsDir,
 			ManageA:     cfg.ManageA,
 			IP:          cfg.IP,
-			Credentials: cfg.Credentials,
+			Credentials: plaintextCreds,
 		}
 
 		if h.mgr != nil {
@@ -249,6 +253,9 @@ func (h *TLSHandler) Test(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// loadConfig reads tls_config from the settings table and decrypts the
+// credential map so callers always see plaintext. Legacy rows (pre-encryption
+// upgrade) are passed through unchanged by DecryptSecret.
 func (h *TLSHandler) loadConfig() tlsConfig {
 	var raw string
 	if err := h.db.Get(&raw, `SELECT value FROM settings WHERE key = 'tls_config'`); err != nil {
@@ -256,5 +263,6 @@ func (h *TLSHandler) loadConfig() tlsConfig {
 	}
 	var cfg tlsConfig
 	json.Unmarshal([]byte(raw), &cfg)
+	cfg.Credentials = crypto.DecryptMap(cfg.Credentials)
 	return cfg
 }

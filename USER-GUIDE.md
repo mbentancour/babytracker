@@ -226,6 +226,13 @@ A fresh install ships with a single **Local** destination pointing at the server
     - *Verify normally* (default): the server's certificate must be signed by a trusted CA. Works for public providers (Nextcloud Cloud, Infomaniak kDrive) or any server with a Let's Encrypt certificate.
     - *Trust a specific certificate*: for home servers (Synology DSM, TrueNAS, QNAP) that use a self-signed certificate. Click **Fetch certificate**, compare the displayed SHA-256 fingerprint against what your server's admin panel shows, then click OK to pin it. The connection now succeeds only with that exact certificate — an attacker on your network can't swap it out.
     - *Skip verification*: for LAN servers where you accept that an on-network attacker could impersonate the server. Required for plain-HTTP WebDAV (which also sends your credentials and backup contents in cleartext — avoid except on fully trusted wired LANs).
+- **S3-compatible** — AWS S3 and any service speaking the S3 API: Cloudflare R2, Backblaze B2, MinIO, Wasabi, DigitalOcean Spaces, etc.
+  - **Bucket / Region / Prefix** — bucket name, region (`auto` for R2, `us-east-1` etc. for AWS), and optional key prefix (a folder within the bucket).
+  - **Access Key ID / Secret Access Key** — prefer scoped credentials. A minimal policy only needs `PutObject`, `GetObject`, `DeleteObject` and `ListBucket` on the single bucket. **Do not use account-wide or root keys** — a leak could cost real money.
+  - **Endpoint URL** — leave blank for AWS. For other services, use the provider's endpoint (e.g. `https://<account-id>.r2.cloudflarestorage.com` for R2, `https://minio.internal:9000` for self-hosted MinIO).
+  - **Use path-style addressing** — enable for MinIO, R2, and most non-AWS providers. Disable for AWS.
+  - **Hardening worth doing on the bucket side:** enable object versioning so a leaked key can't permanently delete old backups, and set a lifecycle rule to expire non-current versions after 30 days.
+  - Credentials entered here are **encrypted at rest** in the BabyTracker database using a key derived from the server's JWT secret — a leaked DB dump alone is not enough to recover them.
 
 **Per-destination settings**
 

@@ -21,6 +21,7 @@ import (
 	btacme "github.com/mbentancour/babytracker/internal/acme"
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/config"
+	"github.com/mbentancour/babytracker/internal/crypto"
 	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/handlers"
 	"github.com/mbentancour/babytracker/internal/router"
@@ -45,6 +46,15 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+
+	// Derive the credential-encryption key from the JWT secret so stored
+	// WebDAV/S3/DNS creds are at-rest encrypted. The JWT secret lives on
+	// the host filesystem (.jwt_secret) so a leaked DB dump alone is not
+	// enough to recover these credentials.
+	if err := crypto.InitSecrets(cfg.JWTSecret); err != nil {
+		slog.Error("failed to init credential encryption", "error", err)
+		os.Exit(1)
+	}
 
 	var handler http.Handler
 	var db *sqlx.DB
@@ -130,7 +140,9 @@ func main() {
 						if dbTLS.IP != "" {
 							cfg.ACMEIP = dbTLS.IP
 						}
-						dbCredentials = dbTLS.Credentials
+						// Decrypt the envelope-wrapped credentials so lego
+						// sees plaintext. Legacy rows pass through.
+						dbCredentials = crypto.DecryptMap(dbTLS.Credentials)
 					}
 				}
 			}

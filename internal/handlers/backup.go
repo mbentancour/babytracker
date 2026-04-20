@@ -530,8 +530,8 @@ func (h *BackupHandler) CreateDestination(w http.ResponseWriter, r *http.Request
 		pagination.WriteError(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	if p.Type != models.BackupTypeLocal && p.Type != models.BackupTypeWebDAV {
-		pagination.WriteError(w, http.StatusBadRequest, "type must be 'local' or 'webdav'")
+	if p.Type != models.BackupTypeLocal && p.Type != models.BackupTypeWebDAV && p.Type != models.BackupTypeS3 {
+		pagination.WriteError(w, http.StatusBadRequest, "type must be 'local', 'webdav', or 's3'")
 		return
 	}
 	if p.RetentionCount <= 0 {
@@ -580,10 +580,12 @@ func (h *BackupHandler) CreateDestination(w http.ResponseWriter, r *http.Request
 		Schedule:       schedule,
 	}
 	if err := d.SetConfig(cfg); err != nil {
+		slog.Error("backup: SetConfig failed", "error", err)
 		pagination.WriteError(w, http.StatusInternalServerError, "config encode failed")
 		return
 	}
 	if err := models.CreateBackupDestination(h.db, d); err != nil {
+		slog.Error("backup: CreateBackupDestination failed", "type", d.Type, "error", err)
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create destination")
 		return
 	}
@@ -630,6 +632,16 @@ func (h *BackupHandler) UpdateDestination(w http.ResponseWriter, r *http.Request
 		if existing.Type == models.BackupTypeWebDAV && newCfg.Password == "" {
 			newCfg.Password = cfg.Password
 		}
+		// Same preservation for S3 secrets — the UI sends them blank on edit
+		// because we only ever expose "*_set" booleans via PublicConfig.
+		if existing.Type == models.BackupTypeS3 {
+			if newCfg.S3AccessKeyID == "" {
+				newCfg.S3AccessKeyID = cfg.S3AccessKeyID
+			}
+			if newCfg.S3SecretAccessKey == "" {
+				newCfg.S3SecretAccessKey = cfg.S3SecretAccessKey
+			}
+		}
 		if existing.Type == models.BackupTypeLocal {
 			cfg.Path = newCfg.Path
 		}
@@ -645,6 +657,15 @@ func (h *BackupHandler) UpdateDestination(w http.ResponseWriter, r *http.Request
 				cfg.TLSMode = newCfg.TLSMode
 				cfg.PinnedCertPEM = newCfg.PinnedCertPEM
 			}
+		}
+		if existing.Type == models.BackupTypeS3 {
+			cfg.S3Bucket = newCfg.S3Bucket
+			cfg.S3Region = newCfg.S3Region
+			cfg.S3Prefix = newCfg.S3Prefix
+			cfg.S3AccessKeyID = newCfg.S3AccessKeyID
+			cfg.S3SecretAccessKey = newCfg.S3SecretAccessKey
+			cfg.S3EndpointURL = newCfg.S3EndpointURL
+			cfg.S3UsePathStyle = newCfg.S3UsePathStyle
 		}
 	}
 
@@ -689,12 +710,15 @@ func (h *BackupHandler) UpdateDestination(w http.ResponseWriter, r *http.Request
 		}
 		updates["schedule"] = sched
 	}
-	cfgBytes, err := json.Marshal(cfg)
-	if err != nil {
+	// Route through a throwaway BackupDestination so SetConfig re-encrypts
+	// every secret field before it reaches the DB. Marshalling cfg directly
+	// would bypass the at-rest encryption and store plaintext keys.
+	tmp := &models.BackupDestination{Type: existing.Type}
+	if err := tmp.SetConfig(cfg); err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "config encode failed")
 		return
 	}
-	updates["config"] = cfgBytes
+	updates["config"] = tmp.ConfigJSON
 	updates["updated_at"] = time.Now()
 
 	d, err := models.UpdateBackupDestination(h.db, id, updates)
@@ -832,6 +856,31 @@ func buildConfigFromPayload(destType string, raw map[string]any) (models.BackupD
 		// doesn't make sense over HTTP either (no cert to pin).
 		if !strings.HasPrefix(cfg.URL, "https://") && cfg.TLSMode != "skip" {
 			return cfg, fmt.Errorf("plain-HTTP WebDAV requires tls_mode=skip")
+		}
+	case models.BackupTypeS3:
+		if v, ok := raw["s3_bucket"].(string); ok {
+			cfg.S3Bucket = strings.TrimSpace(v)
+		}
+		if v, ok := raw["s3_region"].(string); ok {
+			cfg.S3Region = strings.TrimSpace(v)
+		}
+		if v, ok := raw["s3_prefix"].(string); ok {
+			cfg.S3Prefix = strings.Trim(v, "/")
+		}
+		if v, ok := raw["s3_access_key_id"].(string); ok {
+			cfg.S3AccessKeyID = v
+		}
+		if v, ok := raw["s3_secret_access_key"].(string); ok {
+			cfg.S3SecretAccessKey = v
+		}
+		if v, ok := raw["s3_endpoint_url"].(string); ok {
+			cfg.S3EndpointURL = strings.TrimSpace(v)
+		}
+		if v, ok := raw["s3_use_path_style"].(bool); ok {
+			cfg.S3UsePathStyle = v
+		}
+		if cfg.S3Bucket == "" {
+			return cfg, fmt.Errorf("s3 destinations require s3_bucket")
 		}
 	default:
 		return cfg, fmt.Errorf("unsupported destination type: %s", destType)

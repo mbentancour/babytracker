@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/crypto"
 )
 
 // BackupDestinationType enumerates supported storage backends.
 const (
 	BackupTypeLocal  = "local"
 	BackupTypeWebDAV = "webdav"
+	BackupTypeS3     = "s3"
 )
 
 // BackupDestination maps to the backup_destinations table.
@@ -39,6 +41,11 @@ type BackupDestination struct {
 
 // Config is the decoded representation of the `config` JSONB column.
 // Fields are present or absent depending on Type; unused ones are omitted.
+//
+// Secret fields (Password, S3SecretAccessKey, S3AccessKeyID) are stored
+// encrypted at rest via the `enc:v1:` envelope — see internal/crypto/secrets.go.
+// The Config() / SetConfig() accessors handle this transparently; callers
+// see plaintext after Config() and pass plaintext into SetConfig().
 type BackupDestinationConfig struct {
 	// Local
 	Path string `json:"path,omitempty"`
@@ -46,7 +53,7 @@ type BackupDestinationConfig struct {
 	// WebDAV
 	URL       string `json:"url,omitempty"`
 	Username  string `json:"username,omitempty"`
-	Password  string `json:"password,omitempty"`
+	Password  string `json:"password,omitempty"` // encrypted at rest
 	Directory string `json:"directory,omitempty"`
 
 	// TLS verification mode for WebDAV. One of:
@@ -55,6 +62,19 @@ type BackupDestinationConfig struct {
 	//   "skip"    = no verification (LAN / self-signed fallback)
 	TLSMode       string `json:"tls_mode,omitempty"`
 	PinnedCertPEM string `json:"pinned_cert_pem,omitempty"`
+
+	// S3 / S3-compatible (MinIO, R2, B2, Wasabi, etc.)
+	S3Bucket          string `json:"s3_bucket,omitempty"`
+	S3Region          string `json:"s3_region,omitempty"`
+	S3Prefix          string `json:"s3_prefix,omitempty"` // key prefix within the bucket
+	S3AccessKeyID     string `json:"s3_access_key_id,omitempty"`
+	S3SecretAccessKey string `json:"s3_secret_access_key,omitempty"` // encrypted at rest
+	// S3EndpointURL overrides the AWS endpoint for S3-compatible services.
+	// Leave empty for AWS. For MinIO use e.g. "https://minio.internal:9000".
+	S3EndpointURL string `json:"s3_endpoint_url,omitempty"`
+	// S3UsePathStyle forces path-style addressing (bucket.s3.example.com vs
+	// s3.example.com/bucket). Required for most S3-compatible services.
+	S3UsePathStyle bool `json:"s3_use_path_style,omitempty"`
 
 	// Shared — encryption parameters. Absent = not encrypted.
 	Encryption *EncryptionConfig `json:"encryption,omitempty"`
@@ -75,17 +95,37 @@ func (d *BackupDestination) Config() (BackupDestinationConfig, error) {
 	if len(d.ConfigJSON) == 0 {
 		return c, nil
 	}
-	err := json.Unmarshal(d.ConfigJSON, &c)
-	return c, err
+	if err := json.Unmarshal(d.ConfigJSON, &c); err != nil {
+		return c, err
+	}
+	decryptSecretFields(&c)
+	return c, nil
 }
 
 func (d *BackupDestination) SetConfig(c BackupDestinationConfig) error {
+	encryptSecretFields(&c)
 	b, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
 	d.ConfigJSON = b
 	return nil
+}
+
+// decryptSecretFields turns every enc:v1:-wrapped value back into plaintext.
+// Legacy plaintext values (pre-upgrade) pass through untouched.
+func decryptSecretFields(c *BackupDestinationConfig) {
+	c.Password = crypto.DecryptSecret(c.Password)
+	c.S3AccessKeyID = crypto.DecryptSecret(c.S3AccessKeyID)
+	c.S3SecretAccessKey = crypto.DecryptSecret(c.S3SecretAccessKey)
+}
+
+// encryptSecretFields wraps every secret value in the enc:v1: envelope.
+// Already-encrypted values are a no-op so load/modify/save doesn't double-wrap.
+func encryptSecretFields(c *BackupDestinationConfig) {
+	c.Password = crypto.EncryptSecret(c.Password)
+	c.S3AccessKeyID = crypto.EncryptSecret(c.S3AccessKeyID)
+	c.S3SecretAccessKey = crypto.EncryptSecret(c.S3SecretAccessKey)
 }
 
 // PublicConfig returns a config safe to expose via the API — passwords and
@@ -121,6 +161,14 @@ func (d *BackupDestination) PublicConfig() (map[string]any, error) {
 			}
 		}
 		pub["tls"] = tls
+	case BackupTypeS3:
+		pub["s3_bucket"] = c.S3Bucket
+		pub["s3_region"] = c.S3Region
+		pub["s3_prefix"] = c.S3Prefix
+		pub["s3_endpoint_url"] = c.S3EndpointURL
+		pub["s3_use_path_style"] = c.S3UsePathStyle
+		pub["s3_access_key_id_set"] = c.S3AccessKeyID != ""
+		pub["s3_secret_access_key_set"] = c.S3SecretAccessKey != ""
 	}
 	if c.Encryption != nil {
 		pub["encryption"] = map[string]any{

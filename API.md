@@ -797,15 +797,17 @@ A destination row:
 }
 ```
 
-Passwords, stored passphrases, and raw pinned-certificate PEMs are never returned in `GET` responses — only the boolean `password_set` / `passphrase_saved` flags and the certificate metadata needed to display the pinned cert (fingerprint, subject, expiry).
+Passwords, stored passphrases, S3 access/secret keys, and raw pinned-certificate PEMs are never returned in `GET` responses — only the boolean `password_set` / `passphrase_saved` / `s3_access_key_id_set` / `s3_secret_access_key_set` flags and the certificate metadata needed to display the pinned cert (fingerprint, subject, expiry).
+
+Secret fields are **encrypted at rest** in the database using a key derived from the server's JWT secret (see `internal/crypto/secrets.go`). A leaked DB dump alone is not enough to recover these credentials — the `.jwt_secret` file on the host is also required.
 
 `POST` / `PATCH` request body shape:
 
 | Field | Type | Notes |
 |-------|------|-------|
 | `name` | string | Required on create. |
-| `type` | string | `local` or `webdav`. Immutable after create. |
-| `config` | object | Type-specific. Local: `{path}`. WebDAV: `{url, username, password, directory}`. WebDAV `password` may be omitted on PATCH to keep the existing one. |
+| `type` | string | `local`, `webdav`, or `s3`. Immutable after create. |
+| `config` | object | Type-specific. Local: `{path}`. WebDAV: `{url, username, password, directory}`. S3: `{s3_bucket, s3_region, s3_prefix, s3_access_key_id, s3_secret_access_key, s3_endpoint_url, s3_use_path_style}`. Secret fields (`password`, `s3_access_key_id`, `s3_secret_access_key`) may be omitted on PATCH to keep the existing values. |
 | `retention_count` | int | ≥ 1. Older backups at this destination are pruned after each upload. |
 | `auto_backup` | bool | Whether the scheduler should fire this destination. |
 | `enabled` | bool | Disabled destinations are listed but never used. |

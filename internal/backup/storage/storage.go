@@ -77,6 +77,16 @@ func New(dest *models.BackupDestination, defaultBackupsDir string, allowedRoots 
 		return NewLocal(abs)
 	case models.BackupTypeWebDAV:
 		return NewWebDAV(cfg.URL, cfg.Username, cfg.Password, cfg.Directory, cfg.TLSMode, cfg.PinnedCertPEM)
+	case models.BackupTypeS3:
+		return NewS3(S3Options{
+			Bucket:          cfg.S3Bucket,
+			Region:          cfg.S3Region,
+			Prefix:          cfg.S3Prefix,
+			AccessKeyID:     cfg.S3AccessKeyID,
+			SecretAccessKey: cfg.S3SecretAccessKey,
+			EndpointURL:     cfg.S3EndpointURL,
+			UsePathStyle:    cfg.S3UsePathStyle,
+		})
 	default:
 		return nil, fmt.Errorf("unsupported backup destination type: %s", dest.Type)
 	}

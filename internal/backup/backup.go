@@ -86,6 +86,14 @@ type UploadResult struct {
 //   - photos/ directory (all uploaded photos)
 //
 // Returns the path to the temp archive. Caller MUST os.Remove it.
+//
+// SECURITY INVARIANT: this function must NOT walk DataDir or any directory
+// that could contain the JWT secret file (the credential-encryption master
+// key). Including that file in a backup would let an attacker who steals
+// one backup file decrypt all the credential envelopes inside the DB dump,
+// collapsing both encryption layers into one. If you change the archive
+// layout, keep the include list explicit — never a blanket walk over the
+// data directory.
 func BuildArchive(databaseURL, dataDir string) (string, error) {
 	out, err := os.CreateTemp("", "babytracker-archive-*.tar.gz")
 	if err != nil {

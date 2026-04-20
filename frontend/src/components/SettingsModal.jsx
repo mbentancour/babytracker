@@ -1049,6 +1049,17 @@ function DestinationEditor({ destination, onClose, onSaved }) {
   const [pinnedCertPEM, setPinnedCertPEM] = useState("");
   const [pinnedCertMeta, setPinnedCertMeta] = useState(destination?.config?.tls?.mode === "pin" ? destination.config.tls : null);
   const [fetchingCert, setFetchingCert] = useState(false);
+  // S3 / S3-compatible. Secrets are blank on edit — the server returns only
+  // `*_set` booleans via PublicConfig, so we treat blank as "keep existing".
+  const [s3Bucket, setS3Bucket] = useState(destination?.config?.s3_bucket || "");
+  const [s3Region, setS3Region] = useState(destination?.config?.s3_region || "");
+  const [s3Prefix, setS3Prefix] = useState(destination?.config?.s3_prefix || "");
+  const [s3AccessKeyId, setS3AccessKeyId] = useState("");
+  const [s3SecretAccessKey, setS3SecretAccessKey] = useState("");
+  const [s3EndpointURL, setS3EndpointURL] = useState(destination?.config?.s3_endpoint_url || "");
+  const [s3UsePathStyle, setS3UsePathStyle] = useState(!!destination?.config?.s3_use_path_style);
+  const s3AccessKeyIdSet = !!destination?.config?.s3_access_key_id_set;
+  const s3SecretSet = !!destination?.config?.s3_secret_access_key_set;
   const [retention, setRetention] = useState(destination?.retention_count ?? 7);
   const [autoBackup, setAutoBackup] = useState(destination?.auto_backup ?? true);
   const [enabled, setEnabled] = useState(destination?.enabled ?? true);
@@ -1064,6 +1075,11 @@ function DestinationEditor({ destination, onClose, onSaved }) {
   const handleSave = async () => {
     if (!name.trim()) { alert(t("settings.destNameRequired")); return; }
     if (type === "webdav" && !url.trim()) { alert(t("settings.destUrlRequired")); return; }
+    if (type === "s3" && !s3Bucket.trim()) { alert(t("settings.destS3BucketRequired")); return; }
+    if (type === "s3" && isNew && (!s3AccessKeyId.trim() || !s3SecretAccessKey.trim())) {
+      alert(t("settings.destS3CredsRequired"));
+      return;
+    }
     // Passphrase must be provided AND confirmed whenever we're about to store
     // a new one — either first-time enable, or re-keying an encrypted dest.
     const isNewPassphrase = encEnabled && (!encInitiallyOn || passphrase);
@@ -1071,18 +1087,33 @@ function DestinationEditor({ destination, onClose, onSaved }) {
     if (isNewPassphrase && passphrase !== passphraseConfirm) { alert(t("settings.destPassMismatch")); return; }
     if (encEnabled && !encInitiallyOn && !confirm(t("settings.destEncWarn"))) return;
 
-    const config = type === "local"
-      ? { path: path.trim() }
-      : {
-          url: url.trim(),
-          username: username.trim(),
-          directory: directory.trim(),
-          ...(password ? { password } : {}),
-          tls_mode: tlsMode,
-          // Only send the PEM when (re-)pinning in this save — the server
-          // keeps the existing pinned cert if tls_mode isn't touched.
-          ...(tlsMode === "pin" && pinnedCertPEM ? { pinned_cert_pem: pinnedCertPEM } : {}),
-        };
+    let config;
+    if (type === "local") {
+      config = { path: path.trim() };
+    } else if (type === "webdav") {
+      config = {
+        url: url.trim(),
+        username: username.trim(),
+        directory: directory.trim(),
+        ...(password ? { password } : {}),
+        tls_mode: tlsMode,
+        // Only send the PEM when (re-)pinning in this save — the server
+        // keeps the existing pinned cert if tls_mode isn't touched.
+        ...(tlsMode === "pin" && pinnedCertPEM ? { pinned_cert_pem: pinnedCertPEM } : {}),
+      };
+    } else if (type === "s3") {
+      config = {
+        s3_bucket: s3Bucket.trim(),
+        s3_region: s3Region.trim(),
+        s3_prefix: s3Prefix.trim(),
+        s3_endpoint_url: s3EndpointURL.trim(),
+        s3_use_path_style: s3UsePathStyle,
+        // Only send secrets when non-empty. Server preserves existing values
+        // on partial updates (see backup handler UpdateDestination).
+        ...(s3AccessKeyId ? { s3_access_key_id: s3AccessKeyId } : {}),
+        ...(s3SecretAccessKey ? { s3_secret_access_key: s3SecretAccessKey } : {}),
+      };
+    }
 
     const payload = {
       name: name.trim(),
@@ -1138,6 +1169,7 @@ function DestinationEditor({ destination, onClose, onSaved }) {
                 options={[
                   { value: "local", label: t("settings.destTypeLocal") },
                   { value: "webdav", label: t("settings.destTypeWebDAV") },
+                  { value: "s3", label: t("settings.destTypeS3") },
                 ]}
               />
             </FormField>
@@ -1177,6 +1209,39 @@ function DestinationEditor({ destination, onClose, onSaved }) {
                 fetching={fetchingCert}
                 setFetching={setFetchingCert}
               />
+            </>
+          )}
+
+          {type === "s3" && (
+            <>
+              <FormField label={t("settings.destS3Bucket")}>
+                <FormInput value={s3Bucket} onChange={(e) => setS3Bucket(e.target.value)} placeholder="babytracker-backups" />
+              </FormField>
+              <FormField label={t("settings.destS3Region")}>
+                <FormInput value={s3Region} onChange={(e) => setS3Region(e.target.value)} placeholder="us-east-1" />
+                <p className="settings-hint">{t("settings.destS3RegionHint")}</p>
+              </FormField>
+              <FormField label={t("settings.destS3Prefix")}>
+                <FormInput value={s3Prefix} onChange={(e) => setS3Prefix(e.target.value)} placeholder="babytracker" />
+                <p className="settings-hint">{t("settings.destS3PrefixHint")}</p>
+              </FormField>
+              <FormField label={t("settings.destS3AccessKeyId")}>
+                <FormInput value={s3AccessKeyId} onChange={(e) => setS3AccessKeyId(e.target.value)}
+                  placeholder={!isNew && s3AccessKeyIdSet ? t("settings.destPasswordKeep") : "AKIA…"} autoComplete="off" />
+              </FormField>
+              <FormField label={t("settings.destS3SecretAccessKey")}>
+                <FormInput type="password" value={s3SecretAccessKey} onChange={(e) => setS3SecretAccessKey(e.target.value)}
+                  placeholder={!isNew && s3SecretSet ? t("settings.destPasswordKeep") : ""} autoComplete="new-password" />
+                <p className="settings-hint">{t("settings.destS3CredsHint")}</p>
+              </FormField>
+              <FormField label={t("settings.destS3EndpointURL")}>
+                <FormInput value={s3EndpointURL} onChange={(e) => setS3EndpointURL(e.target.value)} placeholder="https://s3.example.com" />
+                <p className="settings-hint">{t("settings.destS3EndpointHint")}</p>
+              </FormField>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", fontSize: 14, color: "var(--text)" }}>
+                <input type="checkbox" checked={s3UsePathStyle} onChange={(e) => setS3UsePathStyle(e.target.checked)} />
+                {t("settings.destS3PathStyle")}
+              </label>
             </>
           )}
 
