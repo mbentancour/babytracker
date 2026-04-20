@@ -311,6 +311,9 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			r.Post("/api/system/restart", systemH.Restart)
 			r.Post("/api/system/shutdown", systemH.Shutdown)
 			r.Get("/api/system/storage", systemH.Storage)
+			r.Get("/api/system/version", systemH.VersionInfo)
+			r.Get("/api/system/update/check", systemH.UpdateCheck)
+			r.Post("/api/system/update/apply", systemH.UpdateApply)
 		})
 	})
 

@@ -476,6 +476,15 @@ export const api = {
       body: JSON.stringify({ picture_frame, device }),
     }),
 
+  // Version + self-update (admin)
+  getVersion: () => request("system/version"),
+  checkUpdate: () => request("system/update/check"),
+  applyUpdate: (tag) =>
+    request("system/update/apply", {
+      method: "POST",
+      body: JSON.stringify(tag ? { tag } : {}),
+    }),
+
   // User management (admin)
   getUsers: () => request("users/"),
   createUser: (data) =>

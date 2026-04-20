@@ -243,7 +243,9 @@ All configuration is done through environment variables.
 
 ## 8. Updating
 
-**Raspberry Pi image:** Download the new image and flash it. User data lives on a separate partition and is preserved across re-flashes.
+**Raspberry Pi image:** Re-flashing replaces the entire SD card and **wipes all user data**. Before re-flashing, take a backup from **Settings → Data → Backups** (push it to a Local destination on a USB stick, or a WebDAV destination like Nextcloud). Flash the new image, go through first-boot setup, then restore from that backup on the first-boot screen.
+
+> Automated unattended-upgrades handle security patches on the running system, so reflashing is only required for major version upgrades of BabyTracker itself.
 
 **Home Assistant add-on:** Update through the HA UI (**Settings > Add-ons > BabyTracker > Update**).
 

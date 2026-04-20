@@ -74,6 +74,10 @@ chroot "${ROOTFS}" apt-get clean
 # 4. Copy shared config files
 echo "[lxc] Installing BabyTracker config files..."
 cp -a "${COMMON_DIR}/files/." "${ROOTFS}/"
+# sudoers files must be 0440 root:root or sudo refuses to load them
+if [ -f "${ROOTFS}/etc/sudoers.d/babytracker" ]; then
+    chmod 440 "${ROOTFS}/etc/sudoers.d/babytracker"
+fi
 
 # 5. Install common provisioning scripts
 mkdir -p "${ROOTFS}/usr/lib/babytracker/common"
@@ -90,6 +94,9 @@ install -m 755 "${BABYTRACKER_BINARY}" "${ROOTFS}/usr/local/bin/babytracker"
 
 # 7. Create system user and directories
 chroot "${ROOTFS}" useradd --system --no-create-home --shell /usr/sbin/nologin babytracker
+# Binary owned by the service user so self-update can atomically rename
+# a new binary over the old one without root.
+chroot "${ROOTFS}" chown babytracker:babytracker /usr/local/bin/babytracker
 install -d -m 750 -o 999 -g 999 "${ROOTFS}/var/lib/babytracker"
 # Note: UID/GID 999 is typical for the first system user; chown by name after first boot.
 # The .needs-setup flag is NOT set — LXC boots directly into production mode.

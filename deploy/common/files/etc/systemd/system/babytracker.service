@@ -15,15 +15,19 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Allow binding to privileged ports (Let's Encrypt autocert uses :80 and :443)
+# Allow binding to privileged ports (HTTPS on :443 and HTTP-01 on :80).
+# Note: we intentionally do NOT set CapabilityBoundingSet or NoNewPrivileges —
+# the self-update handler invokes `sudo systemctl restart babytracker`, and
+# sudo needs CAP_SETUID/CAP_SETGID that a restrictive bounding set would
+# block.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
-# Security hardening
-NoNewPrivileges=true
+# Security hardening. /usr/local/bin is writable so self-update can atomically
+# rename the new binary over the old one; the binary file is owned by the
+# babytracker user (see layer/babytracker.yaml).
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/babytracker
+ReadWritePaths=/var/lib/babytracker /usr/local/bin
 PrivateTmp=true
 
 [Install]

@@ -1,4 +1,4 @@
-name: Build Proxmox LXC Template
+name: Build Go Binary
 
 on:
   workflow_dispatch:
@@ -11,15 +11,18 @@ permissions:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - uses: actions/setup-node@v4
         with:
@@ -34,31 +37,34 @@ jobs:
           cp -r frontend/dist/* internal/router/static/
 
       - name: Build Go binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          CGO_ENABLED=0 go build -trimpath \
+          go build -trimpath \
             -ldflags="-s -w -X 'github.com/mbentancour/babytracker/internal/version.Version=${VERSION}'" \
-            -o babytracker.bin \
+            -o babytracker-linux-${{ matrix.arch }} \
             ./cmd/babytracker/
 
-      - name: Install debootstrap
-        run: sudo apt-get update && sudo apt-get install -y debootstrap zstd
-
-      - name: Build LXC template
+      - name: Compute SHA256
         run: |
-          sudo BABYTRACKER_BINARY="$(pwd)/babytracker.bin" \
-               OUTPUT_DIR="$(pwd)/output" \
-               deploy/proxmox/lxc/build-lxc-template.sh
+          sha256sum babytracker-linux-${{ matrix.arch }} > babytracker-linux-${{ matrix.arch }}.sha256
+          cat babytracker-linux-${{ matrix.arch }}.sha256
 
-      - name: Upload LXC template
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: babytracker-lxc-template
-          path: output/babytracker-lxc-*.tar.zst
-          if-no-files-found: error
+          name: babytracker-linux-${{ matrix.arch }}
+          path: |
+            babytracker-linux-${{ matrix.arch }}
+            babytracker-linux-${{ matrix.arch }}.sha256
 
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: output/babytracker-lxc-*.tar.zst
+          files: |
+            babytracker-linux-${{ matrix.arch }}
+            babytracker-linux-${{ matrix.arch }}.sha256

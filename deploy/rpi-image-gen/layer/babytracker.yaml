@@ -40,6 +40,10 @@ mmdebstrap:
     # Install the binary (mv preserves nothing, so chmod after)
     - mv $1/usr/local/bin/babytracker.bin $1/usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker
+    # Self-update needs the babytracker user to atomically rename the new
+    # binary over the old one. Own the binary by the service user so the
+    # update handler doesn't need root to rewrite it.
+    - chroot $1 chown babytracker:babytracker /usr/local/bin/babytracker
     - chmod 755 $1/usr/local/bin/babytracker-firstboot.sh $1/usr/local/bin/babytracker-setup-wifi.sh $1/usr/local/bin/babytracker-setup-ethernet.sh $1/usr/local/bin/babytracker-network-check.sh $1/usr/local/bin/babytracker-maybe-start-ap.sh $1/usr/local/bin/babytracker-maybe-stop-ap.sh $1/usr/local/bin/babytracker-resize-rootfs.sh
 
     # Make common scripts executable

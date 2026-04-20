@@ -404,6 +404,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
                 <StorageSection />
 
+                <UpdatesSection />
+
                 <DisplayControlSection />
 
                 <TLSSection />
@@ -1679,6 +1681,98 @@ function StorageSection() {
       <h4 className="settings-card-title">Storage</h4>
       {renderRow(info.data ? "System" : "Storage", info.root)}
       {info.data && renderRow("BabyTracker data", info.data)}
+    </div>
+  );
+}
+
+function UpdatesSection() {
+  const [version, setVersion] = useState(null);   // { current, self_update, self_update_reason }
+  const [check, setCheck] = useState(null);       // { latest, update_available, body, url, ... }
+  const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    api.getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  const doCheck = async () => {
+    setChecking(true);
+    setMessage(null);
+    try {
+      const res = await api.checkUpdate();
+      setCheck(res);
+      if (!res.update_available) {
+        setMessage({ type: "success", text: `You're on the latest version (${res.current || "dev"}).` });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || "Check failed" });
+    }
+    setChecking(false);
+  };
+
+  const doApply = async () => {
+    if (!confirm("Apply the update? BabyTracker will restart and the page will briefly be unavailable.")) return;
+    setApplying(true);
+    setMessage(null);
+    try {
+      const res = await api.applyUpdate(check?.latest);
+      setMessage({ type: "success", text: res.message || "Update applied. Reloading in 5 seconds..." });
+      setTimeout(() => window.location.reload(), 5000);
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || "Update failed" });
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div className="settings-card" style={{ marginBottom: 16 }}>
+      <h4 className="settings-card-title">Updates</h4>
+      <div style={{ fontSize: 13, marginBottom: 8 }}>
+        <span style={{ color: "var(--text-muted)" }}>Current version: </span>
+        <span style={{ fontFamily: "monospace" }}>{version?.current || "—"}</span>
+      </div>
+
+      {version && !version.self_update && (
+        <p className="settings-hint" style={{ marginTop: 0 }}>
+          Self-update isn't available here ({version.self_update_reason || "unsupported platform"}).
+          Use your platform's upgrade path: <code>docker compose pull && up -d</code>, <code>helm upgrade</code>, or re-flash the Pi image.
+        </p>
+      )}
+
+      {version?.self_update && (
+        <>
+          {check?.update_available && (
+            <div style={{ padding: 12, background: "var(--card-bg)", border: "1px solid #f39c12", borderRadius: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                {check.latest} available
+              </div>
+              {check.url && (
+                <a href={check.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#6C5CE7" }}>
+                  Release notes ↗
+                </a>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <FormButton color="#636e72" disabled={checking || applying} onClick={doCheck}>
+              {checking ? "Checking..." : "Check for updates"}
+            </FormButton>
+            {check?.update_available && (
+              <FormButton color="#6C5CE7" disabled={applying} onClick={doApply}>
+                {applying ? "Applying..." : `Update to ${check.latest}`}
+              </FormButton>
+            )}
+          </div>
+        </>
+      )}
+
+      {message && (
+        <p className="settings-hint" style={{ color: message.type === "success" ? "#00b894" : "#e74c3c", marginTop: 8 }}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 }
