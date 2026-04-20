@@ -98,7 +98,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	r.Get("/api/config", configH.Get)
 
 	// Setup endpoints (public during setup mode, blocked otherwise)
-	setupH := handlers.NewSetupHandler(cfg)
+	setupH := handlers.NewSetupHandler(cfg, db)
 	r.Get("/api/setup/status", setupH.Status)
 	r.Group(func(r chi.Router) {
 		r.Use(setupH.RequireSetupMode)

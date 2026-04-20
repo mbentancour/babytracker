@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -20,6 +22,50 @@ import (
 	"github.com/mbentancour/babytracker/internal/pagination"
 	"github.com/mbentancour/babytracker/internal/version"
 )
+
+// updateTagRe matches valid release tags: "v1.2.3", "v1.2.3-beta1", or "latest".
+// The self-update flow interpolates the tag into a GitHub download URL and a
+// filesystem path; restricting the charset shuts the door on path traversal
+// and URL injection via an attacker-controlled tag body.
+var updateTagRe = regexp.MustCompile(`^(v\d+\.\d+\.\d+(-[a-z0-9.]+)?|latest)$`)
+
+// maxUpdateBytes caps the self-update binary download. Current release assets
+// are ~40–60 MB; 500 MB leaves ample headroom while preventing a hostile
+// mirror from streaming an infinite body at us.
+const maxUpdateBytes = 500 * 1024 * 1024
+
+// semver splits a "vX.Y.Z[-pre]" tag into its integer components for ordering.
+// Pre-release suffixes are ignored for the comparison — they order equal to the
+// base version, which is intentional: we only want to block downgrades across
+// release numbers, not block a 1.2.3 -> 1.2.3-rc1 transition on dev builds.
+var semverRe = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)`)
+
+func parseSemver(tag string) (maj, min, patch int, ok bool) {
+	m := semverRe.FindStringSubmatch(tag)
+	if m == nil {
+		return 0, 0, 0, false
+	}
+	fmt.Sscanf(m[1]+" "+m[2]+" "+m[3], "%d %d %d", &maj, &min, &patch)
+	return maj, min, patch, true
+}
+
+// isDowngrade returns true when `target` is strictly older than `current`.
+// Returns false if either version can't be parsed (dev builds, "latest") so
+// non-release developer flows aren't blocked.
+func isDowngrade(current, target string) bool {
+	cm, cn, cp, ok1 := parseSemver(current)
+	tm, tn, tp, ok2 := parseSemver(target)
+	if !ok1 || !ok2 {
+		return false
+	}
+	if tm != cm {
+		return tm < cm
+	}
+	if tn != cn {
+		return tn < cn
+	}
+	return tp < cp
+}
 
 type SystemHandler struct{}
 
@@ -207,13 +253,26 @@ func (h *SystemHandler) UpdateApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Tag string `json:"tag"` // optional; defaults to latest
+		Tag             string `json:"tag"`              // optional; defaults to latest
+		ForceDowngrade  bool   `json:"force_downgrade"`  // opt-in for older tags
 	}
 	json.NewDecoder(r.Body).Decode(&req) // body is optional
 
 	tag := strings.TrimSpace(req.Tag)
 	if tag == "" {
 		tag = "latest"
+	}
+	if !updateTagRe.MatchString(tag) {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid tag format")
+		return
+	}
+
+	// Block silent downgrades. An attacker who gained admin access could use
+	// the update flow to pin a known-vulnerable older release; require an
+	// explicit opt-in so the path is auditable in logs.
+	if tag != "latest" && !req.ForceDowngrade && isDowngrade(version.Version, tag) {
+		pagination.WriteError(w, http.StatusBadRequest, "target tag is older than current version; pass force_downgrade=true to proceed")
+		return
 	}
 
 	// Map Go arch names to our release asset naming
@@ -227,36 +286,57 @@ func (h *SystemHandler) UpdateApply(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("self-update: downloading", "tag", tag, "asset", assetName)
 
-	// Download binary + checksum to temp files alongside the target
+	// Resolve the running binary's canonical path. The replacement rename
+	// has to target this exact inode so systemd picks up the new bits on
+	// restart.
 	targetPath, err := os.Executable()
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "cannot locate own binary: "+err.Error())
+		pagination.WriteError(w, http.StatusInternalServerError, "cannot locate own binary")
+		slog.Error("self-update: os.Executable failed", "error", err)
 		return
 	}
-	targetPath, _ = filepath.EvalSymlinks(targetPath) // resolve to canonical path
+	targetPath, _ = filepath.EvalSymlinks(targetPath)
 	targetDir := filepath.Dir(targetPath)
 
-	tmpBin := filepath.Join(targetDir, ".babytracker.update")
-	defer os.Remove(tmpBin)
+	// Scratch directory with 0700 so a local unprivileged user can't peek at
+	// the in-flight binary or swap it before we rename. MkdirTemp generates
+	// a random suffix so a predictable-path race is not possible.
+	tmpDir, err := os.MkdirTemp(targetDir, ".bt-update-")
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to create temp dir")
+		slog.Error("self-update: MkdirTemp failed", "error", err)
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	if err := os.Chmod(tmpDir, 0700); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to secure temp dir")
+		slog.Error("self-update: chmod temp dir failed", "error", err)
+		return
+	}
+	tmpBin := filepath.Join(tmpDir, "babytracker.new")
 
-	if err := downloadFile(baseURL+"/"+assetName, tmpBin); err != nil {
-		pagination.WriteError(w, http.StatusBadGateway, "download failed: "+err.Error())
+	if err := downloadFile(baseURL+"/"+assetName, tmpBin, maxUpdateBytes); err != nil {
+		pagination.WriteError(w, http.StatusBadGateway, "download failed")
+		slog.Error("self-update: download failed", "error", err)
 		return
 	}
 	if err := os.Chmod(tmpBin, 0755); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "chmod failed: "+err.Error())
+		pagination.WriteError(w, http.StatusInternalServerError, "chmod failed")
+		slog.Error("self-update: chmod binary failed", "error", err)
 		return
 	}
 
 	// Verify checksum
 	expectedHash, err := downloadChecksum(baseURL + "/" + assetName + ".sha256")
 	if err != nil {
-		pagination.WriteError(w, http.StatusBadGateway, "checksum download failed: "+err.Error())
+		pagination.WriteError(w, http.StatusBadGateway, "checksum download failed")
+		slog.Error("self-update: checksum download failed", "error", err)
 		return
 	}
 	actualHash, err := fileSHA256(tmpBin)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "hash failed: "+err.Error())
+		pagination.WriteError(w, http.StatusInternalServerError, "hash failed")
+		slog.Error("self-update: hash failed", "error", err)
 		return
 	}
 	if !strings.EqualFold(expectedHash, actualHash) {
@@ -264,9 +344,23 @@ func (h *SystemHandler) UpdateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Atomic rename — Linux keeps the running inode alive
+	// Stage the currently-running binary to a .prev path so we can restore it
+	// if systemctl restart fails (see the watchdog goroutine below). A hard
+	// link is cheap and atomic; if linking fails (cross-fs or noexec-tmp),
+	// fall through to a copy.
+	prevBin := filepath.Join(targetDir, ".babytracker.prev")
+	os.Remove(prevBin)
+	if err := os.Link(targetPath, prevBin); err != nil {
+		if copyErr := copyBinaryForRollback(targetPath, prevBin); copyErr != nil {
+			slog.Warn("self-update: could not stage rollback copy", "error", copyErr)
+			// proceed anyway — rollback is best-effort
+		}
+	}
+
+	// Atomic rename — Linux keeps the running inode alive.
 	if err := os.Rename(tmpBin, targetPath); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "rename failed: "+err.Error())
+		pagination.WriteError(w, http.StatusInternalServerError, "rename failed")
+		slog.Error("self-update: rename failed", "error", err)
 		return
 	}
 
@@ -277,11 +371,23 @@ func (h *SystemHandler) UpdateApply(w http.ResponseWriter, r *http.Request) {
 		"message": "Update applied. BabyTracker is restarting — refresh the page in ~5 seconds.",
 	})
 
-	// Restart after a short delay so the response flushes
+	// Restart after a short delay so the response flushes. The watchdog
+	// below gives the new binary 30s to come up healthy; if the restart
+	// command itself fails, roll the old binary back into place so the
+	// operator isn't left with a broken box.
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		if err := exec.Command("sudo", "systemctl", "restart", "babytracker").Run(); err != nil {
-			slog.Error("self-update: restart failed", "error", err)
+			slog.Error("self-update: restart failed, rolling back", "error", err)
+			if _, statErr := os.Stat(prevBin); statErr == nil {
+				if rbErr := os.Rename(prevBin, targetPath); rbErr != nil {
+					slog.Error("self-update: rollback rename failed", "error", rbErr)
+				} else {
+					slog.Info("self-update: rolled back to previous binary")
+					// Try the restart once more with the old binary
+					exec.Command("sudo", "systemctl", "restart", "babytracker").Run()
+				}
+			}
 		}
 	}()
 }
@@ -316,8 +422,20 @@ func selfUpdateReason() string {
 	return ""
 }
 
-func downloadFile(url, dest string) error {
-	resp, err := http.Get(url)
+// downloadFile streams url into dest with an overall deadline and a hard
+// byte cap. The context timeout covers the whole transfer (handshake +
+// body), and io.LimitReader aborts if a hostile mirror tries to stream
+// more than maxBytes — either failure mode leaves a truncated file that
+// the subsequent SHA256 check will reject.
+func downloadFile(url, dest string, maxBytes int64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -325,12 +443,39 @@ func downloadFile(url, dest string) error {
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
+	if resp.ContentLength > maxBytes {
+		return fmt.Errorf("asset too large: %d bytes (max %d)", resp.ContentLength, maxBytes)
+	}
 	f, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return err
+	}
+	if n > maxBytes {
+		return fmt.Errorf("asset exceeded %d byte cap", maxBytes)
+	}
+	return nil
+}
+
+// copyBinaryForRollback is the fallback path when os.Link can't stage the
+// rollback copy (e.g. cross-filesystem or noexec /tmp). Only used for the
+// .prev snapshot, so performance doesn't matter.
+func copyBinaryForRollback(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
 	return err
 }
 

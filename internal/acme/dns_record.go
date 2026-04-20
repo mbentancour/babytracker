@@ -9,18 +9,25 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	urlpkg "net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 	r53types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 )
 
 // EnsureARecord creates or updates an A record for the given domain.
-// If ip is empty, it auto-detects the machine's LAN IP.
-func EnsureARecord(provider, domain, ip string) error {
+// If ip is empty, it auto-detects the machine's LAN IP. Credentials are
+// looked up in creds first (as passed through Config.Credentials), then
+// in the process environment — this lets us avoid stamping secrets into
+// the process env when they're supplied via the Settings UI, while
+// keeping the env-var-only deployment path working.
+func EnsureARecord(provider, domain, ip string, creds map[string]string) error {
 	if ip == "" {
 		detected, err := detectLANIP()
 		if err != nil {
@@ -34,18 +41,35 @@ func EnsureARecord(provider, domain, ip string) error {
 
 	switch strings.ToLower(provider) {
 	case ProviderCloudflare:
-		return cloudflareEnsureA(domain, ip)
+		return cloudflareEnsureA(domain, ip, creds)
 	case ProviderRoute53:
-		return route53EnsureA(domain, ip)
+		return route53EnsureA(domain, ip, creds)
 	case ProviderDuckDNS:
-		return duckdnsEnsureA(domain, ip)
+		return duckdnsEnsureA(domain, ip, creds)
 	case ProviderNamecheap:
-		return namecheapEnsureA(domain, ip)
+		return namecheapEnsureA(domain, ip, creds)
 	case ProviderSimply:
-		return simplyEnsureA(domain, ip)
+		return simplyEnsureA(domain, ip, creds)
 	default:
 		return fmt.Errorf("A record management not supported for provider %q", provider)
 	}
+}
+
+// credOrEnv looks up a credential from the passed-in map first, then falls
+// back to the process environment. Lets the Settings UI path avoid mutating
+// the process env while still supporting operators who set vars in systemd.
+func credOrEnv(creds map[string]string, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := creds[k]; ok && v != "" {
+			return v
+		}
+	}
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // detectLANIP returns the machine's primary LAN IP address.
@@ -61,11 +85,8 @@ func detectLANIP() (string, error) {
 
 // --- Cloudflare ---
 
-func cloudflareEnsureA(domain, ip string) error {
-	token := os.Getenv("CF_DNS_API_TOKEN")
-	if token == "" {
-		token = os.Getenv("CLOUDFLARE_DNS_API_TOKEN")
-	}
+func cloudflareEnsureA(domain, ip string, creds map[string]string) error {
+	token := credOrEnv(creds, "CF_DNS_API_TOKEN", "CLOUDFLARE_DNS_API_TOKEN")
 	if token == "" {
 		return fmt.Errorf("CF_DNS_API_TOKEN not set")
 	}
@@ -154,16 +175,29 @@ func cloudflareEnsureA(domain, ip string) error {
 
 // --- Route53 ---
 
-func route53EnsureA(domain, ip string) error {
+func route53EnsureA(domain, ip string, creds map[string]string) error {
 	ctx := context.Background()
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	// Prefer creds from the Settings UI over env/shared-config. If none were
+	// supplied we fall through to LoadDefaultConfig, which walks env vars
+	// and the ~/.aws chain — same behavior as before.
+	var awsCfg aws.Config
+	var err error
+	if creds["AWS_ACCESS_KEY_ID"] != "" && creds["AWS_SECRET_ACCESS_KEY"] != "" {
+		awsCfg, err = awsconfig.LoadDefaultConfig(ctx,
+			awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(
+				creds["AWS_ACCESS_KEY_ID"], creds["AWS_SECRET_ACCESS_KEY"], "",
+			)),
+		)
+	} else {
+		awsCfg, err = awsconfig.LoadDefaultConfig(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("AWS config: %w", err)
 	}
 	client := route53.NewFromConfig(awsCfg)
 
 	// Find hosted zone
-	zoneID := os.Getenv("AWS_HOSTED_ZONE_ID")
+	zoneID := credOrEnv(creds, "AWS_HOSTED_ZONE_ID")
 	if zoneID == "" {
 		// Auto-discover from domain
 		out, err := client.ListHostedZonesByName(ctx, &route53.ListHostedZonesByNameInput{
@@ -210,8 +244,8 @@ func route53EnsureA(domain, ip string) error {
 
 // --- DuckDNS ---
 
-func duckdnsEnsureA(domain, ip string) error {
-	token := os.Getenv("DUCKDNS_TOKEN")
+func duckdnsEnsureA(domain, ip string, creds map[string]string) error {
+	token := credOrEnv(creds, "DUCKDNS_TOKEN")
 	if token == "" {
 		return fmt.Errorf("DUCKDNS_TOKEN not set")
 	}
@@ -236,9 +270,9 @@ func duckdnsEnsureA(domain, ip string) error {
 
 // --- Namecheap ---
 
-func namecheapEnsureA(domain, ip string) error {
-	apiUser := os.Getenv("NAMECHEAP_API_USER")
-	apiKey := os.Getenv("NAMECHEAP_API_KEY")
+func namecheapEnsureA(domain, ip string, creds map[string]string) error {
+	apiUser := credOrEnv(creds, "NAMECHEAP_API_USER")
+	apiKey := credOrEnv(creds, "NAMECHEAP_API_KEY")
 	if apiUser == "" || apiKey == "" {
 		return fmt.Errorf("NAMECHEAP_API_USER and NAMECHEAP_API_KEY required")
 	}
@@ -252,7 +286,7 @@ func namecheapEnsureA(domain, ip string) error {
 	sld := parts[len(parts)-2]
 	tld := parts[len(parts)-1]
 
-	clientIP := os.Getenv("NAMECHEAP_CLIENT_IP")
+	clientIP := credOrEnv(creds, "NAMECHEAP_CLIENT_IP")
 	if clientIP == "" {
 		clientIP, _ = detectLANIP()
 	}
@@ -262,13 +296,30 @@ func namecheapEnsureA(domain, ip string) error {
 		baseURL = "https://api.sandbox.namecheap.com/xml.response"
 	}
 
-	// Set the A record using setHosts — this replaces all records, so we need to
-	// get existing records first and merge. For simplicity, we'll just set the one record.
-	// This is a known Namecheap API limitation.
-	url := fmt.Sprintf("%s?ApiUser=%s&ApiKey=%s&UserName=%s&ClientIp=%s&Command=namecheap.domains.dns.setHosts&SLD=%s&TLD=%s&HostName1=%s&RecordType1=A&Address1=%s&TTL1=300",
-		baseURL, apiUser, apiKey, apiUser, clientIP, sld, tld, host, ip)
+	// POST form-encoded body so ApiKey doesn't land in server-side URL logs or
+	// any upstream proxy's access log. Previously the key was in the query
+	// string and a leaked access log would expose it. setHosts replaces all
+	// records, which is a known Namecheap API limitation.
+	form := urlpkg.Values{}
+	form.Set("ApiUser", apiUser)
+	form.Set("ApiKey", apiKey)
+	form.Set("UserName", apiUser)
+	form.Set("ClientIp", clientIP)
+	form.Set("Command", "namecheap.domains.dns.setHosts")
+	form.Set("SLD", sld)
+	form.Set("TLD", tld)
+	form.Set("HostName1", host)
+	form.Set("RecordType1", "A")
+	form.Set("Address1", ip)
+	form.Set("TTL1", "300")
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("POST", baseURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -283,9 +334,9 @@ func namecheapEnsureA(domain, ip string) error {
 
 // --- Simply.com ---
 
-func simplyEnsureA(domain, ip string) error {
-	account := os.Getenv("SIMPLY_ACCOUNT_NAME")
-	apiKey := os.Getenv("SIMPLY_API_KEY")
+func simplyEnsureA(domain, ip string, creds map[string]string) error {
+	account := credOrEnv(creds, "SIMPLY_ACCOUNT_NAME")
+	apiKey := credOrEnv(creds, "SIMPLY_API_KEY")
 	if account == "" || apiKey == "" {
 		return fmt.Errorf("SIMPLY_ACCOUNT_NAME and SIMPLY_API_KEY required")
 	}

@@ -93,12 +93,13 @@ const (
 
 // Config holds the settings for DNS-01 ACME certificate management.
 type Config struct {
-	Domain   string // Domain to obtain a certificate for
-	Email    string // ACME account email (used for expiry notices)
-	Provider string // DNS provider name
-	CertsDir string // Directory to store certificates and account key
-	IP       string // IP for the A record (empty = auto-detect LAN IP)
-	ManageA  bool   // Whether to create/update the A record via the DNS provider
+	Domain      string            // Domain to obtain a certificate for
+	Email       string            // ACME account email (used for expiry notices)
+	Provider    string            // DNS provider name
+	CertsDir    string            // Directory to store certificates and account key
+	IP          string            // IP for the A record (empty = auto-detect LAN IP)
+	ManageA     bool              // Whether to create/update the A record via the DNS provider
+	Credentials map[string]string // Provider credentials, keyed by lego's env-var names (e.g. CF_DNS_API_TOKEN)
 }
 
 // CertInfo holds public information about the current certificate.
@@ -311,7 +312,7 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 		if cert == nil {
 			// Ensure A record exists before attempting ACME
 			if m.cfg.ManageA {
-				if err := EnsureARecord(m.cfg.Provider, m.cfg.Domain, m.cfg.IP); err != nil {
+				if err := EnsureARecord(m.cfg.Provider, m.cfg.Domain, m.cfg.IP, m.cfg.Credentials); err != nil {
 					slog.Warn("acme: failed to set A record, continuing anyway", "error", err)
 				}
 			}
@@ -428,21 +429,75 @@ func (m *Manager) newClient() (*lego.Client, error) {
 	return client, nil
 }
 
+// newDNSProvider builds a lego DNS provider, preferring credentials passed on
+// the Config (via Credentials) over ambient env vars. Falling back to
+// NewDNSProvider() when no credentials were supplied keeps the env-var-only
+// deployment mode (e.g. operators who set vars in the systemd unit) working
+// unchanged. Passing creds directly avoids stamping secrets into the process
+// environment where any child process inherits them and where crash dumps or
+// `/proc/<pid>/environ` could leak them to local unprivileged users.
 func (m *Manager) newDNSProvider() (challenge.Provider, error) {
+	creds := m.cfg.Credentials
+	has := func(key string) bool {
+		v, ok := creds[key]
+		return ok && v != ""
+	}
+
 	switch strings.ToLower(m.cfg.Provider) {
 	case ProviderCloudflare:
+		if has("CF_DNS_API_TOKEN") || has("CLOUDFLARE_DNS_API_TOKEN") {
+			c := cloudflare.NewDefaultConfig()
+			c.AuthToken = firstNonEmpty(creds["CF_DNS_API_TOKEN"], creds["CLOUDFLARE_DNS_API_TOKEN"])
+			c.ZoneToken = firstNonEmpty(creds["CF_ZONE_API_TOKEN"], creds["CLOUDFLARE_ZONE_API_TOKEN"])
+			return cloudflare.NewDNSProviderConfig(c)
+		}
 		return cloudflare.NewDNSProvider()
 	case ProviderRoute53:
+		if has("AWS_ACCESS_KEY_ID") && has("AWS_SECRET_ACCESS_KEY") {
+			c := route53.NewDefaultConfig()
+			c.AccessKeyID = creds["AWS_ACCESS_KEY_ID"]
+			c.SecretAccessKey = creds["AWS_SECRET_ACCESS_KEY"]
+			c.HostedZoneID = creds["AWS_HOSTED_ZONE_ID"]
+			c.Region = creds["AWS_REGION"]
+			return route53.NewDNSProviderConfig(c)
+		}
 		return route53.NewDNSProvider()
 	case ProviderDuckDNS:
+		if has("DUCKDNS_TOKEN") {
+			c := duckdns.NewDefaultConfig()
+			c.Token = creds["DUCKDNS_TOKEN"]
+			return duckdns.NewDNSProviderConfig(c)
+		}
 		return duckdns.NewDNSProvider()
 	case ProviderNamecheap:
+		if has("NAMECHEAP_API_USER") && has("NAMECHEAP_API_KEY") {
+			c := namecheap.NewDefaultConfig()
+			c.APIUser = creds["NAMECHEAP_API_USER"]
+			c.APIKey = creds["NAMECHEAP_API_KEY"]
+			c.ClientIP = creds["NAMECHEAP_CLIENT_IP"]
+			return namecheap.NewDNSProviderConfig(c)
+		}
 		return namecheap.NewDNSProvider()
 	case ProviderSimply:
+		if has("SIMPLY_ACCOUNT_NAME") && has("SIMPLY_API_KEY") {
+			c := simply.NewDefaultConfig()
+			c.AccountName = creds["SIMPLY_ACCOUNT_NAME"]
+			c.APIKey = creds["SIMPLY_API_KEY"]
+			return simply.NewDNSProviderConfig(c)
+		}
 		return simply.NewDNSProvider()
 	default:
 		return nil, fmt.Errorf("unsupported DNS provider: %q (supported: cloudflare, route53, duckdns, namecheap, simply)", m.cfg.Provider)
 	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // Certificate caching

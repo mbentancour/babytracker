@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 type Config struct {
@@ -30,7 +31,12 @@ type Config struct {
 	ACMEEmail       string // Email for ACME account registration
 	ACMEManageA     bool   // Create/update A record via DNS provider
 	ACMEIP          string // IP for the A record (empty = auto-detect)
-	SetupMode       bool   // True when .needs-setup flag file exists (Pi first boot)
+
+	// setupMode tracks whether .needs-setup is active. Atomic so the
+	// RequireSetupMode middleware (reader on every request) and the
+	// Complete handler (writer on cutover) can race without a mutex or
+	// visibility gaps — see IsSetupMode / SetSetupMode.
+	setupMode atomic.Bool
 
 	// ACMEManager is set at runtime by main.go when the ACME manager is started.
 	// Handlers use it to reconfigure TLS and query certificate status.
@@ -53,6 +59,16 @@ func (c *Config) IsProxyMode() bool {
 	return c.ProxyURL != ""
 }
 
+// IsSetupMode reports whether the first-boot setup portal is active.
+func (c *Config) IsSetupMode() bool {
+	return c.setupMode.Load()
+}
+
+// SetSetupMode toggles the in-memory setup flag atomically.
+func (c *Config) SetSetupMode(v bool) {
+	c.setupMode.Store(v)
+}
+
 func New() *Config {
 	dataDir := envOrDefault("DATA_DIR", "/var/lib/babytracker")
 
@@ -64,7 +80,7 @@ func New() *Config {
 	databaseURL := envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=prefer")
 	warnIfInsecureDatabaseURL(databaseURL)
 
-	return &Config{
+	c := &Config{
 		Port:            envOrDefault("PORT", "443"),
 		DataDir:         dataDir,
 		DatabaseURL:     databaseURL,
@@ -83,9 +99,10 @@ func New() *Config {
 		ACMEEmail:       os.Getenv("ACME_EMAIL"),
 		ACMEManageA:     os.Getenv("ACME_MANAGE_A") != "false", // default true
 		ACMEIP:          os.Getenv("ACME_IP"),
-		SetupMode:       fileExists(filepath.Join(dataDir, ".needs-setup")),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
 	}
+	c.setupMode.Store(fileExists(filepath.Join(dataDir, ".needs-setup")))
+	return c
 }
 
 // warnIfInsecureDatabaseURL logs a warning when the DATABASE_URL points at a
@@ -151,7 +168,7 @@ func loadOrCreateSecret(dataDir string) string {
 
 	// Generate and persist a new secret
 	secret := generateRandomSecret()
-	os.MkdirAll(dataDir, 0750)
+	os.MkdirAll(dataDir, 0700)
 	if err := os.WriteFile(secretPath, []byte(secret), 0600); err != nil {
 		slog.Warn("could not persist JWT secret to file, sessions will not survive restart", "error", err)
 	} else {

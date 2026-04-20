@@ -28,6 +28,15 @@ type DisplayHandler struct {
 	db     *sqlx.DB
 	subsMu sync.Mutex
 	subs   map[subKey]chan DisplayCommand
+
+	// stateMu protects last-known state we re-emit to SSE clients on
+	// reconnect. Without this the picture frame stays in whatever state it
+	// was in before the network blip — a missed "turn on" event can leave
+	// a display black until a user manually toggles it again.
+	stateMu        sync.Mutex
+	pictureFrameBy map[int]bool  // user_id -> last picture_frame state
+	photoSeqByUser map[int]int64 // user_id -> broadcast seq at last new_photo
+	photoSeq       int64
 }
 
 // DisplayCommand is the payload sent over the SSE channel. Optional fields
@@ -39,12 +48,18 @@ type DisplayCommand struct {
 	PictureFrame    bool   `json:"picture_frame,omitempty"`
 	NewPhoto        bool   `json:"new_photo,omitempty"`
 	Device          string `json:"device,omitempty"` // empty = all of the caller's devices
+	// PhotoSeq is a monotonically-increasing counter so a client that
+	// missed events while disconnected can tell whether its local gallery
+	// is stale and refetch.
+	PhotoSeq int64 `json:"photo_seq,omitempty"`
 }
 
 func NewDisplayHandler(db *sqlx.DB) *DisplayHandler {
 	return &DisplayHandler{
-		db:   db,
-		subs: make(map[subKey]chan DisplayCommand),
+		db:             db,
+		subs:           make(map[subKey]chan DisplayCommand),
+		pictureFrameBy: make(map[int]bool),
+		photoSeqByUser: make(map[int]int64),
 	}
 }
 
@@ -63,14 +78,23 @@ func (h *DisplayHandler) CloseAll() {
 // BroadcastNewPhoto fans a new-photo notification out to every connected
 // display, regardless of which user owns it. Photos that show up in any
 // child's gallery may be relevant to any tablet — household-wide broadcast
-// is intentional.
+// is intentional. The sequence counter is bumped so reconnecting clients
+// can tell if they missed a photo while disconnected.
 func (h *DisplayHandler) BroadcastNewPhoto() {
-	cmd := DisplayCommand{NewPhoto: true}
+	h.stateMu.Lock()
+	h.photoSeq++
+	seq := h.photoSeq
+	h.stateMu.Unlock()
+
+	cmd := DisplayCommand{NewPhoto: true, PhotoSeq: seq}
 	h.subsMu.Lock()
 	defer h.subsMu.Unlock()
-	for _, ch := range h.subs {
+	for key, ch := range h.subs {
 		select {
 		case ch <- cmd:
+			h.stateMu.Lock()
+			h.photoSeqByUser[key.userID] = seq
+			h.stateMu.Unlock()
 		default:
 		}
 	}
@@ -102,6 +126,13 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 	var isAdmin bool
 	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
 
+	// Record the last-known state per user so a display reconnecting after a
+	// network blip gets re-synced to current state instead of being stuck in
+	// whatever state it was in before the disconnect.
+	h.stateMu.Lock()
+	affectedUsers := map[int]bool{}
+	h.stateMu.Unlock()
+
 	h.subsMu.Lock()
 	targeted := 0
 	for key, ch := range h.subs {
@@ -116,10 +147,17 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 		select {
 		case ch <- cmd:
 			targeted++
+			affectedUsers[key.userID] = true
 		default:
 		}
 	}
 	h.subsMu.Unlock()
+
+	h.stateMu.Lock()
+	for uid := range affectedUsers {
+		h.pictureFrameBy[uid] = cmd.PictureFrame
+	}
+	h.stateMu.Unlock()
 
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"picture_frame":    cmd.PictureFrame,
@@ -210,8 +248,21 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 		h.subsMu.Unlock()
 	}()
 
-	// Send a connected event (use json.Marshal for safe encoding)
-	connMsg, _ := json.Marshal(map[string]any{"connected": true, "device": device})
+	// Send a connected event carrying current state so the client can sync
+	// after a reconnect. Any events that fired while the client was offline
+	// — a turned-on picture frame, a batch of new photos — would otherwise
+	// leave the display out of sync until the next state change.
+	h.stateMu.Lock()
+	lastPictureFrame := h.pictureFrameBy[userID]
+	lastPhotoSeq := h.photoSeq
+	h.stateMu.Unlock()
+
+	connMsg, _ := json.Marshal(map[string]any{
+		"connected":     true,
+		"device":        device,
+		"picture_frame": lastPictureFrame,
+		"photo_seq":     lastPhotoSeq,
+	})
 	w.Write([]byte("data: "))
 	w.Write(connMsg)
 	w.Write([]byte("\n\n"))

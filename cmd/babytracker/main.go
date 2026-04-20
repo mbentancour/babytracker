@@ -35,7 +35,10 @@ func main() {
 
 	flag.StringVar(&cfg.Port, "port", cfg.Port, "Server port")
 	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "Data directory for photos and backups")
-	flag.StringVar(&cfg.DatabaseURL, "database-url", cfg.DatabaseURL, "PostgreSQL connection URL")
+	// DATABASE_URL is env-var only — CLI flags show up in `ps` and process
+	// listing tools, which means any local unprivileged user could read the
+	// DB password. Env vars are scoped to the process (and only readable by
+	// the owning user on a correctly-permissioned /proc).
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -98,7 +101,11 @@ func main() {
 		// integration) so push-based updates are possible without polling.
 		webhooks.Init(db)
 
-		// Resolve TLS config: env vars take precedence, then DB tls_config, then DB tls_domain
+		// Resolve TLS config: env vars take precedence, then DB tls_config, then DB tls_domain.
+		// Credentials from DB flow straight into acmeCfg below — we don't stamp them
+		// into the process env, so a local unprivileged user can't read them from
+		// /proc/<pid>/environ and child processes don't inherit them.
+		var dbCredentials map[string]string
 		if cfg.TLSDomain == "" || cfg.ACMEDNSProvider == "" {
 			var raw string
 			if db.Get(&raw, `SELECT value FROM settings WHERE key = 'tls_config'`) == nil && raw != "" {
@@ -123,10 +130,7 @@ func main() {
 						if dbTLS.IP != "" {
 							cfg.ACMEIP = dbTLS.IP
 						}
-						// Set provider credential env vars so lego can read them
-						for k, v := range dbTLS.Credentials {
-							os.Setenv(k, v)
-						}
+						dbCredentials = dbTLS.Credentials
 					}
 				}
 			}
@@ -136,12 +140,13 @@ func main() {
 		// can configure/reconfigure it at runtime. If DNS-01 config exists,
 		// it will start obtaining a cert in the background.
 		acmeCfg := btacme.Config{
-			Domain:   cfg.TLSDomain,
-			Email:    cfg.ACMEEmail,
-			Provider: cfg.ACMEDNSProvider,
-			CertsDir: cfg.CertsDir,
-			ManageA:  cfg.ACMEManageA,
-			IP:       cfg.ACMEIP,
+			Domain:      cfg.TLSDomain,
+			Email:       cfg.ACMEEmail,
+			Provider:    cfg.ACMEDNSProvider,
+			CertsDir:    cfg.CertsDir,
+			ManageA:     cfg.ACMEManageA,
+			IP:          cfg.ACMEIP,
+			Credentials: dbCredentials,
 		}
 		if acmeCfg.Domain != "" && acmeCfg.Provider != "" {
 			mgr, err := btacme.NewManager(acmeCfg)
@@ -157,7 +162,7 @@ func main() {
 
 	// Resolve TLS domain: cfg.TLSDomain may have been set from DB above
 	tlsDomain := cfg.TLSDomain
-	if tlsDomain == "" && !cfg.IsProxyMode() && !cfg.SetupMode {
+	if tlsDomain == "" && !cfg.IsProxyMode() && !cfg.IsSetupMode() {
 		var savedDomain string
 		if db != nil {
 			if err := db.Get(&savedDomain, `SELECT value FROM settings WHERE key = 'tls_domain'`); err == nil {
@@ -287,7 +292,7 @@ func main() {
 	} // end TLS enabled
 
 	// Setup mode: captive portal on :80
-	if cfg.SetupMode {
+	if cfg.IsSetupMode() {
 		httpSrv = &http.Server{
 			Addr:              ":80",
 			Handler:           handler,

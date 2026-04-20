@@ -766,7 +766,8 @@ func (h *BackupHandler) TestDestination(w http.ResponseWriter, r *http.Request) 
 	}
 	be, err := storage.New(d, h.cfg.BackupsDir(), h.cfg.BackupLocalRoots)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("backup: failed to construct storage backend", "id", id, "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to initialize destination")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)

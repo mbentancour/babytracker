@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -151,20 +150,18 @@ func (h *TLSHandler) Set(w http.ResponseWriter, r *http.Request) {
 		`INSERT INTO settings (key, value) VALUES ('tls_domain', $1)
 		 ON CONFLICT (key) DO UPDATE SET value = $1`, cfg.Domain)
 
-	// If provider and domain are set, trigger ACME
+	// If provider and domain are set, trigger ACME. Credentials are passed on
+	// the Config struct so they're not stamped into the process environment
+	// (where children inherit them and local procfs reads can leak them).
 	if cfg.Domain != "" && cfg.Provider != "" {
-		// Set provider credentials as env vars (lego reads them from env)
-		for k, v := range cfg.Credentials {
-			os.Setenv(k, v)
-		}
-
 		acmeCfg := btacme.Config{
-			Domain:   cfg.Domain,
-			Email:    cfg.Email,
-			Provider: cfg.Provider,
-			CertsDir: h.certsDir,
-			ManageA:  cfg.ManageA,
-			IP:       cfg.IP,
+			Domain:      cfg.Domain,
+			Email:       cfg.Email,
+			Provider:    cfg.Provider,
+			CertsDir:    h.certsDir,
+			ManageA:     cfg.ManageA,
+			IP:          cfg.IP,
+			Credentials: cfg.Credentials,
 		}
 
 		if h.mgr != nil {
