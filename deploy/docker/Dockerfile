@@ -17,8 +17,11 @@ COPY --from=frontend-builder /app/frontend/dist/ /app/internal/router/static/
 RUN CGO_ENABLED=0 go build -o /babytracker ./cmd/babytracker/
 
 # Stage 3: Runtime
-FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata && \
+FROM alpine:3.22
+# pg_dump + psql are used by the backup/restore code. Alpine's stable repos
+# don't yet ship PG 18 client, so we use 17 — the backup/restore code filters
+# incompatible SET statements, so a 17 client against an 18 server works.
+RUN apk add --no-cache ca-certificates tzdata postgresql17-client && \
     adduser -D -h /var/lib/babytracker babytracker
 USER babytracker
 WORKDIR /var/lib/babytracker

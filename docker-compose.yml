@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: deploy/docker/Dockerfile
     ports:
-      - "8099:8099"
+      - "8443:443"
     environment:
       # sslmode=prefer: use TLS if the DB advertises it, fall back to plaintext
       # on the local docker network. For remote DBs set sslmode=verify-full.
