@@ -38,12 +38,11 @@ export default function PictureFrame({ photos, children = [], onWake }) {
     const newPhotos = photos.filter((p) => !seenKeysRef.current.has(p.photo));
     if (newPhotos.length === 0) return;
     for (const p of newPhotos) seenKeysRef.current.add(p.photo);
-    // Append new photos in random positions after the current index so the
-    // viewer sees them soon without a jarring reshuffle.
+    // Insert new photos as the next slides so the viewer sees them right away.
     setShuffled((prev) => {
       const updated = [...prev];
+      const insertAt = currentIndex + 1;
       for (const p of shuffle(newPhotos)) {
-        const insertAt = Math.floor(Math.random() * (updated.length - currentIndex)) + currentIndex + 1;
         updated.splice(insertAt, 0, p);
       }
       return updated;

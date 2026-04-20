@@ -178,7 +178,7 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 
 	key := subKey{userID: userID, device: device}
-	ch := make(chan DisplayCommand, 1)
+	ch := make(chan DisplayCommand, 16)
 	h.subsMu.Lock()
 	// Close the previous channel at the same (user, device) key — same user
 	// reconnecting with the same device name, e.g. after a laptop wake.
