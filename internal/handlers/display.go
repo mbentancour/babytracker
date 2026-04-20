@@ -48,6 +48,18 @@ func NewDisplayHandler(db *sqlx.DB) *DisplayHandler {
 	}
 }
 
+// CloseAll closes every active SSE subscriber channel. Used at server
+// shutdown so long-lived /api/display/events handlers return promptly
+// instead of making Shutdown() hit its context deadline.
+func (h *DisplayHandler) CloseAll() {
+	h.subsMu.Lock()
+	defer h.subsMu.Unlock()
+	for key, ch := range h.subs {
+		close(ch)
+		delete(h.subs, key)
+	}
+}
+
 // BroadcastNewPhoto fans a new-photo notification out to every connected
 // display, regardless of which user owns it. Photos that show up in any
 // child's gallery may be relevant to any tablet — household-wide broadcast

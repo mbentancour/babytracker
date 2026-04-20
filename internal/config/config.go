@@ -36,6 +36,11 @@ type Config struct {
 	// Handlers use it to reconfigure TLS and query certificate status.
 	ACMEManager any // *acme.Manager (any to avoid import cycle)
 
+	// DisplaySubs holds a handle to the display SSE handler so main.go can
+	// close all SSE subscribers at shutdown (prevents the HTTP Shutdown()
+	// from blocking on long-lived connections).
+	DisplaySubs any // *handlers.DisplayHandler, closer via CloseAll()
+
 
 	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
 	// destination's path may resolve into. Defaults to {DataDir}/backups plus

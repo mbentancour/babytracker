@@ -36,6 +36,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	notesH := handlers.NewNotesHandler(db)
 	configH := handlers.NewConfigHandler(cfg)
 	displayH := handlers.NewDisplayHandler(db)
+	cfg.DisplaySubs = displayH // main.go will call CloseAll() at shutdown
 	mediaH := handlers.NewMediaHandler(cfg, db, displayH)
 	deleteH := handlers.NewGenericDeleteHandler(db, cfg)
 

@@ -306,6 +306,12 @@ func main() {
 	<-ctx.Done()
 	slog.Info("shutting down server")
 
+	// Close long-lived SSE subscribers first so their handlers return and
+	// don't hold http.Server.Shutdown() past its deadline.
+	if closer, ok := cfg.DisplaySubs.(interface{ CloseAll() }); ok {
+		closer.CloseAll()
+	}
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
