@@ -109,28 +109,31 @@ export default function App() {
   useEffect(() => {
     setOnAuthRequired(() => setAuthState("login"));
 
-    // Check auth status and try token refresh
-    Promise.all([
-      api.getAuthStatus(),
-      api.getConfig().catch(() => ({ demo_mode: false })),
-    ]).then(([status, config]) => {
-      setDemoMode(config.demo_mode);
-      setApplianceMode(config.appliance_mode || false);
-      // In HA add-on context, persist tokens to localStorage to work around
-      // unreliable cookies in the iframe.
-      if (config.ha_ingress) enableTokenPersistence();
-      if (config.setup_mode) {
-        setAuthState("wifi-setup");
-        return;
-      }
-      if (config.demo_mode) {
-        setAuthState("authenticated");
-        return;
-      }
-      if (status.setup_required) {
-        setAuthState("setup-choice");
-        return;
-      }
+    // Resolve config first so demo_mode can short-circuit the auth calls.
+    // Previously we ran getAuthStatus + getConfig in parallel, which meant
+    // a failing getAuthStatus (e.g. DB unreachable) would reject the whole
+    // Promise.all and bury the demo_mode branch under a login screen.
+    api.getConfig()
+      .catch(() => ({ demo_mode: false }))
+      .then(async (config) => {
+        setDemoMode(config.demo_mode);
+        setApplianceMode(config.appliance_mode || false);
+        if (config.ha_ingress) enableTokenPersistence();
+
+        if (config.demo_mode) {
+          setAuthState("authenticated");
+          return;
+        }
+        if (config.setup_mode) {
+          setAuthState("wifi-setup");
+          return;
+        }
+
+        const status = await api.getAuthStatus().catch(() => ({ setup_required: false }));
+        if (status.setup_required) {
+          setAuthState("setup-choice");
+          return;
+        }
       // If we have a persisted access token, try using it directly. The api
       // request layer will refresh it if it's expired (or fall back to login).
       if (getAccessToken()) {

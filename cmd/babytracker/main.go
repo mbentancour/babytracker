@@ -47,19 +47,21 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// Derive the credential-encryption key from the JWT secret so stored
-	// WebDAV/S3/DNS creds are at-rest encrypted. The JWT secret lives on
-	// the host filesystem (.jwt_secret) so a leaked DB dump alone is not
-	// enough to recover these credentials.
-	if err := crypto.InitSecrets(cfg.JWTSecret); err != nil {
-		slog.Error("failed to init credential encryption", "error", err)
-		os.Exit(1)
-	}
-
 	var handler http.Handler
 	var db *sqlx.DB
 
-	if cfg.IsProxyMode() {
+	switch {
+	case cfg.DemoMode:
+		// ========================================
+		// DEMO MODE: frontend-only mock data, no DB
+		// ========================================
+		// The SPA's useBabyData hook bypasses every API fetch and reads
+		// from mockData.js when demo_mode is on. We only need to serve
+		// the static bundle and two tiny JSON endpoints.
+		slog.Info("starting in demo mode (no database, mock data only)")
+		handler = router.NewDemo(cfg)
+
+	case cfg.IsProxyMode():
 		// ========================================
 		// EXTERNAL MODE: reverse proxy
 		// ========================================
@@ -72,10 +74,19 @@ func main() {
 		}
 		handler = proxy
 
-	} else {
+	default:
 		// ========================================
 		// LOCAL MODE: full app with database
 		// ========================================
+		// Derive the credential-encryption key from the JWT secret so stored
+		// WebDAV/S3/DNS creds are at-rest encrypted. The JWT secret lives on
+		// the host filesystem (.jwt_secret) so a leaked DB dump alone is not
+		// enough to recover these credentials.
+		if err := crypto.InitSecrets(cfg.JWTSecret); err != nil {
+			slog.Error("failed to init credential encryption", "error", err)
+			os.Exit(1)
+		}
+
 		var err error
 		db, err = database.Connect(cfg.DatabaseURL)
 		if err != nil {

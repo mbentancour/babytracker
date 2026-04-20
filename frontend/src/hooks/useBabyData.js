@@ -325,6 +325,10 @@ export function useBabyData(canReadFn) {
     error,
     lastSync,
     unitSystem,
-    refetch: fetchAll,
+    // In demo mode refetch must not hit the API — otherwise the
+    // post-permissions refetch effect in App.jsx fires /api/children,
+    // 404s against the demo router, and surfaces a "Connection error"
+    // banner on a page that otherwise has no connection to error about.
+    refetch: demoRef.current ? loadMock : fetchAll,
   };
 }

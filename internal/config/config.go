@@ -72,8 +72,13 @@ func (c *Config) SetSetupMode(v bool) {
 func New() *Config {
 	dataDir := envOrDefault("DATA_DIR", "/var/lib/babytracker")
 
+	// Demo mode is frontend-only — there's no DB and nothing to sign or
+	// encrypt, so skip the JWT-secret file handling entirely. Without this
+	// guard we'd emit a scary "permission denied" warning whenever someone
+	// runs `DEMO_MODE=true go run` without a writable /var/lib/babytracker.
+	demoMode := os.Getenv("DEMO_MODE") == "true"
 	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" || jwtSecret == "change-me-in-production" {
+	if !demoMode && (jwtSecret == "" || jwtSecret == "change-me-in-production") {
 		jwtSecret = loadOrCreateSecret(dataDir)
 	}
 
