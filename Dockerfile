@@ -1,6 +1,10 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
+# HA Supervisor sets BUILD_VERSION to the add-on's config.yaml version; falls
+# back to "dev" for local builds.
+ARG BUILD_VERSION=dev
+
 # Install runtime dependencies and build tools
 RUN apk add --no-cache \
     postgresql18 \
@@ -41,7 +45,9 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 # cache-bust: v1.0.1
 RUN cp -r /tmp/frontend/dist/ ./internal/router/static/ && \
-    CGO_ENABLED=0 go build -o /usr/local/bin/babytracker ./cmd/babytracker/
+    CGO_ENABLED=0 go build -trimpath \
+        -ldflags="-s -w -X 'github.com/mbentancour/babytracker/internal/version.Version=${BUILD_VERSION}'" \
+        -o /usr/local/bin/babytracker ./cmd/babytracker/
 
 # Clean up build tools and source
 RUN rm -rf /usr/local/go /tmp/frontend /tmp/build /root/go /root/.cache && \
