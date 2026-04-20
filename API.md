@@ -1,6 +1,10 @@
 # BabyTracker API Documentation
 
-Base URL: `http://<host>:8099/api`
+Base URL: `https://<host>/api` (production — default port 443)
+
+> The Home Assistant add-on runs on port 8099 internally, behind HA's
+> ingress proxy. External clients should use the HA-provided URL, not
+> the internal port.
 
 ## Authentication
 
@@ -120,7 +124,7 @@ Content-Type: application/json
 
 Navigate to this URL to start the slideshow immediately:
 ```
-http://<host>:8099/?slideshow=true
+https://<host>/?slideshow=true
 ```
 
 Tapping the screen exits the slideshow and removes the query parameter.
@@ -142,7 +146,7 @@ data: {"picture_frame": true, "device": "nursery-tablet"}
 # rest_command in configuration.yaml
 rest_command:
   babytracker_slideshow_start:
-    url: "http://babytracker.local:8099/api/display"
+    url: "https://babytracker.local/api/display"
     method: PUT
     headers:
       Authorization: "Token YOUR_API_TOKEN"
@@ -150,7 +154,7 @@ rest_command:
     payload: '{"picture_frame": true, "device": "{{ device }}"}'
 
   babytracker_slideshow_stop:
-    url: "http://babytracker.local:8099/api/display"
+    url: "https://babytracker.local/api/display"
     method: PUT
     headers:
       Authorization: "Token YOUR_API_TOKEN"
@@ -945,13 +949,78 @@ These only work when running as a Pi appliance (appliance mode). The response is
 These endpoints are only available when the device is in setup mode (first boot). They require no authentication.
 
 ```
-GET  /api/setup/status          Setup status: {setup_mode, wifi_connected}
-GET  /api/setup/wifi/scan       Scan for Wi-Fi networks
-POST /api/setup/wifi/connect    Connect to Wi-Fi: {ssid, password}
-POST /api/setup/complete        Mark setup as complete
+GET  /api/setup/status          Setup status (see below)
+POST /api/setup/ethernet        Finalize setup using Ethernet
+POST /api/setup/wifi/connect    Connect to Wi-Fi and finalize setup
+GET  /api/setup/wifi/scan       Scan for Wi-Fi networks (legacy — see note)
+POST /api/setup/complete        Mark setup as complete (no network change)
 ```
 
-Wi-Fi scan response:
+### GET /api/setup/status
+
+Returns which network interfaces the device has and their state, so the
+wizard can decide what options to show.
+
+```json
+{
+  "setup_mode": true,
+  "connected": true,
+  "has_ethernet": true,
+  "ethernet_up": true,
+  "ethernet_ip": "192.168.1.50",
+  "has_wifi": true,
+  "wifi_connected": false
+}
+```
+
+### POST /api/setup/ethernet
+
+Finalize setup using the wired connection. DHCP is the default; pass
+`address`, `gateway`, and optionally `dns` for a static IP.
+
+```json
+{ "mode": "dhcp" }
+```
+```json
+{
+  "mode": "static",
+  "address": "192.168.1.50/24",
+  "gateway": "192.168.1.1",
+  "dns": "1.1.1.1,8.8.8.8"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Ethernet configured. BabyTracker is now available on your network.",
+  "ip": "192.168.1.50",
+  "hostname": "babytracker.local"
+}
+```
+
+### POST /api/setup/wifi/connect
+
+Connect to Wi-Fi. Optional `address`/`gateway`/`dns` apply a static IP
+to the Wi-Fi connection. Response mirrors `/api/setup/ethernet`.
+
+```json
+{
+  "ssid": "HomeNetwork",
+  "password": "•••",
+  "address": "192.168.1.50/24",
+  "gateway": "192.168.1.1"
+}
+```
+
+### GET /api/setup/wifi/scan (legacy)
+
+The current setup wizard asks the user to type the SSID instead of scanning
+(Pi WiFi chips can't scan while hostapd is holding the interface, and the
+minimal image doesn't ship `iw`). The endpoint still returns the NetworkManager
+scan cache for compatibility:
+
 ```json
 [
   {"ssid": "HomeNetwork", "signal": "85", "security": "WPA2"},

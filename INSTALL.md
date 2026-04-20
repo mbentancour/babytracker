@@ -50,6 +50,14 @@ Data is persisted in the `/data/` volume managed by Home Assistant.
 
 > Backup schedules are now configured per-destination from the UI (Settings → Data → Backup destinations), not via add-on options.
 
+> **Session persistence in the HA iframe:** Home Assistant loads add-ons in
+> an iframe, which makes cookies unreliable in some browsers (Firefox ETP,
+> Safari ITP). BabyTracker detects when it's running behind HA ingress
+> (`SUPERVISOR_TOKEN` env var) and persists the access token to
+> `localStorage` so sessions survive reloads without a silent logout. On
+> non-HA deployments the token is kept in memory only and relies on the
+> refresh cookie, which works fine there.
+
 ### External (proxy to existing instance)
 
 Use this if you already have BabyTracker running elsewhere and want HA ingress access.

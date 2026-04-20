@@ -130,11 +130,12 @@ Timers make logging faster and more accurate.
 
 Turn a spare tablet into a digital photo frame that cycles through your baby's pictures.
 
-- **Idle timeout:** In Settings, set an idle timeout so picture frame mode activates automatically after a period of inactivity.
+- **Idle timeout:** In Settings → Preferences → Picture Frame, set an idle timeout so picture frame mode activates automatically after a period of inactivity.
 - **Always-on mode:** Add `?slideshow=true` to the URL to start picture frame mode immediately.
-- **Filter photos:** In Settings, choose which types of photos to include in the slideshow.
-- **Live status overlay:** Optionally show small status items on top of the slideshow — time since last feeding / sleep / diaper, running timers, or the current time. Configurable per-item in Settings → General → Picture Frame → Live status overlay.
-- **Remote control:** If you have named your device in Settings, you can control picture frame mode remotely through the Display Control API -- handy for turning it on or off from another device or from Home Assistant.
+- **Filter photos:** In Settings → Preferences → Picture Frame, choose which types of photos to include in the slideshow.
+- **Live status overlay:** Optionally show small status items on top of the slideshow — time since last feeding / sleep / diaper, running timers, or the current time. Configurable per-item in Settings → Preferences → Picture Frame → Live status overlay.
+- **Live updates:** When someone uploads a new photo anywhere, every active slideshow picks it up within a few seconds and shows it as the next slide — no restart needed.
+- **Remote control:** If you have named your device in Settings, you can control picture frame mode from another device via **Settings → Server → Display Control** (admin-only), or via the Display Control API from Home Assistant. Target one device by name or broadcast to every connected display.
 
 ---
 
@@ -164,32 +165,45 @@ Some settings are saved **in this device's browser only**, others are stored on 
 - Backup destinations and their schedules
 - API tokens and webhooks
 - Users and roles
-- Custom domain (appliance mode)
+- TLS/HTTPS certificate, domain, device restart/shutdown (Server tab, admin)
 
 If you clear your browser data or sign in from a new device, the per-device settings reset to defaults — your tracked data is not affected.
 
-### General
+Settings are organized into six tabs in the sidebar (fewer if you're not an admin):
 
-- **Unit system:** Choose between metric and imperial.
-- **Theme:** Light, dark, or match your system setting.
+- **Preferences** — per-device settings (see below)
+- **Data** — export, tags, backups
+- **Integrations** (admin) — API tokens, webhooks
+- **Server** (admin) — storage, display control, TLS/HTTPS, restart/shutdown
+- **Account** — change password, sign out
+- **Users** (admin) — users, roles, child access
+
+### Preferences
+
+Everything on this tab is stored in your browser and applies only to this
+device. The tab is split into sections:
+
+**Appearance + device**
+
+- **Unit system:** metric or imperial.
+- **Theme:** light, dark, or match your system setting.
 - **Language:** English, Spanish, or Danish.
-- **Picture frame timeout:** How long before picture frame mode activates automatically. Also includes the live status overlay toggles (see Picture Frame Mode above).
-- **Device name:** Give this device a name for remote display control.
-- **Custom domain:** Available in appliance mode only. Point a domain name at your device to enable Let's Encrypt HTTPS certificates.
-- **Change password:** Update your account password.
-- **Restart / Shut down:** Available in appliance mode only. Safely reboot or power down the device from the UI.
+- **Device name:** give this device a name used for remote display control and HA integrations.
 
-### Features
+**Picture frame** — all the slideshow controls. Timeout, slide duration,
+which child's photos to show, which entry types (milestones, weights…) to
+include, and the live status overlay toggles.
 
-Toggle which tracking features are visible. If you do not need to track pumping or medications, for example, you can hide them to keep the interface simple.
+**Features** — toggle which tracking features are visible on this device.
+If you don't track pumping or medications, for example, you can hide them
+to keep the interface simple.
 
-### Defaults
-
-Save time by setting default values for things you log often:
+**Defaults** — save time by setting default values for things you log often:
 
 - Default feeding type and method.
 - Default diaper color.
 - Default medication dosage unit.
+- Auto-calculate BMI from weight + height.
 
 ### Data
 
@@ -230,6 +244,19 @@ A fresh install ships with a single **Local** destination pointing at the server
 
 - **API tokens:** Create tokens so external systems (Home Assistant, scripts, etc.) can read or write your data. Choose Read only or Read & Write scope.
 - **Webhooks:** Send HTTP notifications to another system whenever data changes. Useful for triggering automations outside BabyTracker.
+
+### Server (admin only)
+
+- **Storage:** Disk usage for the system and (where applicable) the BabyTracker data volume, with colour-coded progress bars that turn orange >75% and red >90%.
+- **Display control:** Push picture frame on/off to specific tablets or broadcast to every connected device. The list shows which devices are currently connected via SSE.
+- **TLS / HTTPS:** Configure a Let's Encrypt certificate via DNS-01 challenge with Cloudflare, Route53, DuckDNS, Namecheap, or Simply.com. Auto-renews 30 days before expiry. The server starts immediately with a self-signed certificate; the Let's Encrypt cert is obtained in the background and swapped in without a restart.
+- **Custom domain** (appliance mode only): point a domain at the device.
+- **Restart / Shut down** (appliance mode only): safely reboot or power down the device.
+
+### Account
+
+- **Change password:** update your login password.
+- **Sign out:** log out of this browser.
 
 ### Users & Roles (admin only)
 
