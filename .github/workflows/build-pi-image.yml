@@ -101,14 +101,32 @@ jobs:
           set -euo pipefail
           echo "=== Pi Image Smoke Test ==="
 
-          # Find the built image
-          IMG=$(sudo find /tmp/rpi-image-gen/work -type f \( -name '*.img' -o -name '*.img.xz' \) 2>/dev/null | head -1)
+          # Find the built disk image. Look in deploy-* first — that's where
+          # rpi-image-gen drops the final image. Exclude anything under the
+          # chroot's /boot/firmware (kernel_*.img) and kernel*.img by name,
+          # which would otherwise be picked up as the "first .img" and mask
+          # the real disk image.
+          IMG=$(sudo find /tmp/rpi-image-gen/work/deploy-* -maxdepth 2 -type f \( -name '*.img' -o -name '*.img.xz' \) 2>/dev/null | head -1)
           if [ -z "$IMG" ]; then
-            echo "ERROR: No .img file found in build output"
-            sudo find /tmp/rpi-image-gen/work -type f 2>/dev/null | head -50
+            # Fallback: wider search that excludes kernel images and the chroot's /boot/firmware
+            IMG=$(sudo find /tmp/rpi-image-gen/work -type f \( -name '*.img' -o -name '*.img.xz' \) \
+              ! -name 'kernel*.img' ! -path '*/boot/firmware/*' 2>/dev/null | head -1)
+          fi
+          if [ -z "$IMG" ]; then
+            echo "ERROR: No disk image found in build output"
+            sudo find /tmp/rpi-image-gen/work -type f -name '*.img*' 2>/dev/null | head -50
             exit 1
           fi
           echo "Found image: $IMG"
+          # Sanity-check size: a real Pi disk image is at least a few hundred MB.
+          # Anything smaller is almost certainly a kernel file or bootloader blob.
+          SIZE=$(sudo stat -c '%s' "$IMG" 2>/dev/null || sudo stat -f '%z' "$IMG")
+          if [ "$SIZE" -lt 104857600 ]; then
+            echo "ERROR: $IMG is only $SIZE bytes — not a full disk image"
+            echo "Candidates:"
+            sudo find /tmp/rpi-image-gen/work -type f -name '*.img*' -exec ls -lh {} \; 2>/dev/null | head -20
+            exit 1
+          fi
 
           # Decompress if needed
           if [[ "$IMG" == *.xz ]]; then
