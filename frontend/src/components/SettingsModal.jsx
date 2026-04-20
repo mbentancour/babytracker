@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
 import { Icons } from "./Icons";
@@ -403,6 +403,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                 <h3 className="settings-section-title">{t("settings.server")}</h3>
 
                 <StorageSection />
+
+                <DisplayControlSection />
 
                 <TLSSection />
 
@@ -1677,6 +1679,87 @@ function StorageSection() {
       <h4 className="settings-card-title">Storage</h4>
       {renderRow(info.data ? "System" : "Storage", info.root)}
       {info.data && renderRow("BabyTracker data", info.data)}
+    </div>
+  );
+}
+
+function DisplayControlSection() {
+  const [devices, setDevices] = useState([]);
+  const [target, setTarget] = useState(""); // "" = broadcast
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const refresh = useCallback(() => {
+    api.getDisplays()
+      .then((d) => setDevices(d.connected_devices || []))
+      .catch(() => setDevices([]));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 10_000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  const send = async (pictureFrame) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await api.setDisplay({
+        picture_frame: pictureFrame,
+        device: target || undefined,
+      });
+      setMessage({
+        type: "success",
+        text: target
+          ? `Sent to ${target}`
+          : `Sent to ${res.devices_targeted} device${res.devices_targeted === 1 ? "" : "s"}`,
+      });
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || "Failed" });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="settings-card" style={{ marginBottom: 16 }}>
+      <h4 className="settings-card-title">Display Control</h4>
+      <p className="settings-hint">
+        Push picture frame on/off to other connected devices (tablets, displays).
+      </p>
+
+      <FormField label="Target">
+        <select
+          className="form-select"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+        >
+          <option value="">All connected devices ({devices.length})</option>
+          {devices.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </FormField>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <FormButton color="#6C5CE7" disabled={busy || devices.length === 0} onClick={() => send(true)}>
+          Start picture frame
+        </FormButton>
+        <FormButton color="#636e72" disabled={busy || devices.length === 0} onClick={() => send(false)}>
+          Wake / stop
+        </FormButton>
+      </div>
+
+      {message && (
+        <p className="settings-hint" style={{ color: message.type === "success" ? "#00b894" : "#e74c3c", marginTop: 8 }}>
+          {message.text}
+        </p>
+      )}
+      {devices.length === 0 && (
+        <p className="settings-hint" style={{ marginTop: 8 }}>
+          No connected devices yet.
+        </p>
+      )}
     </div>
   );
 }

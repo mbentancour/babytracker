@@ -19,13 +19,20 @@ import (
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
-type PhotosHandler struct {
-	db  *sqlx.DB
-	cfg *config.Config
+// photoBroadcaster is implemented by *DisplayHandler — small interface so the
+// photos package doesn't have to depend on the larger handler.
+type photoBroadcaster interface {
+	BroadcastNewPhoto()
 }
 
-func NewPhotosHandler(db *sqlx.DB, cfg *config.Config) *PhotosHandler {
-	return &PhotosHandler{db: db, cfg: cfg}
+type PhotosHandler struct {
+	db      *sqlx.DB
+	cfg     *config.Config
+	display photoBroadcaster
+}
+
+func NewPhotosHandler(db *sqlx.DB, cfg *config.Config, display photoBroadcaster) *PhotosHandler {
+	return &PhotosHandler{db: db, cfg: cfg, display: display}
 }
 
 func (h *PhotosHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +198,10 @@ func (h *PhotosHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if len(created) == 0 {
 		pagination.WriteError(w, http.StatusBadRequest, "no valid photos uploaded")
 		return
+	}
+
+	if h.display != nil {
+		h.display.BroadcastNewPhoto()
 	}
 
 	pagination.WriteJSON(w, http.StatusCreated, map[string]any{

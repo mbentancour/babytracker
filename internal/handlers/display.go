@@ -30,15 +30,37 @@ type DisplayHandler struct {
 	subs   map[subKey]chan DisplayCommand
 }
 
+// DisplayCommand is the payload sent over the SSE channel. Optional fields
+// distinguish the kind of event:
+//   - SetPictureFrame=true → drive picture frame state via PictureFrame field
+//   - NewPhoto=true → notify clients that a new photo is available
 type DisplayCommand struct {
-	PictureFrame bool   `json:"picture_frame"`
-	Device       string `json:"device,omitempty"` // empty = all of the caller's devices
+	SetPictureFrame bool   `json:"set_picture_frame,omitempty"`
+	PictureFrame    bool   `json:"picture_frame,omitempty"`
+	NewPhoto        bool   `json:"new_photo,omitempty"`
+	Device          string `json:"device,omitempty"` // empty = all of the caller's devices
 }
 
 func NewDisplayHandler(db *sqlx.DB) *DisplayHandler {
 	return &DisplayHandler{
 		db:   db,
 		subs: make(map[subKey]chan DisplayCommand),
+	}
+}
+
+// BroadcastNewPhoto fans a new-photo notification out to every connected
+// display, regardless of which user owns it. Photos that show up in any
+// child's gallery may be relevant to any tablet — household-wide broadcast
+// is intentional.
+func (h *DisplayHandler) BroadcastNewPhoto() {
+	cmd := DisplayCommand{NewPhoto: true}
+	h.subsMu.Lock()
+	defer h.subsMu.Unlock()
+	for _, ch := range h.subs {
+		select {
+		case ch <- cmd:
+		default:
+		}
 	}
 }
 
@@ -59,6 +81,10 @@ func (h *DisplayHandler) SetState(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	// SetState is a picture-frame command; mark it so clients distinguish from
+	// other broadcast types (e.g. new-photo notifications).
+	cmd.SetPictureFrame = true
+	cmd.NewPhoto = false
 
 	userID := middleware.GetUserID(r.Context())
 	var isAdmin bool

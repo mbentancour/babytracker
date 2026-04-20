@@ -35,7 +35,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	pumpingH := handlers.NewPumpingHandler(db)
 	notesH := handlers.NewNotesHandler(db)
 	configH := handlers.NewConfigHandler(cfg)
-	mediaH := handlers.NewMediaHandler(cfg, db)
+	displayH := handlers.NewDisplayHandler(db)
+	mediaH := handlers.NewMediaHandler(cfg, db, displayH)
 	deleteH := handlers.NewGenericDeleteHandler(db, cfg)
 
 	// New feature handlers
@@ -49,11 +50,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	bmiH := handlers.NewBMIHandler(db)
 	exportH := handlers.NewExportHandler(db)
 	galleryH := handlers.NewGalleryHandler(db, cfg)
-	photosH := handlers.NewPhotosHandler(db, cfg)
+	photosH := handlers.NewPhotosHandler(db, cfg, displayH)
 	usersH := handlers.NewUsersHandler(db)
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
-	displayH := handlers.NewDisplayHandler(db)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 

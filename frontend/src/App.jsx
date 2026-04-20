@@ -285,62 +285,57 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
   const childrenRef = useRef(data.children);
   childrenRef.current = data.children;
 
-  const startPictureFrame = useCallback(async () => {
+  // Fetches and filters gallery photos using current preferences. Returns the
+  // list (possibly empty) without touching state. Shared by start + refresh.
+  const fetchGalleryPhotos = useCallback(async () => {
     const pf = pfPrefsRef.current || {};
     const allChildren = childrenRef.current || [];
 
-    // Determine which children to fetch gallery for
     let childIds = pf.childIds?.length > 0 ? pf.childIds : allChildren.map((c) => c.id);
     if (childIds.length === 0 && childIdRef.current) childIds = [childIdRef.current];
 
-    try {
-      // Fetch gallery for each selected child and merge
-      const responses = await Promise.all(
-        childIds.map((cid) => api.getGallery({ child: cid }).catch(() => ({ results: [] })))
-      );
-      let allPhotos = [];
-      const seen = new Set();
-      for (const res of responses) {
-        for (const item of res.results || []) {
-          const key = `${item.entity_type}-${item.photo}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            allPhotos.push(item);
-          }
+    const responses = await Promise.all(
+      childIds.map((cid) => api.getGallery({ child: cid }).catch(() => ({ results: [] })))
+    );
+    let allPhotos = [];
+    const seen = new Set();
+    for (const res of responses) {
+      for (const item of res.results || []) {
+        const key = `${item.entity_type}-${item.photo}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allPhotos.push(item);
         }
       }
+    }
 
-      // Map entity_type to preference key
-      const typeFilter = {
-        shared: "showShared",
-        photo: "showPhoto",
-        profile: "showProfile",
-        milestone: "showMilestone",
-        weight: "showWeight",
-        height: "showHeight",
-        head_circumference: "showHeadCirc",
-        feeding: "showFeeding",
-        sleep: "showSleep",
-        tummy_time: "showTummy",
-        diaper: "showDiaper",
-        temperature: "showTemp",
-        medication: "showMedication",
-        note: "showNote",
-      };
+    const typeFilter = {
+      shared: "showShared", photo: "showPhoto", profile: "showProfile",
+      milestone: "showMilestone", weight: "showWeight", height: "showHeight",
+      head_circumference: "showHeadCirc", feeding: "showFeeding",
+      sleep: "showSleep", tummy_time: "showTummy", diaper: "showDiaper",
+      temperature: "showTemp", medication: "showMedication", note: "showNote",
+    };
 
-      allPhotos = allPhotos.filter((p) => {
-        const key = typeFilter[p.entity_type];
-        if (key === undefined) return true; // Unknown types: show by default
-        return pf[key] !== false;
-      });
+    return allPhotos.filter((p) => {
+      const key = typeFilter[p.entity_type];
+      if (key === undefined) return true;
+      return pf[key] !== false;
+    });
+  }, []);
 
-      if (allPhotos.length > 0) {
-        setGalleryPhotos(allPhotos);
+  const startPictureFrame = useCallback(async () => {
+    try {
+      const photos = await fetchGalleryPhotos();
+      if (photos.length > 0) {
+        setGalleryPhotos(photos);
         setShowPictureFrame(true);
       }
     } catch { /* ignore */ }
-  }, []); // No deps — uses refs
+  }, [fetchGalleryPhotos]);
   startPictureFrameRef.current = startPictureFrame;
+
+  // New photos arrive via the SSE handler below (msg.new_photo) — no polling.
 
   // ?slideshow=true — start picture frame as soon as child data is available
   useEffect(() => {
@@ -350,10 +345,13 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
     }
   }, [slideshowParam, slideshowTriggered, data.child?.id, startPictureFrame]);
 
-  // Idle timeout trigger — only re-runs when the timeout setting changes
+  // Idle timeout trigger — re-runs when the timeout changes OR when picture
+  // frame closes (so we re-arm on a wall-mounted tablet that has no further
+  // user activity to trigger the listener-based reset).
   const pictureFrameTimeout = prefs.pictureFrameTimeout;
   useEffect(() => {
     if (!pictureFrameTimeout || pictureFrameTimeout <= 0) return;
+    if (showPictureFrame) return; // already showing — no idle timer needed
 
     let idleTimer;
     const resetTimer = () => {
@@ -369,27 +367,36 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
       clearTimeout(idleTimer);
       events.forEach((e) => window.removeEventListener(e, resetTimer));
     };
-  }, [pictureFrameTimeout, startPictureFrame]);
+  }, [pictureFrameTimeout, startPictureFrame, showPictureFrame]);
 
-  // Listen for remote display control via SSE (Home Assistant, etc.)
-  // Device name is stored in localStorage so it persists per browser
+  // Listen for remote display events via SSE — drives picture frame state
+  // and live photo refresh. Device name is stored per browser.
   useEffect(() => {
     const deviceName = localStorage.getItem("babytracker_device_name") || "default";
     const evtSource = new EventSource(`./api/display/events?device=${encodeURIComponent(deviceName)}`);
     let isFirst = true;
     evtSource.onmessage = (e) => {
       try {
-        const state = JSON.parse(e.data);
+        const msg = JSON.parse(e.data);
         if (isFirst) { isFirst = false; return; }
-        if (state.picture_frame) {
-          startPictureFrameRef.current();
-        } else {
-          setShowPictureFrame(false);
+
+        // Picture frame on/off command
+        if (msg.set_picture_frame) {
+          if (msg.picture_frame) startPictureFrameRef.current();
+          else setShowPictureFrame(false);
+        }
+
+        // New photo available — refetch the gallery so any active picture
+        // frame slideshow merges it in (PictureFrame.jsx handles the merge).
+        if (msg.new_photo) {
+          fetchGalleryPhotos()
+            .then((photos) => { if (photos.length > 0) setGalleryPhotos(photos); })
+            .catch(() => {});
         }
       } catch { /* ignore */ }
     };
     return () => evtSource.close();
-  }, [startPictureFrame]);
+  }, [startPictureFrame, fetchGalleryPhotos]);
 
   const closeModal = () => setModal(null);
   const handleFormDone = () => {

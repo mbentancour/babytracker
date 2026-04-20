@@ -468,6 +468,14 @@ export const api = {
   shutdownSystem: () => request("system/shutdown", { method: "POST" }),
   getStorage: () => request("system/storage"),
 
+  // Display control (admin)
+  getDisplays: () => request("display"),
+  setDisplay: ({ picture_frame, device }) =>
+    request("display", {
+      method: "PUT",
+      body: JSON.stringify({ picture_frame, device }),
+    }),
+
   // User management (admin)
   getUsers: () => request("users/"),
   createUser: (data) =>

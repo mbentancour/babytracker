@@ -20,12 +20,19 @@ import (
 )
 
 type MediaHandler struct {
-	cfg *config.Config
-	db  *sqlx.DB
+	cfg     *config.Config
+	db      *sqlx.DB
+	display photoBroadcaster
 }
 
-func NewMediaHandler(cfg *config.Config, db *sqlx.DB) *MediaHandler {
-	return &MediaHandler{cfg: cfg, db: db}
+func NewMediaHandler(cfg *config.Config, db *sqlx.DB, display photoBroadcaster) *MediaHandler {
+	return &MediaHandler{cfg: cfg, db: db, display: display}
+}
+
+func (h *MediaHandler) broadcastIfPhoto() {
+	if h.display != nil {
+		h.display.BroadcastNewPhoto()
+	}
 }
 
 func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
@@ -193,6 +200,7 @@ func (h *MediaHandler) UploadChildPhoto(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.broadcastIfPhoto()
 	pagination.WriteJSON(w, http.StatusOK, child)
 }
 
@@ -330,6 +338,7 @@ func (h *MediaHandler) UploadEntryPhoto(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.broadcastIfPhoto()
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"photo": filename})
 }
 
@@ -452,5 +461,6 @@ func (h *MediaHandler) UploadMilestonePhoto(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	h.broadcastIfPhoto()
 	pagination.WriteJSON(w, http.StatusOK, ms)
 }
