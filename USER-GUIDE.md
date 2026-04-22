@@ -26,9 +26,20 @@ To **add another baby** later, tap your current baby's name or photo to open the
 Your baby's dashboard is organized into four tabs:
 
 - **Overview** -- Today's summary at a glance: last feeding, last sleep, last diaper change, and any active timers.
-- **Growth** -- Charts showing weight, height, head circumference, and BMI over time.
+
+  ![Overview tab](docs/screenshots/Overview.png)
+
+- **Growth** -- Charts showing weight, height, head circumference, and BMI over time, with optional WHO percentile overlays.
+
+  ![Growth tab](docs/screenshots/Growth.png)
+
 - **Journal** -- A chronological log of all entries. You can filter by activity type to find what you need.
+
+  ![Journal tab](docs/screenshots/Journal.png)
+
 - **Photos** -- A gallery of all photos attached to entries, milestones, measurements, and standalone uploads.
+
+  ![Photos tab](docs/screenshots/Photos.png)
 
 ---
 

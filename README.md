@@ -8,6 +8,16 @@ The code base was built from scratch and AI was used to accelerate the developme
 
 Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow mode that activates when the device is idle. This feature can be configured or completely disabled. If you have a feature request or want to report a bug, open an issue or a pull request.
 
+## Screenshots
+
+| Overview | Growth |
+|---|---|
+| ![Overview tab — today's activity at a glance](docs/screenshots/Overview.png) | ![Growth tab — weight, height, head circumference, BMI with WHO percentile overlays](docs/screenshots/Growth.png) |
+
+| Journal | Photos |
+|---|---|
+| ![Journal tab — chronological log of all entries with type filters](docs/screenshots/Journal.png) | ![Photos tab — gallery of photos attached to entries](docs/screenshots/Photos.png) |
+
 ## Features
 
 - **Track everything**: feedings, sleep, diapers, tummy time, temperature, weight, height, head circumference, pumping, BMI, medications, milestones, notes, and photos. Multi-child support.
