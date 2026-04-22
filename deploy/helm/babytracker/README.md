@@ -47,8 +47,6 @@ The chart deploys:
 5. **PVC** for BabyTracker data (`/var/lib/babytracker`)
 6. **Ingress** (optional)
 
-No bitnami dependencies. Uses the official `postgres:18-alpine` image directly.
-
 ## TLS
 
 Two options:

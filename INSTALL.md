@@ -142,8 +142,6 @@ The chart deploys:
 - PostgreSQL 18 StatefulSet (optional, bundled by default)
 - Services and PVCs
 
-No bitnami dependencies — uses the official `postgres:18-alpine` image directly.
-
 See [deploy/helm/babytracker/README.md](deploy/helm/babytracker/README.md) for the full configuration reference (TLS modes, external database, ingress setup).
 
 ---
