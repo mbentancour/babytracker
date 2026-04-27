@@ -90,6 +90,30 @@ function timerNameToType(name) {
   return "feeding";
 }
 
+// bootRefresh tries the boot-time /auth/refresh, distinguishing transient
+// failures (network, 5xx) from real "no session" rejections (4xx). Returns
+// "ok" on success, "expired" on 4xx, "transient" if all attempts failed for
+// non-auth reasons. The caller decides what to do with each.
+async function bootRefresh(attempts) {
+  let lastReason = "transient";
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const r = await fetch("./api/auth/refresh", { method: "POST", credentials: "include" });
+      if (r.ok) {
+        const data = await r.json();
+        setAccessToken(data.access_token);
+        return "ok";
+      }
+      if (r.status >= 400 && r.status < 500) return "expired";
+      lastReason = "transient";
+    } catch {
+      lastReason = "transient";
+    }
+    if (i < attempts - 1) await new Promise((res) => setTimeout(res, 800));
+  }
+  return lastReason;
+}
+
 export default function App() {
   const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup-choice, setup, login, authenticated
@@ -140,17 +164,14 @@ export default function App() {
         setAuthState("authenticated");
         return;
       }
-      // No persisted token — try refreshing from the cookie
-      fetch("./api/auth/refresh", { method: "POST", credentials: "include" })
-        .then((r) => {
-          if (r.ok) return r.json();
-          throw new Error("no session");
-        })
-        .then((data) => {
-          setAccessToken(data.access_token);
-          setAuthState("authenticated");
-        })
-        .catch(() => setAuthState("login"));
+      // No persisted token — try refreshing from the cookie. Retry once on
+      // transient failures (network blip, proxy hiccup) before falling back
+      // to login, so a flaky network on first paint doesn't strand the user
+      // at a login screen when their session is actually fine.
+      bootRefresh(2).then((outcome) => {
+        if (outcome === "ok") setAuthState("authenticated");
+        else setAuthState("login");
+      });
     });
   }, []);
 

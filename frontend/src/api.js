@@ -61,19 +61,27 @@ function refreshAccessToken() {
   return refreshPromise;
 }
 
+// doRefresh distinguishes three outcomes:
+//   - "ok": refresh succeeded, accessToken updated
+//   - "expired": server rejected the refresh cookie (4xx) — the session is
+//     genuinely gone and the caller should log out
+//   - throws: transient failure (fetch error, 5xx) — the session may still
+//     be valid; the caller should surface the error without logging out
+//
+// Conflating "transient" with "expired" is what caused random logouts: a Wi-Fi
+// blip or proxy hiccup during the refresh would kick the user to the login
+// screen even though their refresh cookie was still good, and a page reload
+// later would succeed.
 async function doRefresh() {
-  try {
-    const response = await fetch(`${AUTH_BASE}/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!response.ok) return false;
-    const data = await response.json();
-    setAccessToken(data.access_token);
-    return true;
-  } catch {
-    return false;
-  }
+  const response = await fetch(`${AUTH_BASE}/refresh`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (response.status >= 400 && response.status < 500) return "expired";
+  if (!response.ok) throw new Error(`refresh failed: HTTP ${response.status}`);
+  const data = await response.json();
+  setAccessToken(data.access_token);
+  return "ok";
 }
 
 async function request(endpoint, options = {}) {
@@ -94,9 +102,11 @@ async function request(endpoint, options = {}) {
 
   // If unauthorized, try to refresh the token (whether or not we had one).
   // The refresh cookie may still be valid even if the access token is gone.
+  // A *transient* refresh failure (network, 5xx) propagates as-is — only an
+  // explicit "expired" answer from the server kicks the user to login.
   if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
+    const result = await refreshAccessToken();
+    if (result === "ok") {
       config.headers["Authorization"] = `Bearer ${accessToken}`;
       response = await fetch(url, config);
     } else {
