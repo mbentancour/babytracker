@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -60,30 +59,13 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:   input.Notes,
 	}
 
-	if input.Timer != nil {
-		timer, err := models.GetTimer(h.db, *input.Timer)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
-			return
-		}
-		f.Start = timer.Start
-		f.End = time.Now()
-		f.TimerID = input.Timer
-		_ = models.DeleteTimer(h.db, *input.Timer)
-	} else {
-		start, err := time.Parse("2006-01-02T15:04:05", input.Start)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid start time")
-			return
-		}
-		end, err := time.Parse("2006-01-02T15:04:05", input.End)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid end time")
-			return
-		}
-		f.Start = start
-		f.End = end
+	start, end, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	if !ok {
+		return
 	}
+	f.Start = start
+	f.End = end
+	f.TimerID = timerID
 
 	if f.Type == "" {
 		f.Type = "breast milk"

@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -123,4 +125,41 @@ func filterAllowed(body map[string]any, allowed map[string]string) map[string]an
 		}
 	}
 	return updates
+}
+
+// resolveEntryTimes derives start/end for a duration-style entry (feeding,
+// sleep, tummy time). When timerID is set the timer's start anchors the
+// entry, "now" closes it, and the timer is consumed; otherwise the caller's
+// startStr/endStr are parsed as the API's tz-naive
+// "2006-01-02T15:04:05" UTC layout. On any error it writes the response
+// itself and returns ok=false; the caller should just `return`.
+func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startStr, endStr string) (start, end time.Time, resolvedTimer *int, ok bool) {
+	if timerID != nil {
+		timer, err := models.GetTimer(db, *timerID)
+		if err != nil {
+			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
+			return
+		}
+		// Timer cleanup is best-effort — the entry has already been logically
+		// derived from the timer, so we don't roll back on a stale timer row.
+		// But we *do* log it: a silent failure leaves a zombie timer in the
+		// UI with no signal to operators that anything went wrong.
+		if err := models.DeleteTimer(db, *timerID); err != nil {
+			slog.Warn("timer cleanup failed after entry creation", "timer_id", *timerID, "error", err)
+		}
+		return timer.Start, time.Now(), timerID, true
+	}
+	var err error
+	start, err = time.Parse("2006-01-02T15:04:05", startStr)
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid start time")
+		return
+	}
+	end, err = time.Parse("2006-01-02T15:04:05", endStr)
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid end time")
+		return
+	}
+	ok = true
+	return
 }

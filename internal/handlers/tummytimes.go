@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -58,30 +57,13 @@ func (h *TummyTimesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:     input.Notes,
 	}
 
-	if input.Timer != nil {
-		timer, err := models.GetTimer(h.db, *input.Timer)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
-			return
-		}
-		t.Start = timer.Start
-		t.End = time.Now()
-		t.TimerID = input.Timer
-		_ = models.DeleteTimer(h.db, *input.Timer)
-	} else {
-		start, err := time.Parse("2006-01-02T15:04:05", input.Start)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid start time")
-			return
-		}
-		end, err := time.Parse("2006-01-02T15:04:05", input.End)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid end time")
-			return
-		}
-		t.Start = start
-		t.End = end
+	start, end, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	if !ok {
+		return
 	}
+	t.Start = start
+	t.End = end
+	t.TimerID = timerID
 
 	if err := models.CreateTummyTime(h.db, &t); err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create tummy time")

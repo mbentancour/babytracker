@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
@@ -58,30 +57,13 @@ func (h *SleepHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:   input.Notes,
 	}
 
-	if input.Timer != nil {
-		timer, err := models.GetTimer(h.db, *input.Timer)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
-			return
-		}
-		s.Start = timer.Start
-		s.End = time.Now()
-		s.TimerID = input.Timer
-		_ = models.DeleteTimer(h.db, *input.Timer)
-	} else {
-		start, err := time.Parse("2006-01-02T15:04:05", input.Start)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid start time")
-			return
-		}
-		end, err := time.Parse("2006-01-02T15:04:05", input.End)
-		if err != nil {
-			pagination.WriteError(w, http.StatusBadRequest, "invalid end time")
-			return
-		}
-		s.Start = start
-		s.End = end
+	start, end, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	if !ok {
+		return
 	}
+	s.Start = start
+	s.End = end
+	s.TimerID = timerID
 
 	if err := models.CreateSleep(h.db, &s); err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to create sleep entry")
