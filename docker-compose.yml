@@ -6,7 +6,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — copy .env.example to .env and edit}
       POSTGRES_DB: ${POSTGRES_DB:-babytracker}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG18+ stores data under a major-version subdir (/var/lib/postgresql/18/docker)
+      # so pg_upgrade --link works without crossing mount boundaries. Mount the
+      # parent so the versioned subdir lives inside the volume; mounting at
+      # /var/lib/postgresql/data triggers a startup refusal on 18+.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U babytracker"]
       interval: 5s
