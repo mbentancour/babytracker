@@ -96,10 +96,19 @@ export function useBabyData(canReadFn) {
       const weekAgo = new Date(now);
       weekAgo.setDate(weekAgo.getDate() - 6);
       const weekMin = localInputToUTC(`${toLocalISODate(weekAgo)}T00:00:00`);
+      // Sleep charts now clip overnight entries to day boundaries, so the
+      // fetch must reach 1 day earlier to capture sleeps that started the
+      // evening before the chart range but ended inside it.
+      const weekSleepAgo = new Date(now);
+      weekSleepAgo.setDate(weekSleepAgo.getDate() - 7);
+      const weekSleepMin = localInputToUTC(`${toLocalISODate(weekSleepAgo)}T00:00:00`);
 
       const monthAgo = new Date(now);
       monthAgo.setDate(monthAgo.getDate() - 29);
       const monthMin = localInputToUTC(`${toLocalISODate(monthAgo)}T00:00:00`);
+      const monthSleepAgo = new Date(now);
+      monthSleepAgo.setDate(monthSleepAgo.getDate() - 30);
+      const monthSleepMin = localInputToUTC(`${toLocalISODate(monthSleepAgo)}T00:00:00`);
 
       const c = childId || undefined;
 
@@ -130,7 +139,7 @@ export function useBabyData(canReadFn) {
         q("feeding", api.getFeedings({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
         q("feeding", api.getFeedings({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
         q("sleep", api.getSleep({ child: c, start_min: sleepMin, limit: 100, ordering: "-start" })),
-        q("sleep", api.getSleep({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("sleep", api.getSleep({ child: c, start_min: weekSleepMin, limit: 200, ordering: "-start" })),
         q("diaper", api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" })),
         q("tummy", api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
         q("tummy", api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
@@ -140,7 +149,7 @@ export function useBabyData(canReadFn) {
         q("feeding", api.getTimers()),
         q("note", api.getNotes({ child: c, limit: 20, ordering: "-time" })),
         q("feeding", api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
-        q("sleep", api.getSleep({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
+        q("sleep", api.getSleep({ child: c, start_min: monthSleepMin, limit: 500, ordering: "-start" })),
         q("headcirc", api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" })),
         q("medication", api.getMedications({ child: c, limit: 20, ordering: "-time" })),
         q("milestone", api.getMilestones({ child: c, limit: 50, ordering: "-date" })),

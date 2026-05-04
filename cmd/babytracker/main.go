@@ -100,6 +100,7 @@ func main() {
 			slog.Error("failed to access embedded migrations", "error", err)
 			os.Exit(1)
 		}
+		cfg.MigrationsFS = migFS
 		if err := database.RunMigrations(cfg.DatabaseURL, migFS); err != nil {
 			slog.Error("failed to run migrations", "error", err)
 			os.Exit(1)

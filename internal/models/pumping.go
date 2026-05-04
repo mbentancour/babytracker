@@ -26,8 +26,8 @@ type PumpingInput struct {
 
 func CreatePumping(db *sqlx.DB, p *Pumping) error {
 	return db.QueryRowx(
-		`INSERT INTO pumping (child_id, start_time, end_time, amount, duration)
-		 VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-		p.ChildID, p.Start, p.End, p.Amount, computeInterval(p.Start, p.End),
+		`INSERT INTO pumping (child_id, start_time, end_time, amount)
+		 VALUES ($1, $2, $3, $4) RETURNING *`,
+		p.ChildID, p.Start, p.End, p.Amount,
 	).StructScan(p)
 }

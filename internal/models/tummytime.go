@@ -30,9 +30,9 @@ type TummyTimeInput struct {
 
 func CreateTummyTime(db *sqlx.DB, t *TummyTime) error {
 	return db.QueryRowx(
-		`INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-		t.ChildID, t.Start, t.End, computeInterval(t.Start, t.End), t.Milestone, t.Notes, t.TimerID,
+		`INSERT INTO tummy_times (child_id, start_time, end_time, milestone, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+		t.ChildID, t.Start, t.End, t.Milestone, t.Notes, t.TimerID,
 	).StructScan(t)
 }
 

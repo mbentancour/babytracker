@@ -34,10 +34,9 @@ type FeedingInput struct {
 
 func CreateFeeding(db *sqlx.DB, f *Feeding) error {
 	return db.QueryRowx(
-		`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-		f.ChildID, f.Start, f.End, f.Type, f.Method, f.Amount,
-		computeInterval(f.Start, f.End), f.Notes, f.TimerID,
+		`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+		f.ChildID, f.Start, f.End, f.Type, f.Method, f.Amount, f.Notes, f.TimerID,
 	).StructScan(f)
 }
 
@@ -46,15 +45,4 @@ func UpdateFeeding(db *sqlx.DB, id int, updates map[string]any) (*Feeding, error
 	var f Feeding
 	err := db.QueryRowx(query, args...).StructScan(&f)
 	return &f, err
-}
-
-func computeInterval(start, end time.Time) string {
-	d := end.Sub(start)
-	if d < 0 {
-		d = 0
-	}
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	s := int(d.Seconds()) % 60
-	return FormatDuration(h*3600 + m*60 + s)
 }

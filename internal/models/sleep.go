@@ -30,9 +30,9 @@ type SleepInput struct {
 
 func CreateSleep(db *sqlx.DB, s *Sleep) error {
 	return db.QueryRowx(
-		`INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-		s.ChildID, s.Start, s.End, computeInterval(s.Start, s.End), s.Nap, s.Notes, s.TimerID,
+		`INSERT INTO sleep (child_id, start_time, end_time, nap, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+		s.ChildID, s.Start, s.End, s.Nap, s.Notes, s.TimerID,
 	).StructScan(s)
 }
 

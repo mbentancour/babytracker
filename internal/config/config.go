@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/url"
@@ -53,6 +54,12 @@ type Config struct {
 	// any colon-separated value of BACKUP_LOCAL_ROOTS. Prevents an admin from
 	// accidentally (or maliciously) pointing a destination at /etc or /var/log.
 	BackupLocalRoots []string
+
+	// MigrationsFS is the embedded migrations filesystem from main.go. The
+	// restore handlers re-run migrations after dump replay so a backup taken
+	// on an older schema doesn't leave the running server with a downgraded
+	// public schema until the next process restart.
+	MigrationsFS fs.FS
 }
 
 func (c *Config) IsProxyMode() bool {

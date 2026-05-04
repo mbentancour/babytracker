@@ -109,13 +109,6 @@ func (h *FeedingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	updates := filterAllowed(body, allowed)
 
-	// Recompute duration if start or end changed
-	if _, hasStart := updates["start_time"]; hasStart {
-		if _, hasEnd := updates["end_time"]; hasEnd {
-			// Both provided, recalculate
-		}
-	}
-
 	if len(updates) == 0 {
 		pagination.WriteError(w, http.StatusBadRequest, "no valid fields to update")
 		return

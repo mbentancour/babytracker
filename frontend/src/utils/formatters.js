@@ -179,8 +179,11 @@ export function aggregateSleepByDay(entries) {
   const sums = {};
   days.forEach((d) => (sums[d.dateStr] = 0));
   entries.forEach((e) => {
-    const key = entryDateStr(e.start);
-    if (key in sums) sums[key] += parseDuration(e.duration);
+    for (const d of days) {
+      const dayStartMs = new Date(`${d.dateStr}T00:00:00`).getTime();
+      const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000;
+      sums[d.dateStr] += overlapHours(e, dayStartMs, dayEndMs);
+    }
   });
   return days.map((d) => ({ day: d.label, hours: Math.round(sums[d.dateStr] * 10) / 10 }));
 }
@@ -252,8 +255,11 @@ export function dailySleepTotals(entries, numDays = 30) {
   const sums = {};
   days.forEach((d) => (sums[d.dateStr] = 0));
   entries.forEach((e) => {
-    const key = entryDateStr(e.start);
-    if (key in sums) sums[key] += parseDuration(e.duration);
+    for (const d of days) {
+      const dayStartMs = new Date(`${d.dateStr}T00:00:00`).getTime();
+      const dayEndMs = dayStartMs + 24 * 60 * 60 * 1000;
+      sums[d.dateStr] += overlapHours(e, dayStartMs, dayEndMs);
+    }
   });
   const result = days.map((d) => ({ date: d.label, hours: Math.round(sums[d.dateStr] * 10) / 10 }));
   const firstNonZero = result.findIndex((d) => d.hours > 0);

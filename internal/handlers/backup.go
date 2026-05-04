@@ -18,10 +18,23 @@ import (
 	"github.com/mbentancour/babytracker/internal/backup"
 	"github.com/mbentancour/babytracker/internal/backup/storage"
 	"github.com/mbentancour/babytracker/internal/config"
+	"github.com/mbentancour/babytracker/internal/database"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
+
+// reapplyMigrations brings the schema back up to the embedded migration head
+// after a restore. A backup taken on an older schema is replayed verbatim,
+// which downgrades the running server's public schema; without this the new
+// binary would race against an old schema until the next process restart.
+// Returns nil if MigrationsFS isn't configured (proxy/demo modes).
+func (h *BackupHandler) reapplyMigrations() error {
+	if h.cfg.MigrationsFS == nil {
+		return nil
+	}
+	return database.RunMigrations(h.cfg.DatabaseURL, h.cfg.MigrationsFS)
+}
 
 type BackupHandler struct {
 	cfg *config.Config
@@ -91,6 +104,11 @@ func (h *BackupHandler) SetupRestore(w http.ResponseWriter, r *http.Request) {
 			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
+	}
+	if err := h.reapplyMigrations(); err != nil {
+		slog.Error("post-restore migration failed", "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "restored, but failed to re-apply migrations; restart the server")
+		return
 	}
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "restored"})
 }
@@ -394,6 +412,11 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
+		if err := h.reapplyMigrations(); err != nil {
+			slog.Error("post-restore migration failed", "destination_id", destID, "name", name, "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "restored, but failed to re-apply migrations; restart the server")
+			return
+		}
 		pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "restored"})
 		return
 	}
@@ -425,6 +448,11 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 			pagination.WriteError(w, http.StatusInternalServerError, "restore failed")
 			return
 		}
+	}
+	if err := h.reapplyMigrations(); err != nil {
+		slog.Error("post-restore migration failed", "error", err)
+		pagination.WriteError(w, http.StatusInternalServerError, "restored, but failed to re-apply migrations; restart the server")
+		return
 	}
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "restored"})
 }

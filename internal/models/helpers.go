@@ -65,14 +65,6 @@ func buildUpdateQueryWithExtraCondition(table string, id int, updates map[string
 	return query, args
 }
 
-// Duration helpers for formatting intervals as HH:MM:SS strings
-func FormatDuration(seconds int) string {
-	h := seconds / 3600
-	m := (seconds % 3600) / 60
-	s := seconds % 60
-	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
-}
-
 // deletableTables is the allow-list of tables that DeleteEntity is permitted
 // to target. Keeps the fmt.Sprintf on the table name safe even if a future
 // caller passes user-influenced input.

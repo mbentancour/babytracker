@@ -96,28 +96,26 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 
 	imports := []importDef{
 		{"feedings", "/api/feedings/",
-			`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, duration, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+			`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, notes) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End, Type, Method string
 					Amount                   *float64
-					Duration                 *string
 					Notes                    string
 				}
 				json.Unmarshal(raw, &e)
-				return []any{cid, e.Start, e.End, e.Type, e.Method, e.Amount, e.Duration, e.Notes}
+				return []any{cid, e.Start, e.End, e.Type, e.Method, e.Amount, e.Notes}
 			}},
 		{"sleep", "/api/sleep/",
-			`INSERT INTO sleep (child_id, start_time, end_time, duration, nap, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO sleep (child_id, start_time, end_time, nap, notes) VALUES ($1,$2,$3,$4,$5)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
-					Duration   *string
 					Nap        bool
 					Notes      string
 				}
 				json.Unmarshal(raw, &e)
-				return []any{cid, e.Start, e.End, e.Duration, e.Nap, e.Notes}
+				return []any{cid, e.Start, e.End, e.Nap, e.Notes}
 			}},
 		{"changes", "/api/changes/",
 			`INSERT INTO changes (child_id, time, wet, solid, color, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -130,16 +128,15 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Time, e.Wet, e.Solid, e.Color, e.Notes}
 			}},
 		{"tummy-times", "/api/tummy-times/",
-			`INSERT INTO tummy_times (child_id, start_time, end_time, duration, milestone, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
+			`INSERT INTO tummy_times (child_id, start_time, end_time, milestone, notes) VALUES ($1,$2,$3,$4,$5)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
-					Duration   *string
 					Milestone  string
 					Notes      string
 				}
 				json.Unmarshal(raw, &e)
-				return []any{cid, e.Start, e.End, e.Duration, e.Milestone, e.Notes}
+				return []any{cid, e.Start, e.End, e.Milestone, e.Notes}
 			}},
 		{"temperature", "/api/temperature/",
 			`INSERT INTO temperature (child_id, time, temperature, notes) VALUES ($1,$2,$3,$4)`,
@@ -175,15 +172,14 @@ func (h *BBImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 				return []any{cid, e.Date, e.Height, e.Notes}
 			}},
 		{"pumping", "/api/pumping/",
-			`INSERT INTO pumping (child_id, start_time, end_time, amount, duration) VALUES ($1,$2,$3,$4,$5)`,
+			`INSERT INTO pumping (child_id, start_time, end_time, amount) VALUES ($1,$2,$3,$4)`,
 			func(raw json.RawMessage, cid int) []any {
 				var e struct {
 					Start, End string
 					Amount     *float64
-					Duration   *string
 				}
 				json.Unmarshal(raw, &e)
-				return []any{cid, e.Start, e.End, e.Amount, e.Duration}
+				return []any{cid, e.Start, e.End, e.Amount}
 			}},
 		{"notes", "/api/notes/",
 			`INSERT INTO notes (child_id, time, note) VALUES ($1,$2,$3)`,
