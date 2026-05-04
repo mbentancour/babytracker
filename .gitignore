@@ -13,6 +13,7 @@ frontend/dist/
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 
 # OS
