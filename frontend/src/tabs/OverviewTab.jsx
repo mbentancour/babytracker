@@ -26,6 +26,7 @@ import {
   aggregateSleepByDay,
   aggregateTummyByDay,
   getEntriesForDay,
+  overlapHours,
   parseDuration,
 } from "../utils/formatters";
 import { useUnits } from "../utils/units";
@@ -51,8 +52,14 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
 
   const totalFeeding = feedings.reduce((s, f) => s + (f.amount || 0), 0);
+  // "Last 24 hours" sleep total: clip each entry to the rolling window so an
+  // overnight sleep that straddles the boundary contributes only the portion
+  // that actually falls inside the window (not its whole duration, and not
+  // zero). Ongoing sleeps are clipped to "now".
+  const sleepWindowEnd = Date.now();
+  const sleepWindowStart = sleepWindowEnd - 24 * 60 * 60 * 1000;
   const totalSleep = sleepEntries.reduce(
-    (s, e) => s + parseDuration(e.duration),
+    (s, e) => s + overlapHours(e, sleepWindowStart, sleepWindowEnd),
     0
   );
   const totalDiapers = changes.length;

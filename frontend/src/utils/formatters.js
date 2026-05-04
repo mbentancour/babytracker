@@ -58,6 +58,21 @@ export function parseDuration(durationStr) {
   return parts[0];
 }
 
+// overlapHours returns how many hours of an entry's [start, end] range fall
+// within the given window. Used by rolling "last 24 hours" totals so an
+// overnight sleep that crosses the window boundary contributes only the
+// portion that's actually inside the window, instead of either its whole
+// duration (if start ∈ window) or nothing (if start ∉ window). Ongoing
+// entries with no end are treated as ending right now.
+export function overlapHours(entry, windowStartMs, windowEndMs) {
+  if (!entry?.start) return 0;
+  const startMs = new Date(entry.start).getTime();
+  const endMs = entry.end ? new Date(entry.end).getTime() : Date.now();
+  const overlapStart = Math.max(startMs, windowStartMs);
+  const overlapEnd = Math.min(endMs, windowEndMs);
+  return Math.max(0, (overlapEnd - overlapStart) / 3600000);
+}
+
 export function formatDuration(durationStr) {
   if (!durationStr) return "—";
   const hours = parseDuration(durationStr);

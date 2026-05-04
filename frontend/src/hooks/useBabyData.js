@@ -82,9 +82,15 @@ export function useBabyData(canReadFn) {
       const todayMin = localInputToUTC(`${todayStr}T00:00:00`);
       const todayMax = localInputToUTC(`${todayStr}T23:59:59`);
 
-      const twentyFourAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      // Sleep entries can span the rolling 24h window boundary, and the API
+      // only filters by start_time. To make sure the OverviewTab "Last 24h"
+      // total — which clips each entry to the window — sees overnight sleeps
+      // that started *before* the window but ended inside it, we ask for a
+      // wider lookback (~36h). Anything fully outside the window contributes
+      // 0 hours after the clip, so the wider fetch is harmless to the stat.
+      const sleepFetchAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000);
       const sleepMin = localInputToUTC(
-        `${toLocalISODate(twentyFourAgo)}T${String(twentyFourAgo.getHours()).padStart(2, "0")}:${String(twentyFourAgo.getMinutes()).padStart(2, "0")}:00`,
+        `${toLocalISODate(sleepFetchAgo)}T${String(sleepFetchAgo.getHours()).padStart(2, "0")}:${String(sleepFetchAgo.getMinutes()).padStart(2, "0")}:00`,
       );
 
       const weekAgo = new Date(now);
@@ -164,7 +170,9 @@ export function useBabyData(canReadFn) {
       // Fetch tag maps for every taggable entity type in parallel. Each
       // returns `{ "<entity_id>": [tag, tag, ...] }`; we only populate
       // entries that actually have tags (untagged entities are absent).
-      // A failure here shouldn't break the dashboard — fall back to empty.
+      // A failure here shouldn't break the dashboard — fall back to empty
+      // for the affected type — but we log so a partial outage doesn't
+      // silently drop tags off the UI with no signal to the operator.
       const tagTypes = [
         "feeding", "sleep", "diaper", "tummy_time", "pumping",
         "temperature", "medication", "note", "milestone",
@@ -172,12 +180,18 @@ export function useBabyData(canReadFn) {
       ];
       try {
         const results = await Promise.all(
-          tagTypes.map((t) => api.getEntityTagsBulk(t).catch(() => ({}))),
+          tagTypes.map((t) =>
+            api.getEntityTagsBulk(t).catch((e) => {
+              console.warn(`tag fetch failed for ${t}:`, e);
+              return {};
+            }),
+          ),
         );
         const nextMaps = {};
         tagTypes.forEach((t, i) => { nextMaps[t] = results[i] || {}; });
         setTagMaps(nextMaps);
-      } catch {
+      } catch (err) {
+        console.warn("tag bulk fetch aggregate failure:", err);
         setTagMaps({});
       }
 
