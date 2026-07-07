@@ -2,6 +2,7 @@ package router
 
 import (
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -352,6 +353,18 @@ type spaHandler struct {
 
 func newSPAHandler() *spaHandler {
 	staticFS := getStaticFS()
+	// Fail loudly if the frontend didn't get embedded correctly. Without this,
+	// a broken build (e.g. the frontend copied to static/dist/ instead of
+	// static/) silently serves a directory listing on a blank page instead of
+	// the app — invisible until a user hits it. One clear log line at startup
+	// turns that into an obvious diagnosis.
+	if f, err := staticFS.Open("index.html"); err != nil {
+		slog.Error("embedded frontend is missing index.html at its root — " +
+			"the app will not render (check the frontend build/copy step); " +
+			"serving API only")
+	} else {
+		f.Close()
+	}
 	return &spaHandler{
 		staticFS:   staticFS,
 		fileServer: http.FileServer(staticFS),
