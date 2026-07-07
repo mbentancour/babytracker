@@ -118,6 +118,30 @@ func grantChild(t *testing.T, db *sqlx.DB, userID, childID, roleID int) {
 	}
 }
 
+// grantPerm sets a role's access level for a feature (feeding, sleep, …).
+func grantPerm(t *testing.T, db *sqlx.DB, roleID int, feature, level string) {
+	t.Helper()
+	_, err := db.Exec(
+		`INSERT INTO role_permissions (role_id, feature, access_level) VALUES ($1, $2, $3)`,
+		roleID, feature, level)
+	if err != nil {
+		t.Fatalf("grantPerm: %v", err)
+	}
+}
+
+// mkFeeding creates a plain feeding row for a child and returns its id.
+func mkFeeding(t *testing.T, db *sqlx.DB, childID int) int {
+	t.Helper()
+	var id int
+	err := db.Get(&id, `
+		INSERT INTO feedings (child_id, start_time, end_time, type, method)
+		VALUES ($1, NOW(), NOW(), 'breast milk', 'bottle') RETURNING id`, childID)
+	if err != nil {
+		t.Fatalf("mkFeeding: %v", err)
+	}
+	return id
+}
+
 // mkFeedingPhoto creates a feeding row for a child with a photo filename.
 func mkFeedingPhoto(t *testing.T, db *sqlx.DB, childID int, photo string) int {
 	t.Helper()
