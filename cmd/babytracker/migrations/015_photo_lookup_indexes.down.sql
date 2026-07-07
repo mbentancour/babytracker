@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS idx_feedings_photo;
+DROP INDEX IF EXISTS idx_sleep_photo;
+DROP INDEX IF EXISTS idx_changes_photo;
+DROP INDEX IF EXISTS idx_tummy_times_photo;
+DROP INDEX IF EXISTS idx_temperature_photo;
+DROP INDEX IF EXISTS idx_weight_photo;
+DROP INDEX IF EXISTS idx_height_photo;
+DROP INDEX IF EXISTS idx_head_circumference_photo;
+DROP INDEX IF EXISTS idx_pumping_photo;
+DROP INDEX IF EXISTS idx_medications_photo;
+DROP INDEX IF EXISTS idx_milestones_photo;
+DROP INDEX IF EXISTS idx_notes_photo;
+DROP INDEX IF EXISTS idx_bmi_photo;
