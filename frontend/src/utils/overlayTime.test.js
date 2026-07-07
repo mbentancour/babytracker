@@ -19,8 +19,8 @@ describe("agoAnchor", () => {
 describe("formatAwake", () => {
   const M = 60000;
   it("renders minutes only under an hour", () => { expect(formatAwake(45 * M)).toBe("45m"); });
-  it("renders hours and minutes compactly", () => { expect(formatAwake(90 * M)).toBe("1h30m"); });
+  it("renders hours and minutes compactly", () => { expect(formatAwake(90 * M)).toBe("1h 30m"); });
   it("drops minutes when zero", () => { expect(formatAwake(120 * M)).toBe("2h"); });
-  it("renders days and hours", () => { expect(formatAwake(26 * 60 * M)).toBe("1d2h"); });
+  it("renders days and hours", () => { expect(formatAwake(26 * 60 * M)).toBe("1d 2h"); });
   it("floors sub-minute to <1m", () => { expect(formatAwake(30000)).toBe("<1m"); });
 });

@@ -14,14 +14,16 @@ export function agoAnchor(item) {
   return item.start || item.time;
 }
 
-// formatAwake renders a compact elapsed duration like "1h30m", "45m", "2d3h".
+// formatAwake renders an elapsed duration like "1h 30m", "45m", "2d 3h".
+// The spacing matches timeAgo() (used by the other overlay lines) so the
+// "Awake 1h 30m" line reads consistently with "fed 1h 30m ago".
 export function formatAwake(ms) {
   const totalMin = Math.floor(ms / 60000);
   if (totalMin < 1) return "<1m";
   const d = Math.floor(totalMin / 1440);
   const h = Math.floor((totalMin % 1440) / 60);
   const m = totalMin % 60;
-  if (d > 0) return h > 0 ? `${d}d${h}h` : `${d}d`;
-  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
+  if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
   return `${m}m`;
 }
