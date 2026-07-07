@@ -11,15 +11,35 @@ export function useTimers(serverTimers, childId) {
   // without this set the sync below would pop the bar right back onto the
   // screen behind the open form.
   const suppressedRef = useRef(new Set());
+  // Snapshot of each suppressed timer taken at stop time, so a cancel can
+  // restore the bar even when serverTimers hasn't caught up with a timer
+  // that was started and stopped within one poll interval.
+  const stashedRef = useRef(new Map());
+  // Ids that have appeared in at least one serverTimers snapshot. Suppression
+  // cleanup keys off this: "absent from the server" only means "saved and
+  // deleted" for a timer the server ever reported — a poll snapshot that
+  // predates the timer's creation must not clear its suppression.
+  const everSeenRef = useRef(new Set());
 
   // Sync with server timers on data load — only show timers for selected child
   useEffect(() => {
-    // Server no longer knows a suppressed timer → the entry was saved and
-    // the timer deleted; drop the suppression so the id can't shadow a
-    // future timer.
     const serverIds = new Set((serverTimers || []).map((t) => t.id));
+    for (const id of serverIds) everSeenRef.current.add(id);
+    // Server no longer knows a suppressed timer it previously reported →
+    // the entry was saved and the timer deleted; drop the suppression so
+    // the id can't shadow a future timer.
     for (const id of suppressedRef.current) {
-      if (!serverIds.has(id)) suppressedRef.current.delete(id);
+      if (everSeenRef.current.has(id) && !serverIds.has(id)) {
+        suppressedRef.current.delete(id);
+        stashedRef.current.delete(id);
+      }
+    }
+    // Bound everSeen: ids gone from the server and no longer suppressed
+    // are settled history.
+    for (const id of everSeenRef.current) {
+      if (!serverIds.has(id) && !suppressedRef.current.has(id)) {
+        everSeenRef.current.delete(id);
+      }
     }
     if (serverTimers?.length > 0) {
       const filtered = (childId
@@ -77,22 +97,28 @@ export function useTimers(serverTimers, childId) {
     const timer = activeTimers.find((t) => t.id === timerId);
     if (!timer) return null;
     suppressedRef.current.add(timerId);
+    stashedRef.current.set(timerId, { ...timer });
     setActiveTimers((prev) => prev.filter((t) => t.id !== timerId));
     return { ...timer };
   }, [activeTimers]);
 
   // Un-suppress a stopped timer — used when the entry form is cancelled, so
   // the still-running server timer becomes visible again immediately instead
-  // of silently on the next poll.
+  // of silently on the next poll. Falls back to the stop-time snapshot when
+  // serverTimers doesn't have the timer yet (started and stopped within one
+  // poll interval).
   const resumeTimer = useCallback((timerId) => {
     if (!suppressedRef.current.has(timerId)) return;
     suppressedRef.current.delete(timerId);
-    const t = (serverTimers || []).find((s) => s.id === timerId);
-    if (!t || (childId && t.child !== childId)) return;
+    const stashed = stashedRef.current.get(timerId);
+    stashedRef.current.delete(timerId);
+    const s = (serverTimers || []).find((t) => t.id === timerId);
+    const restored = s
+      ? { id: s.id, name: s.name || "timer", start: new Date(s.start), childId: s.child }
+      : stashed;
+    if (!restored || (childId && restored.childId !== childId)) return;
     setActiveTimers((prev) =>
-      prev.some((p) => p.id === timerId)
-        ? prev
-        : [...prev, { id: t.id, name: t.name || "timer", start: new Date(t.start), childId: t.child }]
+      prev.some((p) => p.id === timerId) ? prev : [...prev, restored]
     );
   }, [serverTimers, childId]);
 

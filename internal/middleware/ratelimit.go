@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
 type rateLimiter struct {
@@ -85,7 +87,7 @@ func RateLimit(maxRequests int, window time.Duration) func(http.Handler) http.Ha
 
 			if !rl.allow(ip) {
 				w.Header().Set("Retry-After", "60")
-				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+				pagination.WriteError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 

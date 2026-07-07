@@ -205,7 +205,7 @@ func (h *DisplayHandler) Events(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !authenticated {
-		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		pagination.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 

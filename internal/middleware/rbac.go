@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/models"
+	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
 // Map URL path prefixes to feature names for permission checking
@@ -92,7 +93,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			for awp := range adminWritePaths {
 				if path == awp || strings.HasPrefix(path, awp) {
 					if r.Method != http.MethodGet {
-						http.Error(w, `{"error":"admin access required"}`, http.StatusForbidden)
+						pagination.WriteError(w, http.StatusForbidden, "admin access required")
 						return
 					}
 					next.ServeHTTP(w, r)
@@ -127,7 +128,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			}
 			if feature == "" {
 				// Unknown path — deny by default for non-admins
-				http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+				pagination.WriteError(w, http.StatusForbidden, "access denied")
 				return
 			}
 
@@ -148,7 +149,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 				//            body to include child so we can check it here.
 				accessible, _ := models.GetAccessibleChildIDs(db, userID)
 				if len(accessible) == 0 {
-					http.Error(w, `{"error":"you don't have access to any children"}`, http.StatusForbidden)
+					pagination.WriteError(w, http.StatusForbidden, "you don't have access to any children")
 					return
 				}
 				switch r.Method {
@@ -156,7 +157,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				default:
-					http.Error(w, `{"error":"child parameter required"}`, http.StatusBadRequest)
+					pagination.WriteError(w, http.StatusBadRequest, "child parameter required")
 					return
 				}
 			}
@@ -165,13 +166,13 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			level := models.CheckAccess(db, userID, childID, feature)
 
 			if level == "none" {
-				http.Error(w, `{"error":"you don't have access to this child's data"}`, http.StatusForbidden)
+				pagination.WriteError(w, http.StatusForbidden, "you don't have access to this child's data")
 				return
 			}
 
 			// Write operations need "write" level
 			if r.Method != http.MethodGet && level != "write" {
-				http.Error(w, `{"error":"you have read-only access to this feature"}`, http.StatusForbidden)
+				pagination.WriteError(w, http.StatusForbidden, "you have read-only access to this feature")
 				return
 			}
 
@@ -190,12 +191,12 @@ func RequireFreshAdmin(db *sqlx.DB) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			uid := GetUserID(r.Context())
 			if uid == 0 {
-				http.Error(w, `{"error":"not authenticated"}`, http.StatusUnauthorized)
+				pagination.WriteError(w, http.StatusUnauthorized, "not authenticated")
 				return
 			}
 			user, err := models.GetUserByID(db, uid)
 			if err != nil || user == nil || !user.IsAdmin {
-				http.Error(w, `{"error":"admin access required"}`, http.StatusForbidden)
+				pagination.WriteError(w, http.StatusForbidden, "admin access required")
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -9,6 +9,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/crypto"
 	"github.com/mbentancour/babytracker/internal/models"
+	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
 type contextKey string
@@ -24,13 +25,13 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, `{"error":"missing authorization header"}`, http.StatusUnauthorized)
+				pagination.WriteError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 {
-				http.Error(w, `{"error":"invalid authorization header"}`, http.StatusUnauthorized)
+				pagination.WriteError(w, http.StatusUnauthorized, "invalid authorization header")
 				return
 			}
 
@@ -39,7 +40,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 				// JWT token auth
 				claims, err := crypto.ValidateAccessToken(jwtSecret, parts[1])
 				if err != nil {
-					http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+					pagination.WriteError(w, http.StatusUnauthorized, "invalid or expired token")
 					return
 				}
 				ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -52,20 +53,20 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 				tokenHash := crypto.HashRefreshToken(parts[1])
 				apiToken, err := models.GetAPITokenByHash(db, tokenHash)
 				if err != nil {
-					http.Error(w, `{"error":"invalid API token"}`, http.StatusUnauthorized)
+					pagination.WriteError(w, http.StatusUnauthorized, "invalid API token")
 					return
 				}
 				// Defence-in-depth expiry check — GetAPITokenByHash already
 				// filters expired rows, but re-checking here keeps the contract
 				// explicit if that query ever changes.
 				if apiToken.ExpiresAt != nil && time.Now().After(*apiToken.ExpiresAt) {
-					http.Error(w, `{"error":"API token expired"}`, http.StatusUnauthorized)
+					pagination.WriteError(w, http.StatusUnauthorized, "API token expired")
 					return
 				}
 
 				// Check permissions for write operations
 				if r.Method != http.MethodGet && apiToken.Permissions == "read" {
-					http.Error(w, `{"error":"API token does not have write permission"}`, http.StatusForbidden)
+					pagination.WriteError(w, http.StatusForbidden, "API token does not have write permission")
 					return
 				}
 
@@ -74,7 +75,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 
 				user, err := models.GetUserByID(db, apiToken.UserID)
 				if err != nil {
-					http.Error(w, `{"error":"token user not found"}`, http.StatusUnauthorized)
+					pagination.WriteError(w, http.StatusUnauthorized, "token user not found")
 					return
 				}
 
@@ -84,7 +85,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r.WithContext(ctx))
 
 			default:
-				http.Error(w, `{"error":"invalid authorization scheme, use Bearer or Token"}`, http.StatusUnauthorized)
+				pagination.WriteError(w, http.StatusUnauthorized, "invalid authorization scheme, use Bearer or Token")
 			}
 		})
 	}

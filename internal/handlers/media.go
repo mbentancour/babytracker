@@ -62,7 +62,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !authenticated {
-		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		pagination.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		accessible, _ := models.GetAccessibleChildIDs(h.db, userID)
 		if len(accessible) == 0 {
-			http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+			pagination.WriteError(w, http.StatusForbidden, "access denied")
 			return
 		}
 		// A photo with no owning children is "shared" in gallery terms
@@ -111,7 +111,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		// lookup error must deny, never fall through to "shared".
 		owners, err := photoOwnerChildIDs(h.db, justFilename)
 		if err != nil {
-			http.Error(w, `{"error":"access check failed"}`, http.StatusInternalServerError)
+			pagination.WriteError(w, http.StatusInternalServerError, "access check failed")
 			return
 		}
 		if len(owners) > 0 {
@@ -127,7 +127,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if !allowed {
-				http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+				pagination.WriteError(w, http.StatusForbidden, "access denied")
 				return
 			}
 		}
