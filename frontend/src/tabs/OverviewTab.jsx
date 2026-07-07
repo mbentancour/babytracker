@@ -414,18 +414,18 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
           <div className="fade-in fade-in-7">
             <SectionCard title={t("overview.temperature")} icon={<Icons.Temp />} color={colors.temp}>
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {(expanded.temps ? temperatures : temperatures.slice(0, 3)).map((t, i, arr) => (
-                  <div key={t.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? `${colors.temp}08` : "transparent" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("temp", t)}>
+                {(expanded.temps ? temperatures : temperatures.slice(0, 3)).map((temp, i, arr) => (
+                  <div key={temp.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? `${colors.temp}08` : "transparent" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("temp", temp)}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: colors.temp }}>
-                        {t.temperature.toFixed(1)}
+                        {temp.temperature.toFixed(1)}
                       </span>
                       <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                        {new Date(t.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(temp.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
-                      <TagChips tags={tagMaps.temperature?.[t.id]} size="sm" />
+                      <TagChips tags={tagMaps.temperature?.[temp.id]} size="sm" />
                     </div>
-                    {canWrite("temp") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("temp", t.id)} title="Delete">x</button>}
+                    {canWrite("temp") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("temp", temp.id)} title={t("general.delete")}>x</button>}
                   </div>
                 ))}
                 {temperatures.length > 3 && (
@@ -457,7 +457,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                         {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    {canWrite("medication") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("medication", m.id)} title="Delete">x</button>}
+                    {canWrite("medication") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("medication", m.id)} title={t("general.delete")}>x</button>}
                   </div>
                 ))}
                 {medications.length > 3 && (

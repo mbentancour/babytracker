@@ -434,7 +434,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                     value={selectedBar.value}
                     unit={units.weight}
                     color={colors.growth}
-                    actionLabel="Edit"
+                    actionLabel={t("general.edit")}
                     onViewEntries={() => {
                       if (selectedBar.entry) onEditEntry?.("weight", selectedBar.entry);
                       setSelectedBar(null);
@@ -487,7 +487,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                     value={selectedBar.value}
                     unit={units.length}
                     color={colors.height}
-                    actionLabel="Edit"
+                    actionLabel={t("general.edit")}
                     onViewEntries={() => {
                       if (selectedBar.entry) onEditEntry?.("height", selectedBar.entry);
                       setSelectedBar(null);
@@ -532,7 +532,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                     value={selectedBar.value}
                     unit={units.length}
                     color={colors.growth}
-                    actionLabel="Edit"
+                    actionLabel={t("general.edit")}
                     onViewEntries={() => {
                       if (selectedBar.entry) onEditEntry?.("headcirc", selectedBar.entry);
                       setSelectedBar(null);

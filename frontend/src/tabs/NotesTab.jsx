@@ -168,7 +168,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
                     <button
                       className="delete-entry-btn"
                       onClick={() => onDeleteEntry?.("milestone", m.id)}
-                      title="Delete"
+                      title={t("general.delete")}
                     >x</button>
                   )}
                 </div>
@@ -244,7 +244,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
                     <button
                       className="delete-entry-btn"
                       onClick={() => onDeleteEntry?.("medication", m.id)}
-                      title="Delete"
+                      title={t("general.delete")}
                     >x</button>
                   )}
                 </div>
@@ -299,7 +299,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
                     <button
                       className="delete-entry-btn"
                       onClick={() => onDeleteEntry?.("note", n.entry?.id)}
-                      title="Delete"
+                      title={t("general.delete")}
                     >x</button>
                   )}
                 </div>

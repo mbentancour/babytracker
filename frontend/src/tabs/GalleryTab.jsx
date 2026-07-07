@@ -285,7 +285,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
                     <button
                       className="delete-entry-btn"
                       onClick={() => handleDeletePhoto(item)}
-                      title="Remove photo"
+                      title={t("gallery.removePhoto")}
                       style={{
                         position: "absolute",
                         top: 6,
@@ -422,6 +422,7 @@ function FilterChip({ active, onClick, label, color }) {
 }
 
 function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
+  const { t } = useI18n();
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
@@ -447,7 +448,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
     >
       <button
         onClick={(e) => { e.stopPropagation(); onClose(); }}
-        aria-label="Close"
+        aria-label={t("general.close")}
         style={{
           position: "absolute", top: 16, right: 16,
           background: "rgba(255,255,255,0.15)", color: "white",
@@ -462,7 +463,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
       {hasPrev && (
         <button
           onClick={(e) => { e.stopPropagation(); onPrev(); }}
-          aria-label="Previous"
+          aria-label={t("general.previous")}
           style={{
             position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)",
             background: "rgba(255,255,255,0.15)", color: "white",
@@ -478,7 +479,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
       {hasNext && (
         <button
           onClick={(e) => { e.stopPropagation(); onNext(); }}
-          aria-label="Next"
+          aria-label={t("general.next")}
           style={{
             position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)",
             background: "rgba(255,255,255,0.15)", color: "white",

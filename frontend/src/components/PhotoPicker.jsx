@@ -79,7 +79,7 @@ export default function PhotoPicker({ currentPhoto, onPhotoSelected }) {
           <button
             type="button"
             onClick={handleRemove}
-            title="Remove photo"
+            title={t("gallery.removePhoto")}
             style={{
               position: "absolute",
               top: 6,

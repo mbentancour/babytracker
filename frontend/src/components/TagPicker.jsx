@@ -100,7 +100,7 @@ export default function TagPicker({ value = [], onChange, disabled = false }) {
               <button
                 type="button"
                 onClick={() => remove(tag.id)}
-                aria-label="Remove tag"
+                aria-label={t("tags.remove")}
                 style={{
                   background: "none",
                   border: "none",
