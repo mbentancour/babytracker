@@ -27,7 +27,6 @@ var childOwnedTables = map[string]string{
 	"medications":        "medication",
 	"milestones":         "milestone",
 	"notes":              "note",
-	"reminders":          "note",
 	"timers":             "feeding",
 }
 

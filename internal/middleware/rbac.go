@@ -29,7 +29,6 @@ var pathFeatureMap = map[string]string{
 	"/api/notes/":              "note",
 	"/api/photos/":             "photo",
 	"/api/timers/":             "feeding",
-	"/api/reminders/":          "note",
 	"/api/gallery/":            "photo",
 	"/api/export/csv":          "note", // Export needs at least read access
 }

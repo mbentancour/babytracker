@@ -276,14 +276,6 @@ export const api = {
     request(`milestones/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteMilestone: (id) => request(`milestones/${id}/`, { method: "DELETE" }),
 
-  // Reminders
-  getReminders: (params) => request(`reminders/${qs(params)}`),
-  createReminder: (data) =>
-    request("reminders/", { method: "POST", body: JSON.stringify(data) }),
-  updateReminder: (id, data) =>
-    request(`reminders/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
-  deleteReminder: (id) => request(`reminders/${id}/`, { method: "DELETE" }),
-
   // Delete for existing entities
   deleteFeeding: (id) => request(`feedings/${id}/`, { method: "DELETE" }),
   deleteSleep: (id) => request(`sleep/${id}/`, { method: "DELETE" }),

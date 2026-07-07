@@ -612,19 +612,6 @@ DELETE /api/tokens/{id}/       Revoke token
 
 ---
 
-## Reminders
-
-```
-GET    /api/reminders/?child=1  List reminders
-POST   /api/reminders/          Create: {child, title, type, interval_minutes, fixed_time, active}
-PATCH  /api/reminders/{id}/     Update
-DELETE /api/reminders/{id}/     Delete
-```
-
-Types: `interval` (every N minutes) or `fixed_time`.
-
----
-
 ## Tags
 
 ```

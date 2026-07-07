@@ -48,7 +48,6 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	tagsH := handlers.NewTagsHandler(db)
 	medicationsH := handlers.NewMedicationsHandler(db)
 	milestonesH := handlers.NewMilestonesHandler(db)
-	remindersH := handlers.NewRemindersHandler(db)
 	apiTokensH := handlers.NewAPITokensHandler(db)
 	webhooksH := handlers.NewWebhooksHandler(db)
 	bmiH := handlers.NewBMIHandler(db)
@@ -223,12 +222,6 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/bmi/", bmiH.Create)
 		r.Patch("/api/bmi/{id}/", bmiH.Update)
 		r.Delete("/api/bmi/{id}/", bmiH.Delete)
-
-		// Reminders
-		r.Get("/api/reminders/", remindersH.List)
-		r.Post("/api/reminders/", remindersH.Create)
-		r.Patch("/api/reminders/{id}/", remindersH.Update)
-		r.Delete("/api/reminders/{id}/", remindersH.Delete)
 
 		// API tokens (for external integrations)
 		r.Get("/api/tokens/", apiTokensH.List)
