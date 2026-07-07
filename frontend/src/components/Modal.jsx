@@ -1,6 +1,63 @@
+import { useEffect, useRef } from "react";
 import { Icons } from "./Icons";
+import { useI18n } from "../utils/i18n";
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default function Modal({ title, children, onClose, headerAction }) {
+  const { t } = useI18n();
+  const dialogRef = useRef(null);
+  const restoreFocusRef = useRef(null);
+  // Hold the latest onClose in a ref so the mount-only effect below can call
+  // it without re-running (which would re-steal focus to the first field on
+  // every render if the parent passes a fresh onClose identity).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    // Remember what had focus so we can restore it when the modal closes.
+    restoreFocusRef.current = document.activeElement;
+    const el = dialogRef.current;
+    // Move focus into the dialog (first field, else the dialog itself).
+    if (el) {
+      const first = el.querySelector(FOCUSABLE);
+      (first || el).focus();
+    }
+
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        onCloseRef.current?.();
+        return;
+      }
+      if (e.key === "Tab" && el) {
+        // Keep focus within the dialog (basic focus trap).
+        const nodes = Array.from(el.querySelectorAll(FOCUSABLE)).filter(
+          (n) => n.offsetParent !== null,
+        );
+        if (nodes.length === 0) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // Restore focus to the element that opened the modal.
+      const prev = restoreFocusRef.current;
+      if (prev && typeof prev.focus === "function") prev.focus();
+    };
+    // Mount-only: focus capture/restore and the listener must run exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div
       style={{
@@ -17,6 +74,11 @@ export default function Modal({ title, children, onClose, headerAction }) {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : undefined}
+        tabIndex={-1}
         style={{
           background: "var(--card-bg)",
           border: "1px solid var(--border)",
@@ -44,6 +106,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
           </div>
           <button
             onClick={onClose}
+            aria-label={t("general.close")}
             style={{
               background: "none",
               border: "none",
