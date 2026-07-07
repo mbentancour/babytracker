@@ -43,8 +43,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
-# cache-bust: v1.0.1
-RUN cp -r /tmp/frontend/dist/ ./internal/router/static/ && \
+# Copy the *contents* of dist into the embed dir. The trailing "/." matters:
+# busybox cp (Alpine) treats `cp -r dist/ static/` as "copy the dist dir into
+# static", producing static/dist/ with no index.html at the embed root — the
+# server then shows a directory listing instead of the app. `dist/.` copies the
+# contents so index.html + assets land directly in static/.
+RUN cp -r /tmp/frontend/dist/. ./internal/router/static/ && \
     CGO_ENABLED=0 go build -trimpath \
         -ldflags="-s -w -X 'github.com/mbentancour/babytracker/internal/version.Version=${BUILD_VERSION}'" \
         -o /usr/local/bin/babytracker ./cmd/babytracker/
