@@ -3,6 +3,8 @@ package router
 import (
 	"io/fs"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -370,9 +372,35 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// SPA fallback: serve index.html for all other routes
+	// A missing hashed asset (e.g. /assets/index-ABC123.js requested by a
+	// stale index.html after a redeploy) must 404, not fall through to the
+	// SPA index. Serving text/html for a .js/.css request only surfaces as a
+	// confusing MIME error in the browser and hides the real cause — the
+	// chunk is gone. The SPA fallback is only correct for navigation routes.
+	if isStaticAssetPath(path) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// SPA fallback: serve index.html for all other (navigation) routes
 	r.URL.Path = "/"
 	h.fileServer.ServeHTTP(w, r)
+}
+
+// isStaticAssetPath reports whether a path is a request for a built asset
+// (rather than a client-side route). Vite emits everything under /assets/
+// with a content hash; we also treat common asset extensions as assets so a
+// missing file returns 404 instead of an HTML body.
+func isStaticAssetPath(path string) bool {
+	if strings.HasPrefix(path, "/assets/") {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".js", ".css", ".map", ".json", ".png", ".jpg", ".jpeg", ".gif",
+		".svg", ".webp", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".wasm":
+		return true
+	}
+	return false
 }
 
 func getStaticFS() http.FileSystem {
