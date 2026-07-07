@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
 import { timeAgo, formatElapsed } from "../utils/formatters";
+import { agoAnchor, formatAwake } from "../utils/overlayTime";
 import { useScreenWakeLock } from "../utils/wakeLock";
 
 function shuffle(arr) {
@@ -201,23 +202,35 @@ function StatusOverlay({ overlay, children }) {
     }
   }
 
-  const summary = (kind, icon, labelKey, timerKind) => {
+  const summary = (kind, icon, timerKind, textFor) => {
     if (!overlay[kind === "feedings" ? "lastFeeding" : kind === "sleeps" ? "lastSleep" : "lastDiaper"]) return;
     for (const c of children || []) {
       // Suppress "last X" if a timer for that activity is currently running for this child
       if (timerKind && activeFor(c.id, timerKind)) continue;
       const item = data[kind][c.id];
       if (!item) continue;
-      const dateStr = item.start || item.time;
-      if (!dateStr) continue;
+      const text = textFor(item);
+      if (!text) continue;
       const prefix = multiChild ? `${c.first_name}: ` : "";
-      lines.push({ icon, text: `${prefix}${t(labelKey)} ${timeAgo(dateStr)}` });
+      lines.push({ icon, text: `${prefix}${text}` });
     }
   };
 
-  summary("feedings", "🍼", "pictureFrame.lastFed", "feeding");
-  summary("sleeps", "😴", "pictureFrame.lastSlept", "sleep");
-  summary("changes", "👶", "pictureFrame.lastChanged", null);
+  summary("feedings", "🍼", "feeding", (item) => {
+    const d = agoAnchor(item);
+    return d ? `${t("pictureFrame.lastFed")} ${timeAgo(d)}` : null;
+  });
+  // The sleep line only renders when no sleep timer is running — i.e. the
+  // child is awake — so report how long they've been awake, measured from
+  // when the last sleep ended.
+  summary("sleeps", "😴", "sleep", (item) => {
+    const end = agoAnchor(item);
+    return end ? `${t("pictureFrame.awake")} ${formatAwake(Date.now() - new Date(end).getTime())}` : null;
+  });
+  summary("changes", "👶", null, (item) => {
+    const d = agoAnchor(item);
+    return d ? `${t("pictureFrame.lastChanged")} ${timeAgo(d)}` : null;
+  });
 
   if (overlay.currentTime) {
     lines.push({
