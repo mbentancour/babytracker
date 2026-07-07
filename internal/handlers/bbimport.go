@@ -255,6 +255,14 @@ func bbFetchAll(client *http.Client, baseURL, token, endpoint string) []json.Raw
 		all = append(all, results...)
 
 		if page.Next != nil {
+			// The `next` URL is server-supplied — a malicious or compromised
+			// Baby Buddy instance could redirect the crawler at an internal
+			// address, so it must clear the same SSRF checks as the initial
+			// URL, not just the first host.
+			if err := validateBBURL(*page.Next); err != nil {
+				slog.Warn("bb import: rejected unsafe next URL", "url", *page.Next, "error", err)
+				break
+			}
 			url = *page.Next
 		} else {
 			url = ""
@@ -282,31 +290,42 @@ func validateBBURL(rawURL string) error {
 		return fmt.Errorf("URL must include a hostname")
 	}
 
-	// Resolve hostname to check for private IPs
-	ips, err := net.LookupHost(host)
-	if err != nil {
-		return fmt.Errorf("cannot resolve hostname")
-	}
-
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			continue
-		}
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("URL must not point to a loopback or link-local address")
-		}
-		// Check cloud metadata addresses
-		if ipStr == "169.254.169.254" {
-			return fmt.Errorf("URL must not point to cloud metadata service")
-		}
-	}
-
 	// Block common internal hostnames
 	lower := strings.ToLower(host)
 	if lower == "localhost" || lower == "metadata.google.internal" {
 		return fmt.Errorf("URL must not point to an internal service")
 	}
 
+	// Resolve hostname and reject any address that isn't a routable public IP.
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return fmt.Errorf("cannot resolve hostname")
+	}
+	for _, ipStr := range ips {
+		ip := net.ParseIP(ipStr)
+		if ip == nil {
+			continue
+		}
+		if !isPublicIP(ip) {
+			return fmt.Errorf("URL must not point to a private, loopback, or reserved address")
+		}
+	}
+
 	return nil
+}
+
+// isPublicIP reports whether ip is a globally routable unicast address —
+// everything else (private RFC1918/ULA, loopback, link-local, multicast,
+// unspecified, and the cloud metadata address) is rejected for SSRF safety.
+func isPublicIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() || ip.IsPrivate() {
+		return false
+	}
+	// 169.254.169.254 is link-local (already blocked) but pin it explicitly
+	// in case the classification ever changes.
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return false
+	}
+	return true
 }

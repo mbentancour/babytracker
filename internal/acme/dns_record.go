@@ -255,7 +255,10 @@ func duckdnsEnsureA(domain, ip string, creds map[string]string) error {
 	subdomain = strings.TrimSuffix(subdomain, ".duckdns.org.")
 
 	url := fmt.Sprintf("https://www.duckdns.org/update?domains=%s&token=%s&ip=%s", subdomain, token, ip)
-	resp, err := http.Get(url)
+	// Explicit timeout: this runs synchronously inside the renewal loop, so an
+	// unresponsive endpoint on http.DefaultClient (no timeout) would wedge it.
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}

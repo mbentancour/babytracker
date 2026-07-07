@@ -531,10 +531,15 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			// server are on different major versions).
 			cmd := exec.Command("psql", "-v", "ON_ERROR_STOP=1", "--single-transaction")
 			cmd.Env = env
-			cmd.Stdin = filterIncompatibleSQL(tr)
+			filtered := filterIncompatibleSQL(tr)
+			cmd.Stdin = filtered
 			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("database restore: %w", err)
+			runErr := cmd.Run()
+			// Always close: on a mid-stream psql abort this unblocks the
+			// feeder goroutine that would otherwise leak (see the func doc).
+			filtered.Close()
+			if runErr != nil {
+				return fmt.Errorf("database restore: %w", runErr)
 			}
 			slog.Info("database restored from backup")
 		} else if strings.HasPrefix(header.Name, "photos/") {
@@ -783,7 +788,13 @@ var incompatibleSetPrefixes = []string{
 // parameters the server doesn't recognise. The match is line-prefix only —
 // good enough for pg_dump output (which puts each SET on its own line) and
 // safe for COPY data (rows never start with "SET ").
-func filterIncompatibleSQL(r io.Reader) io.Reader {
+//
+// The caller MUST Close the returned reader. If the consumer (psql) aborts
+// mid-stream — ON_ERROR_STOP on a bad dump — exec stops draining the pipe but
+// never closes it, so without a Close the feeder goroutine blocks forever on
+// pw.Write, leaking the goroutine and the underlying archive fd. Close unblocks
+// it with ErrClosedPipe.
+func filterIncompatibleSQL(r io.Reader) io.ReadCloser {
 	pr, pw := io.Pipe()
 	go func() {
 		defer pw.Close()

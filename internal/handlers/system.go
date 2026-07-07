@@ -480,7 +480,10 @@ func copyBinaryForRollback(src, dst string) error {
 }
 
 func downloadChecksum(url string) (string, error) {
-	resp, err := http.Get(url)
+	// Bounded client: the checksum fetch runs inside an admin update request;
+	// http.DefaultClient has no timeout and could hang it indefinitely.
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
 	}

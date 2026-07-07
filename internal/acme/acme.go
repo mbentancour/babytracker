@@ -276,14 +276,14 @@ func (m *Manager) Reconfigure(cfg Config) {
 	go m.obtainAndRenewLoop(ctx)
 }
 
-func (m *Manager) obtain() error {
-	client, err := m.newClient()
+func (m *Manager) obtain(cfg Config) error {
+	client, err := m.newClient(cfg)
 	if err != nil {
 		return err
 	}
 
 	request := certificate.ObtainRequest{
-		Domains: []string{m.cfg.Domain},
+		Domains: []string{cfg.Domain},
 		Bundle:  true,
 	}
 	cert, err := client.Certificate.Obtain(request)
@@ -304,6 +304,15 @@ func (m *Manager) obtain() error {
 func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 	retryDelay := 5 * time.Minute
 
+	// Snapshot the config once at entry. Reconfigure() replaces m.cfg under
+	// the lock and starts a *new* loop with a fresh ctx; the old loop can
+	// still be blocked inside a minutes-long DNS-01 propagation wait and must
+	// keep acting on the config it started with, never the concurrently
+	// rewritten m.cfg (a data race, and a torn string read could crash).
+	m.mu.RLock()
+	cfg := m.cfg
+	m.mu.RUnlock()
+
 	for {
 		m.mu.RLock()
 		cert := m.cert
@@ -311,16 +320,16 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 
 		if cert == nil {
 			// Ensure A record exists before attempting ACME
-			if m.cfg.ManageA {
-				if err := EnsureARecord(m.cfg.Provider, m.cfg.Domain, m.cfg.IP, m.cfg.Credentials); err != nil {
+			if cfg.ManageA {
+				if err := EnsureARecord(cfg.Provider, cfg.Domain, cfg.IP, cfg.Credentials); err != nil {
 					slog.Warn("acme: failed to set A record, continuing anyway", "error", err)
 				}
 			}
 
 			// No certificate — try to obtain one
 			m.setStatus("obtaining", "")
-			slog.Info("acme: obtaining certificate", "domain", m.cfg.Domain, "provider", m.cfg.Provider)
-			if err := m.obtain(); err != nil {
+			slog.Info("acme: obtaining certificate", "domain", cfg.Domain, "provider", cfg.Provider)
+			if err := m.obtain(cfg); err != nil {
 				m.setStatus("error", err.Error())
 				slog.Error("acme: failed to obtain certificate, will retry",
 					"error", err, "retry_in", retryDelay)
@@ -334,7 +343,7 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 				continue
 			}
 			m.setStatus("active", "")
-			slog.Info("acme: certificate obtained", "domain", m.cfg.Domain)
+			slog.Info("acme: certificate obtained", "domain", cfg.Domain)
 			retryDelay = 5 * time.Minute // reset on success
 			continue                     // re-enter loop to check expiry
 		}
@@ -362,7 +371,7 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 		sleepDur := time.Until(renewAt)
 		if sleepDur > 0 {
 			slog.Info("acme: certificate valid, next renewal",
-				"domain", m.cfg.Domain,
+				"domain", cfg.Domain,
 				"expires", leaf.NotAfter,
 				"renew_at", renewAt,
 			)
@@ -374,8 +383,8 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 		}
 
 		m.setStatus("obtaining", "")
-		slog.Info("acme: renewing certificate", "domain", m.cfg.Domain)
-		if err := m.obtain(); err != nil {
+		slog.Info("acme: renewing certificate", "domain", cfg.Domain)
+		if err := m.obtain(cfg); err != nil {
 			m.setStatus("error", err.Error())
 			slog.Error("acme: renewal failed, retrying in 1 hour", "error", err)
 			select {
@@ -385,13 +394,13 @@ func (m *Manager) obtainAndRenewLoop(ctx context.Context) {
 			}
 		} else {
 			m.setStatus("active", "")
-			slog.Info("acme: certificate renewed", "domain", m.cfg.Domain)
+			slog.Info("acme: certificate renewed", "domain", cfg.Domain)
 		}
 	}
 }
 
-func (m *Manager) newClient() (*lego.Client, error) {
-	user, err := m.loadOrCreateAccount()
+func (m *Manager) newClient(cfg Config) (*lego.Client, error) {
+	user, err := m.loadOrCreateAccount(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("load account: %w", err)
 	}
@@ -404,7 +413,7 @@ func (m *Manager) newClient() (*lego.Client, error) {
 		return nil, fmt.Errorf("create ACME client: %w", err)
 	}
 
-	provider, err := m.newDNSProvider()
+	provider, err := m.newDNSProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create DNS provider: %w", err)
 	}
@@ -436,14 +445,14 @@ func (m *Manager) newClient() (*lego.Client, error) {
 // unchanged. Passing creds directly avoids stamping secrets into the process
 // environment where any child process inherits them and where crash dumps or
 // `/proc/<pid>/environ` could leak them to local unprivileged users.
-func (m *Manager) newDNSProvider() (challenge.Provider, error) {
-	creds := m.cfg.Credentials
+func (m *Manager) newDNSProvider(cfg Config) (challenge.Provider, error) {
+	creds := cfg.Credentials
 	has := func(key string) bool {
 		v, ok := creds[key]
 		return ok && v != ""
 	}
 
-	switch strings.ToLower(m.cfg.Provider) {
+	switch strings.ToLower(cfg.Provider) {
 	case ProviderCloudflare:
 		if has("CF_DNS_API_TOKEN") || has("CLOUDFLARE_DNS_API_TOKEN") {
 			c := cloudflare.NewDefaultConfig()
@@ -487,7 +496,7 @@ func (m *Manager) newDNSProvider() (challenge.Provider, error) {
 		}
 		return simply.NewDNSProvider()
 	default:
-		return nil, fmt.Errorf("unsupported DNS provider: %q (supported: cloudflare, route53, duckdns, namecheap, simply)", m.cfg.Provider)
+		return nil, fmt.Errorf("unsupported DNS provider: %q (supported: cloudflare, route53, duckdns, namecheap, simply)", cfg.Provider)
 	}
 }
 
@@ -539,8 +548,8 @@ func (m *Manager) loadCached() error {
 func (m *Manager) accountKeyPath() string  { return filepath.Join(m.cfg.CertsDir, "account.key") }
 func (m *Manager) accountDataPath() string { return filepath.Join(m.cfg.CertsDir, "account.json") }
 
-func (m *Manager) loadOrCreateAccount() (*legoUser, error) {
-	user := &legoUser{email: m.cfg.Email}
+func (m *Manager) loadOrCreateAccount(cfg Config) (*legoUser, error) {
+	user := &legoUser{email: cfg.Email}
 
 	// Try loading existing key
 	keyData, err := os.ReadFile(m.accountKeyPath())
