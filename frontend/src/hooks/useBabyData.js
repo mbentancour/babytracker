@@ -67,8 +67,15 @@ export function useBabyData(canReadFn) {
   );
   const intervalRef = useRef(null);
   const childIdRef = useRef(null);
+  const fetchSeqRef = useRef(0);
 
   const fetchData = useCallback(async (childId) => {
+    // Concurrent fetches happen: the 30s background refresh can overlap a
+    // manual child switch, and slow responses can arrive out of order. Only
+    // the most recently started fetch may apply its results — a stale
+    // response would clobber the dashboard with the previous child's data.
+    const seq = ++fetchSeqRef.current;
+    const stale = () => seq !== fetchSeqRef.current;
     try {
       const now = new Date();
 
@@ -157,6 +164,8 @@ export function useBabyData(canReadFn) {
         ];
       })());
 
+      if (stale()) return;
+
       setFeedings(feedingsRes.results || []);
       setWeeklyFeedings(weeklyFeedingsRes.results || []);
       setSleepEntries(sleepRes.results || []);
@@ -196,20 +205,24 @@ export function useBabyData(canReadFn) {
             }),
           ),
         );
+        if (stale()) return;
         const nextMaps = {};
         tagTypes.forEach((t, i) => { nextMaps[t] = results[i] || {}; });
         setTagMaps(nextMaps);
       } catch (err) {
         console.warn("tag bulk fetch aggregate failure:", err);
-        setTagMaps({});
+        if (!stale()) setTagMaps({});
       }
 
+      if (stale()) return;
       setLastSync(new Date());
       setError(null);
     } catch (err) {
-      setError(err.message);
+      if (!stale()) setError(err.message);
     } finally {
-      setLoading(false);
+      // A stale fetch must not touch `loading` either: the newer fetch that
+      // superseded it owns the spinner and will clear it when *it* finishes.
+      if (!stale()) setLoading(false);
     }
   }, []);
 

@@ -46,39 +46,42 @@ const TABS = [
 
 const ACTION_GROUPS = [
   {
-    label: "Track",
+    id: "track",
+    labelKey: "action.track",
     actions: [
-      { id: "feeding", label: "Feeding", icon: <Icons.Bottle />, color: colors.feeding },
-      { id: "sleep", label: "Sleep", icon: <Icons.Moon />, color: colors.sleep },
-      { id: "diaper", label: "Diaper", icon: <Icons.Droplet />, color: colors.diaper },
-      { id: "tummy", label: "Tummy", icon: <Icons.Sun />, color: colors.tummy },
-      { id: "pumping", label: "Pumping", icon: <Icons.Bottle />, color: "#6C5CE7" },
+      { id: "feeding", labelKey: "action.feeding", icon: <Icons.Bottle />, color: colors.feeding },
+      { id: "sleep", labelKey: "action.sleep", icon: <Icons.Moon />, color: colors.sleep },
+      { id: "diaper", labelKey: "action.diaper", icon: <Icons.Droplet />, color: colors.diaper },
+      { id: "tummy", labelKey: "action.tummy", icon: <Icons.Sun />, color: colors.tummy },
+      { id: "pumping", labelKey: "action.pumping", icon: <Icons.Bottle />, color: "#6C5CE7" },
     ],
   },
   {
-    label: "Measure",
+    id: "measure",
+    labelKey: "action.measure",
     actions: [
-      { id: "temp", label: "Temp", icon: <Icons.Temp />, color: colors.temp },
-      { id: "weight", label: "Weight", icon: <Icons.Weight />, color: colors.growth },
-      { id: "height", label: "Height", icon: <Icons.Ruler />, color: colors.height },
-      { id: "headcirc", label: "Head", icon: <Icons.Baby />, color: colors.growth },
-      { id: "bmi", label: "BMI", icon: <Icons.TrendUp />, color: colors.feeding },
+      { id: "temp", labelKey: "action.temp", icon: <Icons.Temp />, color: colors.temp },
+      { id: "weight", labelKey: "action.weight", icon: <Icons.Weight />, color: colors.growth },
+      { id: "height", labelKey: "action.height", icon: <Icons.Ruler />, color: colors.height },
+      { id: "headcirc", labelKey: "action.headCirc", icon: <Icons.Baby />, color: colors.growth },
+      { id: "bmi", labelKey: "action.bmi", icon: <Icons.TrendUp />, color: colors.feeding },
     ],
   },
   {
-    label: "More",
+    id: "more",
+    labelKey: "action.more",
     actions: [
-      { id: "note", label: "Note", icon: <Icons.StickyNote />, color: colors.note },
-      { id: "medication", label: "Meds", icon: <Icons.Temp />, color: "#e67e22" },
-      { id: "milestone", label: "Milestone", icon: <Icons.TrendUp />, color: "#00b894" },
+      { id: "note", labelKey: "action.note", icon: <Icons.StickyNote />, color: colors.note },
+      { id: "medication", labelKey: "action.medication", icon: <Icons.Temp />, color: "#e67e22" },
+      { id: "milestone", labelKey: "action.milestone", icon: <Icons.TrendUp />, color: "#00b894" },
     ],
   },
 ];
 
 const TIMER_TYPES = [
-  { id: "feeding", label: "Feeding", icon: <Icons.Bottle />, color: colors.feeding },
-  { id: "sleep", label: "Sleep", icon: <Icons.Moon />, color: colors.sleep },
-  { id: "tummy", label: "Tummy Time", icon: <Icons.Sun />, color: colors.tummy },
+  { id: "feeding", labelKey: "timer.feeding", icon: <Icons.Bottle />, color: colors.feeding },
+  { id: "sleep", labelKey: "timer.sleep", icon: <Icons.Moon />, color: colors.sleep },
+  { id: "tummy", labelKey: "timer.tummy", icon: <Icons.Sun />, color: colors.tummy },
 ];
 
 
@@ -225,7 +228,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
   const [activeTab, setActiveTab] = useState("overview");
   const [modal, setModal] = useState(null);
   const [showActions, setShowActions] = useState(false);
-  const [expandedGroup, setExpandedGroup] = useState("Track");
+  const [expandedGroup, setExpandedGroup] = useState("track");
   const [showTimerPicker, setShowTimerPicker] = useState(false);
   const [editingTimerId, setEditingTimerId] = useState(null);
   const [isAdmin, setIsAdmin] = useState(demoMode);
@@ -422,9 +425,26 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
     return () => evtSource.close();
   }, [startPictureFrame, fetchGalleryPhotos]);
 
-  const closeModal = () => setModal(null);
+  // The avatar and name blocks in the header are the only entry point for
+  // editing a child; they're divs, so keyboard access needs explicit wiring.
+  const openEditChild = () => data.child && setModal({ type: "editChild", child: data.child });
+  const editChildKeys = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openEditChild();
+    }
+  };
+
+  const closeModal = () => {
+    // Cancelling a timer-backed entry form leaves the timer running on the
+    // server — bring its bar back right away instead of on the next poll.
+    if (modal?.timerId) timer.resumeTimer(modal.timerId);
+    setModal(null);
+  };
   const handleFormDone = () => {
-    closeModal();
+    // Deliberately not closeModal(): saving deletes the server timer, so the
+    // suppressed bar must stay hidden (the next refetch cleans it up).
+    setModal(null);
     data.refetch();
   };
 
@@ -488,7 +508,11 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           <div
             className="avatar"
             style={{ cursor: "pointer" }}
-            onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
+            role="button"
+            tabIndex={0}
+            aria-label={tr("general.tapToEdit")}
+            onClick={openEditChild}
+            onKeyDown={editChildKeys}
             title={tr("general.tapToEdit")}
           >
             {data.child?.picture ? (
@@ -499,11 +523,15 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           </div>
           <div
             style={{ cursor: "pointer" }}
-            onClick={() => data.child && setModal({ type: "editChild", child: data.child })}
+            role="button"
+            tabIndex={0}
+            aria-label={tr("general.tapToEdit")}
+            onClick={openEditChild}
+            onKeyDown={editChildKeys}
             title={tr("general.tapToEdit")}
           >
             <h1 className="baby-name">
-              {data.child?.first_name || "Baby"}
+              {data.child?.first_name || tr("general.baby")}
             </h1>
             {data.child?.birth_date && (
               <span className="baby-age">{getAge(data.child.birth_date)}</span>
@@ -514,7 +542,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           {data.error && (
             <span className="sync-error">{tr("general.connectionError")}</span>
           )}
-          <button className="refresh-btn" onClick={() => setModal({ type: "settings" })} title="Settings">
+          <button className="refresh-btn" onClick={() => setModal({ type: "settings" })} title={tr("settings.title")} aria-label={tr("settings.title")}>
             <Icons.Settings />
           </button>
         </div>
@@ -574,7 +602,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
               <span
                 className="timer-elapsed"
                 style={{ cursor: "pointer" }}
-                title="Click to edit start time"
+                title={tr("timer.editStart")}
                 onClick={() => setEditingTimerId(t.id)}
               >
                 {formatElapsed(timer.elapsedMap[t.id] || 0)}
@@ -589,7 +617,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                 }
               }}
             >
-              Save
+              {tr("timer.save")}
             </button>
             <button
               className="timer-discard-btn"
@@ -690,14 +718,14 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             {ACTION_GROUPS.map((group) => {
               const filteredActions = group.actions.filter((a) => isFeatureEnabled(a.id) && canWrite(a.id));
               if (filteredActions.length === 0) return null;
-              const isOpen = expandedGroup === group.label;
+              const isOpen = expandedGroup === group.id;
               return (
-                <div key={group.label} className="fab-group">
+                <div key={group.id} className="fab-group">
                   <button
                     className={`fab-group-label${isOpen ? " fab-group-label-active" : ""}`}
-                    onClick={() => setExpandedGroup(isOpen ? null : group.label)}
+                    onClick={() => setExpandedGroup(isOpen ? null : group.id)}
                   >
-                    {group.label}
+                    {tr(group.labelKey)}
                   </button>
                   {isOpen && (
                     <div className="fab-group-items">
@@ -716,7 +744,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                           >
                             {action.icon}
                           </span>
-                          <span className="fab-action-label">{action.label}</span>
+                          <span className="fab-action-label">{tr(action.labelKey)}</span>
                         </button>
                       ))}
                     </div>
@@ -743,14 +771,14 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                 >
                   {t.icon}
                 </span>
-                <span className="fab-action-label">{t.label}</span>
+                <span className="fab-action-label">{tr(t.labelKey)}</span>
               </button>
             ))}
           </div>
         )}
         {(canWrite("feeding") || canWrite("sleep") || canWrite("tummy")) && (
           <TimerButton
-            label="Timer"
+            label={tr("timer.label")}
             icon={<Icons.Timer />}
             color={colors.feeding}
             active={false}
@@ -764,7 +792,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           <button
             className="fab-btn"
             style={{ background: showActions ? "var(--text-muted)" : colors.feeding }}
-            onClick={() => { setShowActions(!showActions); setShowTimerPicker(false); setExpandedGroup("Track"); }}
+            onClick={() => { setShowActions(!showActions); setShowTimerPicker(false); setExpandedGroup("track"); }}
           >
             <span style={{ transform: showActions ? "rotate(45deg)" : "none", transition: "transform 0.2s", display: "flex" }}>
               <Icons.Plus />
