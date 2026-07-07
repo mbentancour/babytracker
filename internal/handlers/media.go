@@ -81,6 +81,17 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		justFilename = strings.TrimPrefix(cleaned, "photos/")
 	}
 
+	// The .thumbs/ cache holds resized copies keyed by the *base* filename
+	// (feedings-123.jpg → .thumbs/thumb/feedings-123.jpg). They are generated
+	// and served internally from an original-file request (?size=...), never
+	// fetched directly. Allowing a direct fetch would bypass the ownership
+	// check below, since the derived name has no owning row — so reject any
+	// direct request into that directory outright.
+	if justFilename == ".thumbs" || strings.HasPrefix(justFilename, ".thumbs/") {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Authorization: admins see everything; everyone else must have access to
 	// a child the photo is attached to. Entry-photo filenames are
 	// deterministic and IDs sequential, so anything weaker lets one caregiver
@@ -96,8 +107,14 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		}
 		// A photo with no owning children is "shared" in gallery terms
 		// (untagged or untracked) and stays visible to any user with child
-		// access, matching GalleryHandler.List semantics.
-		if owners := photoOwnerChildIDs(h.db, justFilename); len(owners) > 0 {
+		// access, matching GalleryHandler.List semantics. Fail closed: a
+		// lookup error must deny, never fall through to "shared".
+		owners, err := photoOwnerChildIDs(h.db, justFilename)
+		if err != nil {
+			http.Error(w, `{"error":"access check failed"}`, http.StatusInternalServerError)
+			return
+		}
+		if len(owners) > 0 {
 			accessibleSet := make(map[int]bool, len(accessible))
 			for _, id := range accessible {
 				accessibleSet[id] = true
@@ -150,7 +167,7 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 // gallery photos tagged via photo_children. Empty means the file is untagged
 // or untracked — "shared" in gallery terms. Mirrors the sources scanned by
 // GalleryHandler.List; a new photo-bearing table must be added to both.
-func photoOwnerChildIDs(db *sqlx.DB, filename string) []int {
+func photoOwnerChildIDs(db *sqlx.DB, filename string) ([]int, error) {
 	const query = `
 		SELECT child_id FROM feedings WHERE photo = $1
 		UNION SELECT child_id FROM sleep WHERE photo = $1
@@ -168,8 +185,10 @@ func photoOwnerChildIDs(db *sqlx.DB, filename string) []int {
 		UNION SELECT id FROM children WHERE picture = $1
 		UNION SELECT child_id FROM photo_children WHERE photo_filename = $1`
 	var ids []int
-	db.Select(&ids, query, filename)
-	return ids
+	if err := db.Select(&ids, query, filename); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 var allowedImageTypes = map[string]string{
