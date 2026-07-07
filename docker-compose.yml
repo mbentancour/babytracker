@@ -23,14 +23,14 @@ services:
       context: .
       dockerfile: deploy/docker/Dockerfile
     ports:
-      # Host and container use the same port so the URL the app logs
-      # ("starting HTTPS server, port 8443") is exactly the one you open:
-      # https://localhost:8443. Port 8443 (not 443) avoids needing elevated
-      # privileges to bind a low port on the host.
-      - "8443:8443"
+      # One knob (PORT) drives both sides so the host port, the container
+      # port, and the port the app logs can never drift apart — the URL the
+      # app prints ("starting HTTPS server, port <PORT>") is exactly the one
+      # you open. Defaults to 8443 to avoid needing elevated privileges to
+      # bind a low port; to serve on standard HTTPS set PORT=443 in your .env
+      # (e.g. https://your-host/ with no port suffix).
+      - "${PORT:-8443}:${PORT:-8443}"
     environment:
-      # Serve on 8443 inside the container too, matching the host mapping
-      # above — otherwise the logged port (443) wouldn't match the URL.
       PORT: ${PORT:-8443}
       # sslmode=prefer: use TLS if the DB advertises it, fall back to plaintext
       # on the local docker network. For remote DBs set sslmode=verify-full.
