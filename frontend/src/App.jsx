@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from "react";
 import { useBabyData } from "./hooks/useBabyData";
 import { useTimers } from "./hooks/useTimers";
 import { UnitContext } from "./utils/units";
@@ -9,9 +9,12 @@ import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPers
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "./utils/datetime";
-import OverviewTab from "./tabs/OverviewTab";
-import GrowthTab from "./tabs/GrowthTab";
-import NotesTab from "./tabs/NotesTab";
+// Tabs, settings, and the picture frame are lazy so the initial bundle
+// stays lean — recharts alone (Overview/Growth) would otherwise sit in the
+// critical path of the login screen on slow wall-mounted tablets.
+const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
+const GrowthTab = lazy(() => import("./tabs/GrowthTab"));
+const NotesTab = lazy(() => import("./tabs/NotesTab"));
 import FeedingForm from "./components/forms/FeedingForm";
 import SleepForm from "./components/forms/SleepForm";
 import DiaperForm from "./components/forms/DiaperForm";
@@ -27,14 +30,14 @@ import PumpingForm from "./components/forms/PumpingForm";
 import BMIForm from "./components/forms/BMIForm";
 import TimerButton from "./components/TimerButton";
 import LoginScreen from "./components/LoginScreen";
-import SetupWizard from "./components/SetupWizard";
+const SetupWizard = lazy(() => import("./components/SetupWizard"));
 import OnboardingScreen from "./components/OnboardingScreen";
 import SetupChoiceScreen from "./components/SetupChoiceScreen";
 import ChildForm from "./components/forms/ChildForm";
 import EditChildForm from "./components/forms/EditChildForm";
-import SettingsModal from "./components/SettingsModal";
-import GalleryTab from "./tabs/GalleryTab";
-import PictureFrame from "./components/PictureFrame";
+const SettingsModal = lazy(() => import("./components/SettingsModal"));
+const GalleryTab = lazy(() => import("./tabs/GalleryTab"));
+const PictureFrame = lazy(() => import("./components/PictureFrame"));
 import "./styles.css";
 
 const TABS = [
@@ -188,7 +191,11 @@ export default function App() {
   }
 
   if (authState === "wifi-setup") {
-    return <SetupWizard />;
+    return (
+      <Suspense fallback={null}>
+        <SetupWizard />
+      </Suspense>
+    );
   }
 
   if (authState === "setup-choice") {
@@ -663,6 +670,13 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
 
       {/* Tab Content */}
       <main className="tab-content">
+        <Suspense
+          fallback={
+            <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 14 }}>{tr("general.loading")}</span>
+            </div>
+          }
+        >
         {activeTab === "overview" && (
           <OverviewTab
             feedings={data.feedings}
@@ -709,6 +723,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         {activeTab === "gallery" && (
           <GalleryTab childId={data.child?.id} children={data.children} canWrite={canWrite("photo")} />
         )}
+        </Suspense>
       </main>
 
       {/* Quick Action FAB */}
@@ -941,6 +956,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         />
       )}
       {modal?.type === "settings" && (
+        <Suspense fallback={null}>
         <SettingsModal
           childId={data.child?.id}
           unitSystem={data.unitSystem}
@@ -951,8 +967,10 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           onLogout={demoMode ? undefined : onLogout}
           onRefetch={data.refetch}
         />
+        </Suspense>
       )}
       {showPictureFrame && galleryPhotos.length > 0 && (
+        <Suspense fallback={null}>
         <PictureFrame
           photos={galleryPhotos}
           children={data.children}
@@ -966,6 +984,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             }
           }}
         />
+        </Suspense>
       )}
     </div>
     </UnitContext.Provider>
