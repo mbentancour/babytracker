@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/jpeg"
 	_ "image/png"
@@ -20,6 +21,13 @@ var thumbnailSizes = map[string]int{
 	"thumb":  300,
 	"medium": 800,
 }
+
+// maxDecodePixels caps the decoded image size. A few-KB PNG/GIF can declare
+// e.g. 30000×30000 and image.Decode would allocate the full ~3.6GB pixel
+// buffer — a decompression bomb that OOMs the process on the first thumbnail
+// request. 64MP comfortably covers real camera output (48MP phone sensors)
+// while bounding the decode allocation to ~256MB worst case.
+const maxDecodePixels = 64 << 20
 
 // In-flight generation guard so concurrent requests for the same thumb don't race.
 var thumbMu sync.Map // key: dstPath -> *sync.Mutex
@@ -55,6 +63,20 @@ func generateThumbnail(srcPath, dstPath string, maxDim int) error {
 		}
 		// Rewind for Decode
 		src.Seek(0, 0)
+	}
+
+	// Check declared dimensions before decoding — DecodeConfig reads only
+	// the header, so a decompression bomb is rejected without allocating
+	// its pixel buffer.
+	cfg, _, err := image.DecodeConfig(src)
+	if err != nil {
+		return err
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > maxDecodePixels/cfg.Height {
+		return fmt.Errorf("image dimensions %dx%d exceed decode limit", cfg.Width, cfg.Height)
+	}
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return err
 	}
 
 	img, _, err := image.Decode(src)

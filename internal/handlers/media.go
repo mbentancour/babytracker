@@ -66,23 +66,6 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authorization: verify user can access this photo's child.
-	// Admins can access all photos.
-	var isAdmin bool
-	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
-
-	if !isAdmin {
-		// Check that the user has access to at least one child
-		// (photo filenames contain child IDs, but for defense in depth we check
-		// the user has ANY child access — specific ownership is hard to derive
-		// from filenames alone without a reverse lookup table)
-		accessible, _ := models.GetAccessibleChildIDs(h.db, userID)
-		if len(accessible) == 0 {
-			http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
-			return
-		}
-	}
-
 	filename := chi.URLParam(r, "*")
 
 	cleaned := filepath.Clean(filename)
@@ -96,6 +79,41 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 	justFilename := cleaned
 	if strings.HasPrefix(cleaned, "photos/") {
 		justFilename = strings.TrimPrefix(cleaned, "photos/")
+	}
+
+	// Authorization: admins see everything; everyone else must have access to
+	// a child the photo is attached to. Entry-photo filenames are
+	// deterministic and IDs sequential, so anything weaker lets one caregiver
+	// enumerate another family's photos.
+	var isAdmin bool
+	h.db.Get(&isAdmin, `SELECT is_admin FROM users WHERE id = $1`, userID)
+
+	if !isAdmin {
+		accessible, _ := models.GetAccessibleChildIDs(h.db, userID)
+		if len(accessible) == 0 {
+			http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+			return
+		}
+		// A photo with no owning children is "shared" in gallery terms
+		// (untagged or untracked) and stays visible to any user with child
+		// access, matching GalleryHandler.List semantics.
+		if owners := photoOwnerChildIDs(h.db, justFilename); len(owners) > 0 {
+			accessibleSet := make(map[int]bool, len(accessible))
+			for _, id := range accessible {
+				accessibleSet[id] = true
+			}
+			allowed := false
+			for _, owner := range owners {
+				if accessibleSet[owner] {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				http.Error(w, `{"error":"access denied"}`, http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	fullPath := filepath.Join(h.cfg.PhotosDir(), justFilename)
@@ -125,6 +143,33 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	http.ServeFile(w, r, fullPath)
+}
+
+// photoOwnerChildIDs returns every child a photo filename is attached to:
+// entry photos across the child-owned tables, child profile pictures, and
+// gallery photos tagged via photo_children. Empty means the file is untagged
+// or untracked — "shared" in gallery terms. Mirrors the sources scanned by
+// GalleryHandler.List; a new photo-bearing table must be added to both.
+func photoOwnerChildIDs(db *sqlx.DB, filename string) []int {
+	const query = `
+		SELECT child_id FROM feedings WHERE photo = $1
+		UNION SELECT child_id FROM sleep WHERE photo = $1
+		UNION SELECT child_id FROM changes WHERE photo = $1
+		UNION SELECT child_id FROM tummy_times WHERE photo = $1
+		UNION SELECT child_id FROM temperature WHERE photo = $1
+		UNION SELECT child_id FROM weight WHERE photo = $1
+		UNION SELECT child_id FROM height WHERE photo = $1
+		UNION SELECT child_id FROM head_circumference WHERE photo = $1
+		UNION SELECT child_id FROM pumping WHERE photo = $1
+		UNION SELECT child_id FROM medications WHERE photo = $1
+		UNION SELECT child_id FROM milestones WHERE photo = $1
+		UNION SELECT child_id FROM notes WHERE photo = $1
+		UNION SELECT child_id FROM bmi WHERE photo = $1
+		UNION SELECT id FROM children WHERE picture = $1
+		UNION SELECT child_id FROM photo_children WHERE photo_filename = $1`
+	var ids []int
+	db.Select(&ids, query, filename)
+	return ids
 }
 
 var allowedImageTypes = map[string]string{

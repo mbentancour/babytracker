@@ -72,6 +72,14 @@ func HashPassword(password string) (string, error) {
 	), nil
 }
 
+// FakeVerify burns the same argon2id work as a real password check. Login
+// calls it when the username doesn't exist so that response timing doesn't
+// reveal which usernames are registered.
+func FakeVerify(password string) {
+	salt := []byte("babytracker-fake")[:saltLen]
+	argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+}
+
 func VerifyPassword(password, encodedHash string) (bool, error) {
 	parts := strings.Split(encodedHash, "$")
 	if len(parts) != 6 {

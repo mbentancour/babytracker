@@ -88,6 +88,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := models.GetUserByUsername(h.db, req.Username)
 	if err != nil {
+		// Burn the same argon2 work as the real check below — returning
+		// early would let an attacker enumerate usernames by timing.
+		crypto.FakeVerify(req.Password)
 		pagination.WriteError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
