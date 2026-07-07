@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -239,11 +240,15 @@ func main() {
 		}
 	}
 	if fallbackCert == nil {
-		// Try loading a previously generated self-signed cert from disk
+		// Try loading a previously generated self-signed cert from disk, but
+		// only reuse it if it's still acceptable to modern clients: not
+		// expired, and with a validity span within Apple's 398-day limit.
+		// This transparently replaces the old 10-year certs that Safari/iOS
+		// reject ("can't establish a secure connection") with a compliant one
+		// on the next restart — no manual deletion needed.
 		certPath := cfg.CertsDir + "/self-signed.crt"
 		keyPath := cfg.CertsDir + "/self-signed.key"
-		c, err := tls.LoadX509KeyPair(certPath, keyPath)
-		if err == nil {
+		if c, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil && selfSignedUsable(&c) {
 			fallbackCert = &c
 			slog.Info("loaded self-signed certificate from disk")
 		} else {
@@ -350,6 +355,29 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown error", "error", err)
 	}
+}
+
+// selfSignedUsable reports whether a cached self-signed cert can still be
+// served: present, currently valid, and within Apple's 398-day validity
+// limit. A cert failing any check (notably the old 10-year certs) is
+// discarded so a compliant one is regenerated in its place.
+func selfSignedUsable(c *tls.Certificate) bool {
+	if c == nil || len(c.Certificate) == 0 {
+		return false
+	}
+	leaf := c.Leaf
+	if leaf == nil {
+		parsed, err := x509.ParseCertificate(c.Certificate[0])
+		if err != nil {
+			return false
+		}
+		leaf = parsed
+	}
+	now := time.Now()
+	if now.Before(leaf.NotBefore) || now.After(leaf.NotAfter) {
+		return false
+	}
+	return leaf.NotAfter.Sub(leaf.NotBefore) <= 398*24*time.Hour
 }
 
 func httpToHTTPSRedirect(domain string) func(w http.ResponseWriter, r *http.Request) {

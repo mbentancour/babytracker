@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,23 +39,54 @@ import (
 
 // GenerateSelfSignedCert creates an in-memory self-signed TLS certificate.
 // Used as a fallback when no cert files exist and ACME hasn't completed yet.
+//
+// Two constraints are Apple/Safari-specific but harmless elsewhere, so we
+// always honour them:
+//   - Validity is capped at 397 days. Apple platforms reject TLS server
+//     certificates valid for more than 398 days (certs issued after
+//     2020-09-01), which shows up as "Safari can't establish a secure
+//     connection" with no click-through option.
+//   - localhost / 127.0.0.1 / ::1 are always added to the SANs (alongside the
+//     configured domain) because Safari ignores CommonName and matches only
+//     Subject Alternative Names — without them, local testing over
+//     https://localhost fails the name check.
 func GenerateSelfSignedCert(domain string) (*tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err
 	}
+
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, err
+	}
+
 	template := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
+		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: domain},
 		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+		NotAfter:              time.Now().Add(397 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
-	if domain != "" {
-		template.DNSNames = []string{domain}
+
+	// Always cover loopback so local testing (https://localhost:PORT) works.
+	dnsNames := []string{"localhost"}
+	ipAddrs := []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}
+
+	// Add the configured host: an IP goes in IPAddresses, anything else is a
+	// DNS name. Skip "localhost" so it isn't duplicated.
+	if domain != "" && domain != "localhost" {
+		if ip := net.ParseIP(domain); ip != nil {
+			ipAddrs = append(ipAddrs, ip)
+		} else {
+			dnsNames = append(dnsNames, domain)
+		}
 	}
+	template.DNSNames = dnsNames
+	template.IPAddresses = ipAddrs
+
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
 		return nil, err
