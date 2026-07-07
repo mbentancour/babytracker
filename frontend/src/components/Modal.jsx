@@ -8,6 +8,7 @@ const FOCUSABLE =
 export default function Modal({ title, children, onClose, headerAction }) {
   const { t } = useI18n();
   const dialogRef = useRef(null);
+  const contentRef = useRef(null);
   const restoreFocusRef = useRef(null);
   // Hold the latest onClose in a ref so the mount-only effect below can call
   // it without re-running (which would re-steal focus to the first field on
@@ -19,9 +20,11 @@ export default function Modal({ title, children, onClose, headerAction }) {
     // Remember what had focus so we can restore it when the modal closes.
     restoreFocusRef.current = document.activeElement;
     const el = dialogRef.current;
-    // Move focus into the dialog (first field, else the dialog itself).
+    // Move focus to the first field in the content (so a form is ready to
+    // type into), falling back to the dialog itself. Deliberately not the
+    // header's close button, which is the first focusable in DOM order.
     if (el) {
-      const first = el.querySelector(FOCUSABLE);
+      const first = contentRef.current?.querySelector(FOCUSABLE);
       (first || el).focus();
     }
 
@@ -118,7 +121,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
             <Icons.X />
           </button>
         </div>
-        <div style={{ padding: "20px" }}>{children}</div>
+        <div ref={contentRef} style={{ padding: "20px" }}>{children}</div>
       </div>
     </div>
   );
