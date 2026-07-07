@@ -23,8 +23,15 @@ services:
       context: .
       dockerfile: deploy/docker/Dockerfile
     ports:
-      - "8443:443"
+      # Host and container use the same port so the URL the app logs
+      # ("starting HTTPS server, port 8443") is exactly the one you open:
+      # https://localhost:8443. Port 8443 (not 443) avoids needing elevated
+      # privileges to bind a low port on the host.
+      - "8443:8443"
     environment:
+      # Serve on 8443 inside the container too, matching the host mapping
+      # above — otherwise the logged port (443) wouldn't match the URL.
+      PORT: ${PORT:-8443}
       # sslmode=prefer: use TLS if the DB advertises it, fall back to plaintext
       # on the local docker network. For remote DBs set sslmode=verify-full.
       DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-babytracker}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-babytracker}?sslmode=prefer}
