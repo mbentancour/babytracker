@@ -32,6 +32,10 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Build frontend
 WORKDIR /tmp/frontend
+# The symlink frontend/public/icons -> ../../public/icons resolves from
+# /tmp/frontend to /tmp/public/icons. Copy the source icon files there
+# so the symlink is valid during and after the build.
+COPY public/icons/ /tmp/public/icons/
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --production=false
 COPY frontend/ ./

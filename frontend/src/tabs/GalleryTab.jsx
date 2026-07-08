@@ -53,7 +53,7 @@ const TYPE_API_PATH = {
   note: "notes",
 };
 
-export default function GalleryTab({ childId, children = [], canWrite = false }) {
+export default function GalleryTab({ childId, children = [], canWrite = false, isOffline = false }) {
   const { t } = useI18n();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -200,6 +200,8 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           <Icons.Plus />
           {uploading
             ? `${t("gallery.uploading")} (${progress.done}/${progress.total})`
+            : isOffline
+            ? t("general.offline")
             : t("gallery.addPhotos")}
           <input
             type="file"
@@ -207,7 +209,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
             multiple
             style={{ display: "none" }}
             onChange={handleBulkUpload}
-            disabled={uploading}
+            disabled={uploading || isOffline}
           />
         </label>
       </div>}
@@ -253,10 +255,19 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           <div style={{ fontSize: 32, marginBottom: 12 }}>
             <Icons.Baby />
           </div>
-          <div style={{ fontSize: 14 }}>{t("gallery.noPhotos")}</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>
-            {t("gallery.noPhotosHint")}
-          </div>
+          {isOffline ? (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{t("general.offline")}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{t("general.reconnecting")}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 14 }}>{t("gallery.noPhotos")}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>
+                {t("gallery.noPhotosHint")}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         dates.map((date) => (

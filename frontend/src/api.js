@@ -2,6 +2,15 @@ const API_BASE = "./api";
 const CONFIG_PATH = "./api/config";
 const AUTH_BASE = "./api/auth";
 
+// Offline write queue — intercepts POST/PUT/PATCH when offline, replays on reconnect.
+import { isOffline, observe } from "./utils/offline.js";
+import {
+  queueAdd,
+  queueReplay,
+  queueMarkSucceeded,
+  queueMarkFailed,
+} from "./utils/writeQueue.js";
+
 // Token management
 //
 // In HA add-on (iframe) contexts, cookies are unreliable, so we persist the
@@ -97,6 +106,32 @@ async function request(endpoint, options = {}) {
     credentials: "include",
     ...options,
   };
+
+  // Offline write interception: queue POST/PUT/PATCH when offline.
+  const isWriteMethod = [
+    "POST",
+    "PUT",
+    "PATCH",
+  ].includes((options.method || "GET").toUpperCase());
+  const method = options.method || "GET";
+
+  if (isWriteMethod && isOffline()) {
+    const op = {
+      id: `${method}-${endpoint}-${Date.now()}`,
+      method: method,
+      entity: endpoint.split("/")[0],
+      path: endpoint,
+      body:
+        options.body !== undefined && options.body !== null
+          ? JSON.parse(options.body)
+          : null,
+      timestamp: Date.now(),
+      status: "pending",
+      retryCount: 0,
+      error: null,
+    };
+    return queueAdd(op);
+  }
 
   let response = await fetch(url, config);
 
@@ -552,3 +587,21 @@ export const api = {
       credentials: "include",
     }),
 };
+
+// ── Reconnect replay ────────────────────────────────────────────────────────
+// When the app transitions from offline → online, replay all pending queued
+// writes so the user never notices a brief connectivity loss.
+let previousOffline = isOffline();
+observe((state) => {
+  if (previousOffline && !state.offline) {
+    queueReplay().then((result) => {
+      if (result.failed.length > 0) {
+        console.warn(`Write queue replay: ${result.failed.length} failed`);
+      }
+      if (result.success.length > 0) {
+        console.log(`Write queue replay: ${result.success.length} succeeded`);
+      }
+    });
+  }
+  previousOffline = state.offline;
+});

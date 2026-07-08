@@ -11,16 +11,23 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "idb-keyval": "^6.2.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@vitejs/plugin-react": "^6.0.1",
     "jsdom": "^29.1.1",
+    "sharp": "^0.34.5",
     "vite": "^8.0.8",
+    "vite-plugin-pwa": "^1.0.0",
     "vitest": "^3.2.7"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true
   }
 }
