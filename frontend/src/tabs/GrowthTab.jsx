@@ -26,7 +26,7 @@ import { useI18n } from "../utils/i18n";
 export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
-  const { prefs } = usePreferences();
+  const { prefs, isFeatureEnabled } = usePreferences();
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
   const [whoView, setWhoView] = useState({ weight: false, height: false, headcirc: false, bmi: false });
@@ -135,7 +135,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           marginBottom: 20,
         }}
       >
-        <div className="fade-in fade-in-1">
+        {isFeatureEnabled("weight") && <div className="fade-in fade-in-1">
           <div
             onClick={() => latestWeight && canWrite("weight") && onEditEntry?.("weight", latestWeight)}
             style={{
@@ -180,9 +180,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="fade-in fade-in-2">
+        {isFeatureEnabled("height") && <div className="fade-in fade-in-2">
           <div
             onClick={() => latestHeight && canWrite("height") && onEditEntry?.("height", latestHeight)}
             style={{
@@ -227,9 +227,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="fade-in fade-in-3">
+        {isFeatureEnabled("headcirc") && <div className="fade-in fade-in-3">
           <div
             onClick={() => latestHeadCirc && canWrite("headcirc") && onEditEntry?.("headcirc", latestHeadCirc)}
             style={{
@@ -261,9 +261,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        <div className="fade-in fade-in-4">
+        {isFeatureEnabled("bmi") && <div className="fade-in fade-in-4">
           <div
             onClick={() => latestManualBMI && canWrite("bmi") && onEditEntry?.("bmi", latestManualBMI)}
             style={{
@@ -299,7 +299,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 : t("general.noData")}
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Charts */}
@@ -311,7 +311,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         }}
       >
         {/* Daily Feeding Totals */}
-        <div className="fade-in fade-in-5">
+        {isFeatureEnabled("feeding") && <div className="fade-in fade-in-5">
           <SectionCard title={t("growth.dailyFeeding30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingSeries.some((d) => d.amount > 0) ? (
               <>
@@ -352,10 +352,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
 
         {/* Daily Sleep Totals */}
-        <div className="fade-in fade-in-6">
+        {isFeatureEnabled("sleep") && <div className="fade-in fade-in-6">
           <SectionCard title={t("growth.dailySleep30d")} icon={<Icons.Moon />} color={colors.sleep}>
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
@@ -396,10 +396,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
 
         {/* Weight Chart */}
-        <div className="fade-in fade-in-7">
+        {isFeatureEnabled("weight") && <div className="fade-in fade-in-7">
           <SectionCard
             title={t("growth.weightTrend")}
             icon={<Icons.Weight />}
@@ -449,10 +449,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
 
         {/* Height Chart */}
-        <div className="fade-in fade-in-8">
+        {isFeatureEnabled("height") && <div className="fade-in fade-in-8">
           <SectionCard
             title={t("growth.heightTrend")}
             icon={<Icons.Ruler />}
@@ -502,9 +502,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
         {/* Head Circumference Chart */}
-        <div className="fade-in fade-in-9">
+        {isFeatureEnabled("headcirc") && <div className="fade-in fade-in-9">
           <SectionCard
             title={t("growth.headCircTrend")}
             icon={<Icons.Baby />}
@@ -547,10 +547,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
 
         {/* BMI Chart */}
-        <div className="fade-in fade-in-10">
+        {isFeatureEnabled("bmi") && <div className="fade-in fade-in-10">
           <SectionCard
             title={t("growth.bmiTrend")}
             icon={<Icons.TrendUp />}
@@ -585,7 +585,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>
+        </div>}
       </div>
 
       {dayModal && (
