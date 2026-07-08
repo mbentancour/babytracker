@@ -3,6 +3,23 @@ import { useI18n } from "../utils/i18n";
 import "./InstallPrompt.css";
 
 const IOS_STANDALONE_DETECTION_QUERY = "(display-mode: standalone)";
+const STORAGE_KEY = "babytracker_install_prompt_dismissed";
+
+function hasDismissedInstallPrompt() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markInstallPromptDismissed() {
+  try {
+    localStorage.setItem(STORAGE_KEY, "1");
+  } catch {
+    // localStorage may be unavailable (e.g. private browsing)
+  }
+}
 
 export default function InstallPrompt() {
   const { t } = useI18n();
@@ -10,11 +27,12 @@ export default function InstallPrompt() {
   const [iosInstallHint, setIosInstallHint] = useState(false);
   const [visible, setVisible] = useState(false);
   const deferredPromptRef = useRef(null);
-  const iosHintDismissedRef = useRef(false);
+  const iosHintDismissedRef = useRef(hasDismissedInstallPrompt());
   const isStandaloneRef = useRef(false);
 
   // --- Android: capture beforeinstallprompt ---
   useEffect(() => {
+    if (hasDismissedInstallPrompt()) return;
     const handler = (e) => {
       e.preventDefault();
       deferredPromptRef.current = e;
@@ -38,7 +56,7 @@ export default function InstallPrompt() {
     if (!isStandalone) {
       // Show iOS hint after a short delay so the app is fully loaded
       const timer = setTimeout(() => {
-        if (!isStandaloneRef.current && !iosHintDismissedRef.current) {
+        if (!isStandaloneRef.current && !iosHintDismissedRef.current && !hasDismissedInstallPrompt()) {
           setIosInstallHint(true);
           setVisible(true);
         }
@@ -72,6 +90,7 @@ export default function InstallPrompt() {
       if (outcome === "accepted") {
         setPrompt(null);
         setVisible(false);
+        markInstallPromptDismissed();
       }
     } catch (e) {
       console.warn("Install prompt failed:", e);
@@ -84,6 +103,7 @@ export default function InstallPrompt() {
   const handleDismiss = useCallback(() => {
     setVisible(false);
     if (prompt === "ios") iosHintDismissedRef.current = true;
+    markInstallPromptDismissed();
   }, [prompt]);
 
   // If standalone, don't render anything — already installed as PWA
