@@ -1230,6 +1230,16 @@ const es = {
   "settings.destS3CredsRequired": "El ID de clave de acceso y la clave de acceso secreta son obligatorios",
   "general.noData": "Aún no hay datos",
   "general.export": "Exportar",
+
+  // Install Prompt
+  "installPrompt.installBannerAria": "Banner de instalación de la aplicación",
+  "installPrompt.installBannerTitle": "Instalar BabyTracker",
+  "installPrompt.installBannerDesc": "Añadir a tu pantalla de inicio para acceso rápido y soporte sin conexión.",
+  "installPrompt.install": "Instalar",
+  "installPrompt.iosHintAria": "Pista de instalación",
+  "installPrompt.iosHintTitle": "Añadir a la Pantalla de Inicio",
+  "installPrompt.iosHintDesc": "Toca Compartir, luego \"Añadir a la Pantalla de Inicio\" para instalar BabyTracker.",
+  "installPrompt.dismiss": "Descartar",
 };
 
 const da = {
@@ -1769,6 +1779,8 @@ const da = {
   "general.save": "Gem",
   "general.saving": "Gemmer...",
   "general.connectionError": "Forbindelsesfejl",
+  "general.offline": "Du er offline",
+  "general.reconnecting": "Opretter forbindelse igen…",
   "tags.title": "Tags",
   "tags.hint": "Tag måltider, søvn, bleer, noter og målinger for at finde mønstre. Tags vises ved siden af indtastninger i Oversigt og Journal.",
   "tags.empty": "Ingen tags endnu. Tilføj en nedenfor.",
@@ -1857,6 +1869,16 @@ const da = {
   "settings.destS3CredsRequired": "Access Key ID og Secret Access Key er påkrævet",
   "general.noData": "Ingen data endnu",
   "general.export": "Eksporter",
+
+  // Install Prompt
+  "installPrompt.installBannerAria": "Installeringsbanner",
+  "installPrompt.installBannerTitle": "Installer BabyTracker",
+  "installPrompt.installBannerDesc": "Tilføj til startsiden for hurtig adgang og offline-support.",
+  "installPrompt.install": "Installer",
+  "installPrompt.iosHintAria": "Installeringshint",
+  "installPrompt.iosHintTitle": "Tilføj til Startsiden",
+  "installPrompt.iosHintDesc": "Tryk på Del, derefter \"Tilføj til Startsiden\" for at installere BabyTracker.",
+  "installPrompt.dismiss": "Afvis",
 };
 
 const translations = { en, es, da };
