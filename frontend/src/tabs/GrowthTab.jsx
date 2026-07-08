@@ -34,8 +34,8 @@ const feedingCountLabelKeys = {
 const feedingCountFills = {
   "breast milk": colors.feeding,
   formula: "#F9A826",
-  "fortified breast milk": "#81C784",
-  "solid food": "#FFB74D",
+  "fortified breast milk": "#FFB74D",
+  "solid food": "#81C784",
   other: "#B0BEC5",
 };
 
