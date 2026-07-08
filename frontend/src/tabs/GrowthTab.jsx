@@ -4,6 +4,8 @@ import {
   Line,
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -19,7 +21,7 @@ import AddButton from "../components/AddButton";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
-import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailySleepTotals, getEntriesForDate } from "../utils/formatters";
+import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate } from "../utils/formatters";
 import { usePreferences } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
@@ -37,6 +39,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const heightSeries = toGrowthSeries(heights, "height");
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
   const feedingSeries = dailyFeedingTotals(monthlyFeedings);
+  const feedingCountSeries = dailyFeedingCountsByType(monthlyFeedings);
   const sleepSeries = dailySleepTotals(monthlySleep);
 
   const latestWeight = weights[0];
@@ -398,8 +401,42 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           </SectionCard>
         </div>
 
-        {/* Weight Chart */}
+        {/* Daily Feeding Counts by Type */}
         <div className="fade-in fade-in-7">
+          <SectionCard title={t("growth.dailyFeedingCount30d")} icon={<Icons.Bottle />} color={colors.feeding}>
+            {feedingCountSeries.some(
+              (d) =>
+                d["breast milk"] > 0 ||
+                d["formula"] > 0 ||
+                d["solid food"] > 0 ||
+                d["fortified breast milk"] > 0 ||
+                d.other > 0,
+            ) ? (
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={feedingCountSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="breast milk" stackId="feed" fill={colors.feeding} name="Breast Milk" />
+                    <Bar dataKey="formula" stackId="feed" fill="#F9A826" name="Formula" />
+                    <Bar dataKey="fortified breast milk" stackId="feed" fill="#81C784" name="Fortified" />
+                    <Bar dataKey="solid food" stackId="feed" fill="#FFB74D" name="Solids" />
+                    <Bar dataKey="other" stackId="feed" fill="#B0BEC5" name="Other" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
+                {t("growth.noData", { type: "feeding" })}
+              </div>
+            )}
+          </SectionCard>
+        </div>
+
+        {/* Weight Chart */}
+        <div className="fade-in fade-in-8">
           <SectionCard
             title={t("growth.weightTrend")}
             icon={<Icons.Weight />}
@@ -452,7 +489,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         {/* Height Chart */}
-        <div className="fade-in fade-in-8">
+        <div className="fade-in fade-in-9">
           <SectionCard
             title={t("growth.heightTrend")}
             icon={<Icons.Ruler />}
@@ -504,7 +541,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           </SectionCard>
         </div>
         {/* Head Circumference Chart */}
-        <div className="fade-in fade-in-9">
+        <div className="fade-in fade-in-10">
           <SectionCard
             title={t("growth.headCircTrend")}
             icon={<Icons.Baby />}
@@ -550,7 +587,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         </div>
 
         {/* BMI Chart */}
-        <div className="fade-in fade-in-10">
+        <div className="fade-in fade-in-11">
           <SectionCard
             title={t("growth.bmiTrend")}
             icon={<Icons.TrendUp />}

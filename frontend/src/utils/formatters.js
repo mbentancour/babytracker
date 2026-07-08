@@ -250,6 +250,60 @@ export function getEntriesForDate(entries, dateLabel, dateKey = "start") {
   });
 }
 
+/**
+ * Aggregate feeding counts per day over the last N days, grouped by feeding type.
+ * Returns an array of { date, type, count } suitable for a Recharts
+ * stacked-bar with multiple data keys.
+ *
+ * The `type` field maps directly to the feeding entry's `type` property
+ * (e.g. "breast milk", "formula", "solid food").  Entries that have no
+ * matching type are silently ignored.
+ */
+export function dailyFeedingCountsByType(entries, numDays = 30) {
+  const days = getLastNDays(numDays);
+  const sums = {};
+  days.forEach((d) => (sums[d.dateStr] = {}));
+
+  // Known feeding type keys that the chart will render
+  const feedingTypeKeys = [
+    "breast milk",
+    "formula",
+    "fortified breast milk",
+    "solid food",
+  ];
+
+  entries.forEach((e) => {
+    const key = entryDateStr(e.start || e.time || e.date);
+    const type = e.type || e.method || "other";
+    // Only count types we know how to display; everything else goes into "other"
+    const normalizedType = feedingTypeKeys.includes(type) ? type : "other";
+    for (const d of days) {
+      if (d.dateStr === key) {
+        sums[d.dateStr][normalizedType] = (sums[d.dateStr][normalizedType] || 0) + 1;
+      }
+    }
+  });
+
+  // Convert to the flat array shape Recharts stacked-bar expects
+  const result = [];
+  for (const d of days) {
+    const base = { date: d.label };
+    for (const type of feedingTypeKeys) {
+      base[type] = sums[d.dateStr][type] || 0;
+    }
+    // "other" bucket for any unknown types
+    base.other = sums[d.dateStr]["other"] || 0;
+    result.push(base);
+  }
+
+  // Trim leading zero-only days
+  const firstNonZero = result.findIndex(
+    (d) =>
+      feedingTypeKeys.some((t) => d[t] > 0) || d.other > 0,
+  );
+  return firstNonZero > 0 ? result.slice(firstNonZero) : result;
+}
+
 export function dailySleepTotals(entries, numDays = 30) {
   const days = getLastNDays(numDays);
   const sums = {};
