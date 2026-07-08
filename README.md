@@ -52,6 +52,10 @@ docker compose -f deploy/docker/docker-compose.yml up
 
 Then visit [https://localhost](https://localhost).
 
+As an alternative to Docker, [Podman](https://podman.io/) is also supported with
+Podman Compose [v1.6.0](https://github.com/containers/podman-compose/releases/tag/v1.6.0)
+and later (support for nested variable interpolation).
+
 ## Installation
 
 Six installation options are available (see [INSTALL.md](INSTALL.md) for details):
@@ -60,7 +64,7 @@ Six installation options are available (see [INSTALL.md](INSTALL.md) for details
 2. **Home Assistant add-on**
 3. **Proxmox** -- one-command LXC install or Packer VM template
 4. **Kubernetes** -- Helm chart in `deploy/helm/babytracker/`
-5. **Docker Compose**
+5. **Docker Compose/Podman Compose**
 6. **Manual installation**
 
 ## Documentation
