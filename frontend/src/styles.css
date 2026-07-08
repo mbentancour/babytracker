@@ -1176,3 +1176,189 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Write Queue UI ─────────────────────────────────────────────────── */
+
+.write-queue-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+}
+
+.write-queue-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+.write-queue-pending {
+  background: #22C55E18;
+  color: #22C55E;
+}
+
+.write-queue-failed {
+  background: #EF444418;
+  color: #EF4444;
+}
+
+/* Full list view */
+.write-queue-list {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.write-queue-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.write-queue-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.write-queue-item {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.write-queue-item-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.write-queue-item-type {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.write-queue-item-method {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  background: var(--card-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.write-queue-item-error {
+  font-size: 12px;
+  color: #EF4444;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.write-queue-item-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.write-queue-retry-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #22C55E40;
+  background: #22C55E15;
+  color: #22C55E;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+
+.write-queue-retry-btn:hover {
+  background: #22C55E25;
+}
+
+.write-queue-clear-btn {
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+
+.write-queue-clear-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------------------
+ * OfflineBanner — top-of-page banner for offline/reconnecting states
+ * --------------------------------------------------------------------------- */
+
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font);
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+
+.offline-banner.visible {
+  transform: translateY(0);
+}
+
+/* Offline state — amber/orange */
+.offline-banner--offline {
+  background: #F59E0B;
+  color: #000;
+}
+
+.offline-banner--offline .offline-banner-icon {
+  font-size: 16px;
+}
+
+/* Reconnecting state — green flash */
+.offline-banner--reconnecting {
+  background: #22C55E;
+  color: #000;
+}
+
+.offline-banner--reconnecting .offline-banner-icon {
+  font-size: 16px;
+}
+
+/* Ensure the app layout has top padding to accommodate the fixed banner */
+.app {
+  padding-top: max(20px, 40px, env(safe-area-inset-top));
+}

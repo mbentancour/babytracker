@@ -1,6 +1,10 @@
 # Stage 1: Build frontend
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app/frontend
+# Resolve the frontend/public/icons symlink: it points to ../../public/icons
+# which resolves to /app/public/icons from WORKDIR. Copy the source icon
+# files there so the symlink is valid during and after the build.
+COPY public/icons/ /app/public/icons/
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 COPY frontend/ ./

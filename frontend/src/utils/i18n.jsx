@@ -596,6 +596,8 @@ const en = {
   "general.date": "Date",
   "general.start": "Start",
   "general.end": "End",
+  "general.offline": "You are offline",
+  "general.reconnecting": "Reconnecting…",
 
   // Setup wizard
   "setup.welcome": "Welcome to BabyTracker",
@@ -632,6 +634,16 @@ const en = {
   "setup.error": "Connection failed",
   "setup.connectFailed": "Could not connect to the network. Please check the password and try again.",
   "setup.tryAgain": "Try Again",
+
+  // Install Prompt
+  "installPrompt.installBannerAria": "Install app banner",
+  "installPrompt.installBannerTitle": "Install BabyTracker",
+  "installPrompt.installBannerDesc": "Add to your home screen for quick access and offline support.",
+  "installPrompt.install": "Install",
+  "installPrompt.iosHintAria": "Install hint",
+  "installPrompt.iosHintTitle": "Add to Home Screen",
+  "installPrompt.iosHintDesc": "Tap Share, then \"Add to Home Screen\" to install BabyTracker.",
+  "installPrompt.dismiss": "Dismiss",
 };
 
 const es = {
@@ -1075,6 +1087,8 @@ const es = {
   "general.date": "Fecha",
   "general.start": "Inicio",
   "general.end": "Fin",
+  "general.offline": "Sin conexión",
+  "general.reconnecting": "Reconectando…",
 
   // Setup wizard
   "setup.welcome": "Bienvenido a BabyTracker",

@@ -38,6 +38,10 @@ import EditChildForm from "./components/forms/EditChildForm";
 const SettingsModal = lazy(() => import("./components/SettingsModal"));
 const GalleryTab = lazy(() => import("./tabs/GalleryTab"));
 const PictureFrame = lazy(() => import("./components/PictureFrame"));
+import InstallPrompt from "./components/InstallPrompt";
+import { OfflineBanner } from "./components/OfflineBanner";
+import { WriteQueueIndicator } from "./components/WriteQueueUI";
+import { useOfflineStatus } from "./utils/offline";
 import "./styles.css";
 
 const TABS = [
@@ -232,6 +236,7 @@ export default function App() {
 function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupIntentConsumed }) {
   const { t: tr } = useI18n();
   const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
+  const isOffline = useOfflineStatus().offline;
   const [activeTab, setActiveTab] = useState("overview");
   const [modal, setModal] = useState(null);
   const [showActions, setShowActions] = useState(false);
@@ -509,6 +514,10 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
   return (
     <UnitContext.Provider value={data.unitSystem}>
     <div className="app">
+      {/* Offline status banner */}
+      <OfflineBanner />
+      {/* Write queue indicator (compact header badge) */}
+      <WriteQueueIndicator />
       {/* Header */}
       <header className="app-header fade-in">
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -549,6 +558,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           {data.error && (
             <span className="sync-error">{tr("general.connectionError")}</span>
           )}
+          <WriteQueueIndicator />
           <button className="refresh-btn" onClick={() => setModal({ type: "settings" })} title={tr("settings.title")} aria-label={tr("settings.title")}>
             <Icons.Settings />
           </button>
@@ -721,7 +731,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           />
         )}
         {activeTab === "gallery" && (
-          <GalleryTab childId={data.child?.id} children={data.children} canWrite={canWrite("photo")} />
+          <GalleryTab childId={data.child?.id} children={data.children} canWrite={canWrite("photo")} isOffline={isOffline} />
         )}
         </Suspense>
       </main>
@@ -986,6 +996,9 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         />
         </Suspense>
       )}
+
+      {/* PWA install prompt — shows Android banner or iOS hint */}
+      <InstallPrompt />
     </div>
     </UnitContext.Provider>
   );
