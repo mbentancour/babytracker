@@ -5,6 +5,7 @@ import {
   formatDuration,
   overlapHours,
   getAge,
+  dailyFeedingCountsByType,
 } from "./formatters";
 
 describe("formatElapsed", () => {
@@ -103,5 +104,113 @@ describe("getAge", () => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 3);
     expect(getAge(d.toISOString())).toMatch(/^3y/);
+  });
+});
+
+function relativeDateISO(daysAgo, hour = 10) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  d.setHours(hour, 0, 0, 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+}
+
+function relativeDateLabel(daysAgo) {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+describe("dailyFeedingCountsByType", () => {
+  it("returns zero counts for empty entries", () => {
+    const result = dailyFeedingCountsByType([], 7);
+    expect(result.length).toBe(7);
+    result.forEach((d) => {
+      expect(d["breast milk"]).toBe(0);
+      expect(d["formula"]).toBe(0);
+      expect(d["solid food"]).toBe(0);
+      expect(d["fortified breast milk"]).toBe(0);
+      expect(d.other).toBe(0);
+    });
+  });
+
+  it("counts feedings per day grouped by type", () => {
+    const entries = [
+      { start: relativeDateISO(2), type: "breast milk" },
+      { start: relativeDateISO(2, 14), type: "breast milk" },
+      { start: relativeDateISO(2, 18), type: "formula" },
+      { start: relativeDateISO(1), type: "breast milk" },
+      { start: relativeDateISO(0), type: "solid food" },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+
+    const label2daysAgo = relativeDateLabel(2);
+    const label1dayAgo = relativeDateLabel(1);
+    const labelToday = relativeDateLabel(0);
+
+    const d2 = result.find((d) => d.date === label2daysAgo);
+    const d1 = result.find((d) => d.date === label1dayAgo);
+    const d0 = result.find((d) => d.date === labelToday);
+    expect(d2["breast milk"]).toBe(2);
+    expect(d2["formula"]).toBe(1);
+    expect(d1["breast milk"]).toBe(1);
+    expect(d0["solid food"]).toBe(1);
+  });
+
+  it("handles unknown types by grouping into 'other'", () => {
+    const entries = [
+      { start: relativeDateISO(3), type: "unknown type" },
+      { start: relativeDateISO(2), type: "breast milk" },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+
+    const d3 = result.find((d) => d.date === relativeDateLabel(3));
+    const d2 = result.find((d) => d.date === relativeDateLabel(2));
+    expect(d3.other).toBe(1);
+    expect(d2["breast milk"]).toBe(1);
+  });
+
+  it("trims leading zero-only days", () => {
+    const entries = [
+      { start: relativeDateISO(5), type: "breast milk" },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+    // First non-zero day should be 5 days ago, not earlier
+    const firstEntry = result[0];
+    expect(firstEntry.date).toBe(relativeDateLabel(5));
+    expect(firstEntry["breast milk"]).toBe(1);
+    // Ensure earlier days are not present
+    expect(result[0].date).not.toBe(relativeDateLabel(4));
+  });
+
+  it("supports fortified breast milk type", () => {
+    const entries = [
+      { start: relativeDateISO(1), type: "fortified breast milk" },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+
+    const d1 = result.find((d) => d.date === relativeDateLabel(1));
+    expect(d1["fortified breast milk"]).toBe(1);
+  });
+
+  it("trims to exactly the days from the first entry through today", () => {
+    const entries = [
+      { start: relativeDateISO(15), type: "breast milk" },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+    // 15 days ago through today inclusive = 16 days
+    expect(result.length).toBe(16);
+    expect(result[0].date).toBe(relativeDateLabel(15));
+    expect(result[result.length - 1].date).toBe(relativeDateLabel(0));
+  });
+
+  it("handles entries with no type field by grouping into 'other'", () => {
+    const entries = [
+      { start: relativeDateISO(1) },
+    ];
+    const result = dailyFeedingCountsByType(entries, 30);
+
+    const d1 = result.find((d) => d.date === relativeDateLabel(1));
+    expect(d1.other).toBe(1);
   });
 });

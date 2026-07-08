@@ -1,3 +1,8 @@
+import { FEEDING_TYPES } from "./preferences";
+
+// Chart bucket keys: one per known feeding type, plus "other" for the rest
+export const FEEDING_COUNT_KEYS = [...FEEDING_TYPES.map((ft) => ft.value), "other"];
+
 export function getAge(birthDate) {
   const birth = new Date(birthDate);
   const now = new Date();
@@ -248,6 +253,37 @@ export function getEntriesForDate(entries, dateLabel, dateKey = "start") {
     });
     return formattedDate === targetDate;
   });
+}
+
+/**
+ * Aggregate feeding counts per day over the last N days, grouped by feeding
+ * type. Returns an array of objects with one numeric key per bucket in
+ * FEEDING_COUNT_KEYS, e.g. { date, "breast milk": 2, formula: 1, ..., other: 0 },
+ * suitable for a Recharts stacked bar. Entries whose `type` isn't a known
+ * feeding type are counted under "other". Leading zero-only days are trimmed.
+ */
+export function dailyFeedingCountsByType(entries, numDays = 30) {
+  const days = getLastNDays(numDays);
+  const sums = {};
+  days.forEach((d) => (sums[d.dateStr] = {}));
+
+  entries.forEach((e) => {
+    const key = entryDateStr(e.start || e.time || e.date);
+    if (!(key in sums)) return;
+    const type = FEEDING_COUNT_KEYS.includes(e.type) ? e.type : "other";
+    sums[key][type] = (sums[key][type] || 0) + 1;
+  });
+
+  const result = days.map((d) => {
+    const base = { date: d.label };
+    for (const type of FEEDING_COUNT_KEYS) {
+      base[type] = sums[d.dateStr][type] || 0;
+    }
+    return base;
+  });
+
+  const firstNonZero = result.findIndex((d) => FEEDING_COUNT_KEYS.some((t) => d[t] > 0));
+  return firstNonZero > 0 ? result.slice(firstNonZero) : result;
 }
 
 export function dailySleepTotals(entries, numDays = 30) {
