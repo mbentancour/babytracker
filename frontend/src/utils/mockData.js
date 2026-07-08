@@ -186,9 +186,9 @@ function emmaMonthlySleep() {
 function liamFeedings() {
   // Toddler: 3 meals + snack, whole milk in cup, larger amounts
   return [
-    { id: 1, child: 2, start: isoLocal(hoursAgo(1)), end: isoLocal(hoursAgo(0, 40)), type: "fortified milk", method: "bottle", amount: 200, duration: duration(0, 20) },
-    { id: 2, child: 2, start: isoLocal(hoursAgo(5)), end: isoLocal(hoursAgo(4, 30)), type: "fortified milk", method: "bottle", amount: 180, duration: duration(0, 30) },
-    { id: 3, child: 2, start: isoLocal(hoursAgo(9)), end: isoLocal(hoursAgo(8, 30)), type: "fortified milk", method: "bottle", amount: 220, duration: duration(0, 30) },
+    { id: 1, child: 2, start: isoLocal(hoursAgo(1)), end: isoLocal(hoursAgo(0, 40)), type: "fortified breast milk", method: "bottle", amount: 200, duration: duration(0, 20) },
+    { id: 2, child: 2, start: isoLocal(hoursAgo(5)), end: isoLocal(hoursAgo(4, 30)), type: "fortified breast milk", method: "bottle", amount: 180, duration: duration(0, 30) },
+    { id: 3, child: 2, start: isoLocal(hoursAgo(9)), end: isoLocal(hoursAgo(8, 30)), type: "fortified breast milk", method: "bottle", amount: 220, duration: duration(0, 30) },
   ];
 }
 
@@ -205,7 +205,7 @@ function liamWeeklyFeedings() {
       entries.push({
         id: 100 + d * 10 + f, child: 2,
         start: isoLocal(start), end: isoLocal(end),
-        type: "fortified milk", method: "bottle",
+        type: "fortified breast milk", method: "bottle",
         amount: 180 + Math.floor(Math.random() * 60), duration: duration(0, 25),
       });
     }
@@ -259,7 +259,7 @@ function liamMonthlyFeedings() {
       entries.push({
         id: 500 + d * 10 + f, child: 2,
         start: isoLocal(start), end: isoLocal(end),
-        type: "fortified milk", method: "bottle",
+        type: "fortified breast milk", method: "bottle",
         amount: 180 + Math.floor(Math.random() * 60), duration: duration(0, 25),
       });
     }
