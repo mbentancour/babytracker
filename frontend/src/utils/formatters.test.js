@@ -193,12 +193,15 @@ describe("dailyFeedingCountsByType", () => {
     expect(d1["fortified breast milk"]).toBe(1);
   });
 
-  it("returns all 30 days when there is data", () => {
+  it("trims to exactly the days from the first entry through today", () => {
     const entries = [
       { start: relativeDateISO(15), type: "breast milk" },
     ];
     const result = dailyFeedingCountsByType(entries, 30);
-    expect(result.length).toBeLessThanOrEqual(30);
+    // 15 days ago through today inclusive = 16 days
+    expect(result.length).toBe(16);
+    expect(result[0].date).toBe(relativeDateLabel(15));
+    expect(result[result.length - 1].date).toBe(relativeDateLabel(0));
   });
 
   it("handles entries with no type field by grouping into 'other'", () => {

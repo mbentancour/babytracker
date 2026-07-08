@@ -21,9 +21,23 @@ import AddButton from "../components/AddButton";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
-import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate } from "../utils/formatters";
-import { usePreferences } from "../utils/preferences";
+import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, FEEDING_COUNT_KEYS } from "../utils/formatters";
+import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
+
+// Labels come from the canonical FEEDING_TYPES i18n keys; a type without an
+// explicit color falls back to the "other" gray.
+const feedingCountLabelKeys = {
+  ...Object.fromEntries(FEEDING_TYPES.map((ft) => [ft.value, ft.labelKey])),
+  other: "feeding.other",
+};
+const feedingCountFills = {
+  "breast milk": colors.feeding,
+  formula: "#F9A826",
+  "fortified breast milk": "#81C784",
+  "solid food": "#FFB74D",
+  other: "#B0BEC5",
+};
 
 export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
@@ -404,14 +418,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {/* Daily Feeding Counts by Type */}
         <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyFeedingCount30d")} icon={<Icons.Bottle />} color={colors.feeding}>
-            {feedingCountSeries.some(
-              (d) =>
-                d["breast milk"] > 0 ||
-                d["formula"] > 0 ||
-                d["solid food"] > 0 ||
-                d["fortified breast milk"] > 0 ||
-                d.other > 0,
-            ) ? (
+            {feedingCountSeries.some((d) => FEEDING_COUNT_KEYS.some((k) => d[k] > 0)) ? (
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={feedingCountSeries}>
@@ -419,11 +426,15 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="breast milk" stackId="feed" fill={colors.feeding} name="Breast Milk" />
-                    <Bar dataKey="formula" stackId="feed" fill="#F9A826" name="Formula" />
-                    <Bar dataKey="fortified breast milk" stackId="feed" fill="#81C784" name="Fortified" />
-                    <Bar dataKey="solid food" stackId="feed" fill="#FFB74D" name="Solids" />
-                    <Bar dataKey="other" stackId="feed" fill="#B0BEC5" name="Other" />
+                    {FEEDING_COUNT_KEYS.map((key) => (
+                      <Bar
+                        key={key}
+                        dataKey={key}
+                        stackId="feed"
+                        fill={feedingCountFills[key] || feedingCountFills.other}
+                        name={t(feedingCountLabelKeys[key])}
+                      />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>

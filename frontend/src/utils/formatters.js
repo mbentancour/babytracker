@@ -1,3 +1,8 @@
+import { FEEDING_TYPES } from "./preferences";
+
+// Chart bucket keys: one per known feeding type, plus "other" for the rest
+export const FEEDING_COUNT_KEYS = [...FEEDING_TYPES.map((ft) => ft.value), "other"];
+
 export function getAge(birthDate) {
   const birth = new Date(birthDate);
   const now = new Date();
@@ -251,56 +256,33 @@ export function getEntriesForDate(entries, dateLabel, dateKey = "start") {
 }
 
 /**
- * Aggregate feeding counts per day over the last N days, grouped by feeding type.
- * Returns an array of { date, type, count } suitable for a Recharts
- * stacked-bar with multiple data keys.
- *
- * The `type` field maps directly to the feeding entry's `type` property
- * (e.g. "breast milk", "formula", "solid food").  Entries that have no
- * matching type are silently ignored.
+ * Aggregate feeding counts per day over the last N days, grouped by feeding
+ * type. Returns an array of objects with one numeric key per bucket in
+ * FEEDING_COUNT_KEYS, e.g. { date, "breast milk": 2, formula: 1, ..., other: 0 },
+ * suitable for a Recharts stacked bar. Entries whose `type` isn't a known
+ * feeding type are counted under "other". Leading zero-only days are trimmed.
  */
 export function dailyFeedingCountsByType(entries, numDays = 30) {
   const days = getLastNDays(numDays);
   const sums = {};
   days.forEach((d) => (sums[d.dateStr] = {}));
 
-  // Known feeding type keys that the chart will render
-  const feedingTypeKeys = [
-    "breast milk",
-    "formula",
-    "fortified breast milk",
-    "solid food",
-  ];
-
   entries.forEach((e) => {
     const key = entryDateStr(e.start || e.time || e.date);
-    const type = e.type || e.method || "other";
-    // Only count types we know how to display; everything else goes into "other"
-    const normalizedType = feedingTypeKeys.includes(type) ? type : "other";
-    for (const d of days) {
-      if (d.dateStr === key) {
-        sums[d.dateStr][normalizedType] = (sums[d.dateStr][normalizedType] || 0) + 1;
-      }
-    }
+    if (!(key in sums)) return;
+    const type = FEEDING_COUNT_KEYS.includes(e.type) ? e.type : "other";
+    sums[key][type] = (sums[key][type] || 0) + 1;
   });
 
-  // Convert to the flat array shape Recharts stacked-bar expects
-  const result = [];
-  for (const d of days) {
+  const result = days.map((d) => {
     const base = { date: d.label };
-    for (const type of feedingTypeKeys) {
+    for (const type of FEEDING_COUNT_KEYS) {
       base[type] = sums[d.dateStr][type] || 0;
     }
-    // "other" bucket for any unknown types
-    base.other = sums[d.dateStr]["other"] || 0;
-    result.push(base);
-  }
+    return base;
+  });
 
-  // Trim leading zero-only days
-  const firstNonZero = result.findIndex(
-    (d) =>
-      feedingTypeKeys.some((t) => d[t] > 0) || d.other > 0,
-  );
+  const firstNonZero = result.findIndex((d) => FEEDING_COUNT_KEYS.some((t) => d[t] > 0));
   return firstNonZero > 0 ? result.slice(firstNonZero) : result;
 }
 
