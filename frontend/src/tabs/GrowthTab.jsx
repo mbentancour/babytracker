@@ -371,8 +371,39 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           </SectionCard>
         </div>
 
-        {/* Daily Sleep Totals */}
+        {/* Daily Feeding Counts by Type */}
         <div className="fade-in fade-in-6">
+          <SectionCard title={t("growth.dailyFeedingCount30d")} icon={<Icons.Bottle />} color={colors.feeding}>
+            {feedingCountSeries.some((d) => FEEDING_COUNT_KEYS.some((k) => d[k] > 0)) ? (
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={feedingCountSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    {FEEDING_COUNT_KEYS.map((key) => (
+                      <Bar
+                        key={key}
+                        dataKey={key}
+                        stackId="feed"
+                        fill={feedingCountFills[key] || feedingCountFills.other}
+                        name={t(feedingCountLabelKeys[key])}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
+                {t("growth.noData", { type: "feeding" })}
+              </div>
+            )}
+          </SectionCard>
+        </div>
+
+        {/* Daily Sleep Totals */}
+        <div className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailySleep30d")} icon={<Icons.Moon />} color={colors.sleep}>
             {sleepSeries.some((d) => d.hours > 0) ? (
               <>
@@ -410,37 +441,6 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
                 {t("growth.noData", { type: "sleep" })}
-              </div>
-            )}
-          </SectionCard>
-        </div>
-
-        {/* Daily Feeding Counts by Type */}
-        <div className="fade-in fade-in-7">
-          <SectionCard title={t("growth.dailyFeedingCount30d")} icon={<Icons.Bottle />} color={colors.feeding}>
-            {feedingCountSeries.some((d) => FEEDING_COUNT_KEYS.some((k) => d[k] > 0)) ? (
-              <div style={{ height: 200 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={feedingCountSeries}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip content={<CustomTooltip />} />
-                    {FEEDING_COUNT_KEYS.map((key) => (
-                      <Bar
-                        key={key}
-                        dataKey={key}
-                        stackId="feed"
-                        fill={feedingCountFills[key] || feedingCountFills.other}
-                        name={t(feedingCountLabelKeys[key])}
-                      />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
-                {t("growth.noData", { type: "feeding" })}
               </div>
             )}
           </SectionCard>
