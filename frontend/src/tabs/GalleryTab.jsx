@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import { Icons } from "../components/Icons";
 import { useI18n } from "../utils/i18n";
+import { fullscreenPhotoUrl } from "../utils/photoUrl";
 
 const TYPE_LABELS = {
   shared: "Shared",
@@ -493,7 +494,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
       )}
 
       <img
-        src={`./api/media/photos/${item.photo}`}
+        src={fullscreenPhotoUrl(item.photo)}
         alt={item.label}
         onClick={(e) => e.stopPropagation()}
         style={{

@@ -5,6 +5,7 @@ import { usePreferences } from "../utils/preferences";
 import { timeAgo, formatElapsed } from "../utils/formatters";
 import { agoAnchor, formatAwake } from "../utils/overlayTime";
 import { useScreenWakeLock } from "../utils/wakeLock";
+import { fullscreenPhotoUrl } from "../utils/photoUrl";
 
 function shuffle(arr) {
   const out = [...arr];
@@ -79,7 +80,7 @@ export default function PictureFrame({ photos, children = [], onWake }) {
       <div
         className={`picture-frame-image ${fading ? "picture-frame-fade" : ""}`}
         style={{
-          backgroundImage: `url(./api/media/photos/${current.photo})`,
+          backgroundImage: `url(${fullscreenPhotoUrl(current.photo)})`,
         }}
       />
       <div className="picture-frame-overlay">

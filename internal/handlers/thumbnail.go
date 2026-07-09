@@ -20,6 +20,7 @@ import (
 var thumbnailSizes = map[string]int{
 	"thumb":  300,
 	"medium": 800,
+	"large":  1920,
 }
 
 // maxDecodePixels caps the decoded image size. A few-KB PNG/GIF can declare
