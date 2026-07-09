@@ -23,8 +23,13 @@ export default function Modal({ title, children, onClose, headerAction }) {
     // Move focus to the first field in the content (so a form is ready to
     // type into), falling back to the dialog itself. Deliberately not the
     // header's close button, which is the first focusable in DOM order.
+    // On touch devices, focus the dialog instead: focusing a field while the
+    // opening tap's gesture is still active makes the browser activate it —
+    // a select pops its dropdown, an input raises the keyboard — so the tap
+    // appears to "fall through" into the form.
     if (el) {
-      const first = contentRef.current?.querySelector(FOCUSABLE);
+      const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches;
+      const first = coarsePointer ? null : contentRef.current?.querySelector(FOCUSABLE);
       (first || el).focus();
     }
 

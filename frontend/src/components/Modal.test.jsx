@@ -44,6 +44,24 @@ describe("Modal accessibility", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("amount"));
   });
 
+  it("focuses the dialog itself on touch devices, not the first field", () => {
+    // On coarse-pointer devices, focusing a field during the opening tap
+    // makes the browser pop its picker/keyboard, so the dialog gets focus.
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn((query) => ({
+      matches: query === "(pointer: coarse)",
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    try {
+      renderModal();
+      expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it("closes on backdrop click but not on content click", () => {
     const { onClose } = renderModal();
     // Clicking the dialog content should not close.
