@@ -151,6 +151,21 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   <p className="settings-hint">
                     {t("settings.deviceNameHint")}
                   </p>
+                  <FormField label={t("settings.photoQuality")}>
+                    <FormSelect
+                      options={[
+                        { value: "auto", label: t("settings.photoQualityAuto") },
+                        { value: "medium", label: t("settings.photoQualityMedium") },
+                        { value: "large", label: t("settings.photoQualityLarge") },
+                        { value: "original", label: t("settings.photoQualityOriginal") },
+                      ]}
+                      value={prefs.photoQuality || "auto"}
+                      onChange={(e) => setPref("photoQuality", e.target.value)}
+                    />
+                  </FormField>
+                  <p className="settings-hint">
+                    {t("settings.photoQualityHint")}
+                  </p>
                 </div>
 
                 <h4 className="settings-section-subtitle" style={{ marginTop: 20 }}>{t("settings.pictureFrame")}</h4>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import { Icons } from "../components/Icons";
 import { useI18n } from "../utils/i18n";
+import { usePreferences } from "../utils/preferences";
 import { fullscreenPhotoUrl } from "../utils/photoUrl";
 
 const TYPE_LABELS = {
@@ -424,6 +425,7 @@ function FilterChip({ active, onClick, label, color }) {
 
 function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
   const { t } = useI18n();
+  const { prefs } = usePreferences();
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") onClose();
@@ -494,7 +496,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
       )}
 
       <img
-        src={fullscreenPhotoUrl(item.photo)}
+        src={fullscreenPhotoUrl(item.photo, prefs.photoQuality)}
         alt={item.label}
         onClick={(e) => e.stopPropagation()}
         style={{

@@ -80,7 +80,7 @@ export default function PictureFrame({ photos, children = [], onWake }) {
       <div
         className={`picture-frame-image ${fading ? "picture-frame-fade" : ""}`}
         style={{
-          backgroundImage: `url(${fullscreenPhotoUrl(current.photo)})`,
+          backgroundImage: `url(${fullscreenPhotoUrl(current.photo, prefs.photoQuality)})`,
         }}
       />
       <div className="picture-frame-overlay">

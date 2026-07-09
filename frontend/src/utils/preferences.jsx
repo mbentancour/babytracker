@@ -26,6 +26,12 @@ const DEFAULT_PREFERENCES = {
   // Auto-calculate BMI from weight/height when no manual entry exists for a date
   autoCalculateBMI: true,
 
+  // Full-screen photo resolution (picture frame + gallery lightbox).
+  // "auto" picks a server rendition from the device's screen; "medium"/"large"
+  // force that rendition; "original" disables resizing. Per-device by nature
+  // (localStorage), so a weak tablet can be capped without affecting others.
+  photoQuality: "auto",
+
   // Picture frame screensaver (0 = disabled, value in minutes)
   pictureFrameTimeout: 0,
 
@@ -80,6 +86,7 @@ function loadPreferences() {
         features: { ...DEFAULT_PREFERENCES.features, ...parsed.features },
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
+        photoQuality: parsed.photoQuality ?? DEFAULT_PREFERENCES.photoQuality,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,
         pictureFrame: {
           ...DEFAULT_PREFERENCES.pictureFrame,
