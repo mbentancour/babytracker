@@ -51,6 +51,18 @@ export default function PictureFrame({ photos, children = [], onWake }) {
     });
   }, [photos, currentIndex]);
 
+  // Preload the upcoming slide during the current one's dwell time, so the
+  // network fetch — and the server-side rendition generation on a first
+  // cycle — are already done when the crossfade swaps it in. One ahead is
+  // enough; a deeper queue just competes for bandwidth on weak devices.
+  useEffect(() => {
+    if (shuffled.length <= 1) return;
+    const next = shuffled[(currentIndex + 1) % shuffled.length];
+    if (!next) return;
+    const img = new Image();
+    img.src = fullscreenPhotoUrl(next.photo, prefs.photoQuality);
+  }, [shuffled, currentIndex, prefs.photoQuality]);
+
   // Cycle photos with configurable duration + crossfade
   useEffect(() => {
     if (shuffled.length <= 1) return;
