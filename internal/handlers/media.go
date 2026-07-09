@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -147,14 +148,18 @@ func (h *MediaHandler) ServePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Optional ?size=thumb|medium → serve a cached resized JPEG.
+	// Optional ?size=thumb|medium|large → serve a cached resized JPEG.
 	// Falls back to original if the size is unknown or generation fails.
 	if size := r.URL.Query().Get("size"); size != "" {
-		if thumbPath, err := ensureThumbnail(h.cfg.PhotosDir(), justFilename, size); err == nil && thumbPath != "" {
+		thumbPath, err := ensureThumbnail(h.cfg.PhotosDir(), justFilename, size)
+		if err == nil && thumbPath != "" {
 			w.Header().Set("Cache-Control", "private, max-age=86400")
 			w.Header().Set("Content-Type", "image/jpeg")
 			http.ServeFile(w, r, thumbPath)
 			return
+		}
+		if err != nil {
+			slog.Warn("thumbnail generation failed, serving original", "file", justFilename, "size", size, "error", err)
 		}
 	}
 
