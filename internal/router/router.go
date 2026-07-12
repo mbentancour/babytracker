@@ -180,6 +180,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		// Pumping
 		r.Get("/api/pumping/", pumpingH.List)
 		r.Post("/api/pumping/", pumpingH.Create)
+		r.Patch("/api/pumping/{id}/", pumpingH.Update)
 		r.Delete("/api/pumping/{id}/", deleteH.DeletePumping())
 
 		// Notes

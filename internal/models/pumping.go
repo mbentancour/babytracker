@@ -31,3 +31,10 @@ func CreatePumping(db *sqlx.DB, p *Pumping) error {
 		p.ChildID, p.Start, p.End, p.Amount,
 	).StructScan(p)
 }
+
+func UpdatePumping(db *sqlx.DB, id int, updates map[string]any) (*Pumping, error) {
+	query, args := buildUpdateQuery("pumping", id, updates)
+	var p Pumping
+	err := db.QueryRowx(query, args...).StructScan(&p)
+	return &p, err
+}

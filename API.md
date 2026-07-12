@@ -361,6 +361,7 @@ Body: `{child, date, bmi, notes}`
 ```
 GET    /api/pumping/           List
 POST   /api/pumping/           Create
+PATCH  /api/pumping/{id}/      Update
 DELETE /api/pumping/{id}/      Delete
 ```
 
