@@ -21,7 +21,7 @@ import AddButton from "../components/AddButton";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
-import { toGrowthSeries, formatGrowthTick, dailyFeedingTotals, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, FEEDING_COUNT_KEYS } from "../utils/formatters";
+import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, FEEDING_COUNT_KEYS } from "../utils/formatters";
 import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
@@ -39,7 +39,7 @@ const feedingCountFills = {
   other: "#B0BEC5",
 };
 
-export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
+export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, monthlyPumping = [], child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
   const { prefs, isFeatureEnabled } = usePreferences();
@@ -52,9 +52,12 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const weightSeries = toGrowthSeries(weights, "weight");
   const heightSeries = toGrowthSeries(heights, "height");
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
-  const feedingSeries = dailyFeedingTotals(monthlyFeedings);
+  const feedingSeries = dailyAmountTotals(monthlyFeedings);
   const feedingCountSeries = dailyFeedingCountsByType(monthlyFeedings);
   const sleepSeries = dailySleepTotals(monthlySleep);
+  const sleepCountSeries = dailyCounts(monthlySleep);
+  const pumpingSeries = dailyAmountTotals(monthlyPumping);
+  const pumpingCountSeries = dailyCounts(monthlyPumping);
 
   const latestWeight = weights[0];
   const latestHeight = heights[0];
@@ -136,6 +139,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       dayData = getEntriesForDate(monthlyFeedings, dateLabel, "start");
     } else if (type === "sleep") {
       dayData = getEntriesForDate(monthlySleep, dateLabel, "start");
+    } else if (type === "pumping") {
+      dayData = getEntriesForDate(monthlyPumping, dateLabel, "start");
     }
     setSelectedBar(null);
     setDayModal({ day: dateLabel, type, data: dayData });
@@ -443,6 +448,110 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                 {t("growth.noData", { type: "sleep" })}
               </div>
             )}
+          </SectionCard>
+        </div>}
+
+        {/* Daily Sleep Counts */}
+        {isFeatureEnabled("sleep") && <div className="fade-in fade-in-7">
+          <SectionCard title={t("growth.dailySleepCount30d")} icon={<Icons.Moon />} color={colors.sleep}>
+            {sleepCountSeries.some((d) => d.count > 0) ? (
+              <>
+                <div style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sleepCountSeries} onClick={(data) => handleChartClick(data, "sleepCount", sleepCountSeries, "count")}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="count" fill={colors.sleep} radius={[4, 4, 0, 0]} opacity={0.85} cursor="pointer" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {selectedBar?.type === "sleepCount" && (
+                  <ChartDetailBar
+                    label={selectedBar.label}
+                    value={selectedBar.value}
+                    unit={selectedBar.value === 1 ? t("growth.session") : t("growth.sessions")}
+                    color={colors.sleep}
+                    onViewEntries={() => openDayModal(selectedBar.label, "sleep")}
+                    onDismiss={() => setSelectedBar(null)}
+                  />
+                )}
+              </>
+            ) : (
+              <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
+                {t("growth.noData", { type: "sleep" })}
+              </div>
+            )}
+          </SectionCard>
+        </div>}
+
+        {/* Daily Pumping Totals — data-gated like the Overview card so
+            families who don't pump aren't stuck with an empty chart */}
+        {isFeatureEnabled("pumping") && pumpingSeries.some((d) => d.amount > 0) && <div className="fade-in fade-in-7">
+          <SectionCard title={t("growth.dailyPumping30d")} icon={<Icons.Bottle />} color={colors.pumping}>
+            <>
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={pumpingSeries} onClick={(data) => handleChartClick(data, "pumping", pumpingSeries, "amount")}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area
+                      type="monotone"
+                      dataKey="amount"
+                      stroke={colors.pumping}
+                      strokeWidth={2}
+                      fill={`${colors.pumping}30`}
+                      dot={false}
+                      activeDot={{ r: 4, fill: colors.pumping, cursor: "pointer" }}
+                      cursor="pointer"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              {selectedBar?.type === "pumping" && (
+                <ChartDetailBar
+                  label={selectedBar.label}
+                  value={selectedBar.value}
+                  unit={units.volume}
+                  color={colors.pumping}
+                  onViewEntries={() => openDayModal(selectedBar.label, "pumping")}
+                  onDismiss={() => setSelectedBar(null)}
+                />
+              )}
+            </>
+          </SectionCard>
+        </div>}
+
+        {/* Daily Pumping Counts — gated on sessions rather than amounts so
+            it still shows for entries logged without an amount */}
+        {isFeatureEnabled("pumping") && pumpingCountSeries.some((d) => d.count > 0) && <div className="fade-in fade-in-7">
+          <SectionCard title={t("growth.dailyPumpingCount30d")} icon={<Icons.Bottle />} color={colors.pumping}>
+            <>
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pumpingCountSeries} onClick={(data) => handleChartClick(data, "pumpingCount", pumpingCountSeries, "count")}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="count" fill={colors.pumping} radius={[4, 4, 0, 0]} opacity={0.85} cursor="pointer" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {selectedBar?.type === "pumpingCount" && (
+                <ChartDetailBar
+                  label={selectedBar.label}
+                  value={selectedBar.value}
+                  unit={selectedBar.value === 1 ? t("growth.session") : t("growth.sessions")}
+                  color={colors.pumping}
+                  onViewEntries={() => openDayModal(selectedBar.label, "pumping")}
+                  onDismiss={() => setSelectedBar(null)}
+                />
+              )}
+            </>
           </SectionCard>
         </div>}
 

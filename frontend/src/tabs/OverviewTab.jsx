@@ -22,6 +22,7 @@ import {
   toFeedingTimeline,
   toDiaperTimeline,
   toSleepBlocks,
+  toPumpingTimeline,
   aggregateByDayOfWeek,
   aggregateSleepByDay,
   aggregateTummyByDay,
@@ -35,7 +36,7 @@ import { useI18n } from "../utils/i18n";
 
 const COLLAPSED_COUNT = 2;
 
-export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, temperatures, medications, tagMaps = {}, onEditEntry, onDeleteEntry, canWrite = () => true }) {
+export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, pumpingSessions = [], weeklyPumping = [], temperatures, medications, tagMaps = {}, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
   const { isFeatureEnabled } = usePreferences();
@@ -50,8 +51,11 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const weeklyFeedings = aggregateByDayOfWeek(weeklyFeedingsRaw, "amount");
   const sleepByDay = aggregateSleepByDay(weeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
+  const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume);
+  const pumpingByDay = aggregateByDayOfWeek(weeklyPumping, "amount");
 
   const totalFeeding = feedings.reduce((s, f) => s + (f.amount || 0), 0);
+  const totalPumping = pumpingSessions.reduce((s, p) => s + (p.amount || 0), 0);
   // "Last 24 hours" sleep total: clip each entry to the rolling window so an
   // overnight sleep that straddles the boundary contributes only the portion
   // that actually falls inside the window (not its whole duration, and not
@@ -94,6 +98,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       dayData = getEntriesForDay(weeklySleep, day, "start");
     } else if (type === "tummy") {
       dayData = getEntriesForDay(weeklyTummyTimes, day, "start");
+    } else if (type === "pumping") {
+      dayData = getEntriesForDay(weeklyPumping, day, "start");
     }
     setSelectedBar(null);
     setDayModal({ day, type, data: dayData });
@@ -102,14 +108,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   return (
     <>
       {/* Quick Stats */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 14,
-          marginBottom: 20,
-        }}
-      >
+      <div className="stat-grid">
         {isFeatureEnabled("feeding") && (
           <div className="fade-in fade-in-1">
             <StatCard
@@ -159,6 +158,19 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               color={colors.tummy}
               onAdd={canWrite("tummy") ? () => onEditEntry?.("tummy") : undefined}
               addLabel={t("action.tummy")}
+            />
+          </div>
+        )}
+        {isFeatureEnabled("pumping") && (
+          <div className="fade-in fade-in-5">
+            <StatCard
+              icon={<Icons.Bottle />}
+              label={t("overview.pumping")}
+              value={totalPumping > 0 ? `${Math.round(totalPumping)} ${units.volume}` : `${pumpingSessions.length}`}
+              sub={`${pumpingSessions.length} session${pumpingSessions.length !== 1 ? "s" : ""} today`}
+              color={colors.pumping}
+              onAdd={canWrite("pumping") ? () => onEditEntry?.("pumping") : undefined}
+              addLabel={t("action.pumping")}
             />
           </div>
         )}
@@ -409,6 +421,63 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
           </SectionCard>
         </div>}
+        {/* Pumping — data-gated like temperature/medications so families who
+            don't pump (but leave the feature on) don't carry an empty card */}
+        {isFeatureEnabled("pumping") && (pumpingTimeline.length > 0 || pumpingByDay.some((d) => d.amount > 0)) && <div className="fade-in fade-in-6">
+          <SectionCard title={t("overview.recentPumping")} icon={<Icons.Bottle />} color={colors.pumping}>
+            {pumpingTimeline.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {(expanded.pumping ? pumpingTimeline : pumpingTimeline.slice(0, COLLAPSED_COUNT)).map((p, i, arr) => (
+                  <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("pumping", p.entry)}>
+                    <TimelineItem
+                      time={p.time}
+                      label={p.label}
+                      detail={p.detail}
+                      color={colors.pumping}
+                      isLast={i === arr.length - 1}
+                      tags={tagMaps.pumping?.[p.entry?.id]}
+                    />
+                  </div>
+                ))}
+                {pumpingTimeline.length > COLLAPSED_COUNT && (
+                  <button className="expand-toggle" onClick={() => toggle("pumping")}>
+                    {expanded.pumping ? t("overview.showLess") : t("overview.showMore", { count: pumpingTimeline.length - COLLAPSED_COUNT })}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 20 }}>
+                {t("overview.noPumping")}
+              </div>
+            )}
+            {pumpingByDay.some((d) => d.amount > 0) && (
+              <>
+                <div style={{ marginTop: 16, height: 120 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={pumpingByDay} barSize={18} onClick={(data) => handleChartClick(data, "pumping", pumpingByDay, "amount")}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="amount" fill={colors.pumping} radius={[6, 6, 0, 0]} opacity={0.85} cursor="pointer" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {selectedBar?.type === "pumping" && (
+                  <ChartDetailBar
+                    label={selectedBar.label}
+                    value={selectedBar.value}
+                    unit={units.volume}
+                    color={colors.pumping}
+                    onViewEntries={() => openDayModal(selectedBar.label, "pumping")}
+                    onDismiss={() => setSelectedBar(null)}
+                  />
+                )}
+              </>
+            )}
+          </SectionCard>
+        </div>}
+
         {/* Temperature */}
         {isFeatureEnabled("temp") && temperatures && temperatures.length > 0 && (
           <div className="fade-in fade-in-7">

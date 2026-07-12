@@ -7,6 +7,7 @@ import {
   toFeedingTimeline,
   toSleepBlocks,
   toDiaperTimeline,
+  toPumpingTimeline,
   parseDuration,
 } from "../utils/formatters";
 import { useUnits } from "../utils/units";
@@ -19,6 +20,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
       case "feeding": return <Icons.Bottle />;
       case "sleep": return <Icons.Moon />;
       case "tummy": return <Icons.Sun />;
+      case "pumping": return <Icons.Bottle />;
       default: return <Icons.Activity />;
     }
   };
@@ -28,6 +30,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
       case "feeding": return colors.feeding;
       case "sleep": return colors.sleep;
       case "tummy": return colors.tummy;
+      case "pumping": return colors.pumping;
       default: return colors.diaper;
     }
   };
@@ -37,6 +40,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
       feeding: "Feedings",
       sleep: "Sleep Sessions",
       tummy: "Tummy Time",
+      pumping: "Pumping Sessions",
     };
     return `${titles[type] || "Activities"} - ${day}`;
   };
@@ -94,6 +98,32 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
                 label={`${s.duration.toFixed(1)}h${s.nap ? " · Nap" : ""}`}
                 detail={`${s.start} to ${s.end}`}
                 color={colors.sleep}
+                isLast={i === arr.length - 1}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (type === "pumping") {
+      const timeline = toPumpingTimeline(data, units.volume);
+      return (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {timeline.map((p, i, arr) => (
+            <div
+              key={i}
+              className="entry-clickable"
+              onClick={() => {
+                onEditEntry?.("pumping", p.entry);
+                onClose();
+              }}
+            >
+              <TimelineItem
+                time={p.time}
+                label={p.label}
+                detail={p.detail}
+                color={colors.pumping}
                 isLast={i === arr.length - 1}
               />
             </div>

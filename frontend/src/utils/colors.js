@@ -4,6 +4,7 @@ export const colors = {
   diaper: "#3B82F6",
   growth: "#10B981",
   tummy: "#EC4899",
+  pumping: "#6C5CE7",
   temp: "#EF4444",
   height: "#6366F1",
   note: "#84CC16",

@@ -109,7 +109,9 @@ A simple way to jot down general observations that do not fit neatly into other 
 
 ### Pumping
 
-Track pumping sessions with the amount collected and the duration.
+Track pumping sessions with the amount collected and the duration. Today's
+sessions appear on the Overview alongside a weekly chart, and the Growth tab
+shows 30-day amount and session-count trends.
 
 ---
 

@@ -44,11 +44,14 @@ export function useBabyData(canReadFn) {
   const [changes, setChanges] = useState([]);
   const [tummyTimes, setTummyTimes] = useState([]);
   const [weeklyTummyTimes, setWeeklyTummyTimes] = useState([]);
+  const [pumpingSessions, setPumpingSessions] = useState([]);
+  const [weeklyPumping, setWeeklyPumping] = useState([]);
   const [temperatures, setTemperatures] = useState([]);
   const [weights, setWeights] = useState([]);
   const [heights, setHeights] = useState([]);
   const [monthlyFeedings, setMonthlyFeedings] = useState([]);
   const [monthlySleep, setMonthlySleep] = useState([]);
+  const [monthlyPumping, setMonthlyPumping] = useState([]);
   const [notes, setNotes] = useState([]);
   const [timers, setTimers] = useState([]);
   const [headCircumferences, setHeadCircumferences] = useState([]);
@@ -127,6 +130,8 @@ export function useBabyData(canReadFn) {
         changesRes,
         tummyRes,
         weeklyTummyRes,
+        pumpingRes,
+        weeklyPumpingRes,
         tempRes,
         weightRes,
         heightRes,
@@ -134,6 +139,7 @@ export function useBabyData(canReadFn) {
         notesRes,
         monthlyFeedingsRes,
         monthlySleepRes,
+        monthlyPumpingRes,
         headCircRes,
         medicationsRes,
         milestonesRes,
@@ -150,6 +156,8 @@ export function useBabyData(canReadFn) {
         q("diaper", api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" })),
         q("tummy", api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
         q("tummy", api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("pumping", api.getPumping({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("pumping", api.getPumping({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
         q("temp", api.getTemperature({ child: c, limit: 10, ordering: "-time" })),
         q("weight", api.getWeight({ child: c, limit: 20, ordering: "-date" })),
         q("height", api.getHeight({ child: c, limit: 20, ordering: "-date" })),
@@ -157,6 +165,7 @@ export function useBabyData(canReadFn) {
         q("note", api.getNotes({ child: c, limit: 20, ordering: "-time" })),
         q("feeding", api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
         q("sleep", api.getSleep({ child: c, start_min: monthSleepMin, limit: 500, ordering: "-start" })),
+        q("pumping", api.getPumping({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
         q("headcirc", api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" })),
         q("medication", api.getMedications({ child: c, limit: 20, ordering: "-time" })),
         q("milestone", api.getMilestones({ child: c, limit: 50, ordering: "-date" })),
@@ -173,6 +182,8 @@ export function useBabyData(canReadFn) {
       setChanges(changesRes.results || []);
       setTummyTimes(tummyRes.results || []);
       setWeeklyTummyTimes(weeklyTummyRes.results || []);
+      setPumpingSessions(pumpingRes.results || []);
+      setWeeklyPumping(weeklyPumpingRes.results || []);
       setTemperatures(tempRes.results || []);
       setWeights(weightRes.results || []);
       setHeights(heightRes.results || []);
@@ -180,6 +191,7 @@ export function useBabyData(canReadFn) {
       setNotes(notesRes.results || []);
       setMonthlyFeedings(monthlyFeedingsRes.results || []);
       setMonthlySleep(monthlySleepRes.results || []);
+      setMonthlyPumping(monthlyPumpingRes.results || []);
       setHeadCircumferences(headCircRes.results || []);
       setMedications(medicationsRes.results || []);
       setMilestones(milestonesRes.results || []);
@@ -345,11 +357,14 @@ export function useBabyData(canReadFn) {
     changes,
     tummyTimes,
     weeklyTummyTimes,
+    pumpingSessions,
+    weeklyPumping,
     temperatures,
     weights,
     heights,
     monthlyFeedings,
     monthlySleep,
+    monthlyPumping,
     notes,
     timers,
     headCircumferences,

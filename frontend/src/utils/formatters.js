@@ -117,6 +117,16 @@ export function toSleepBlocks(sleepEntries) {
   }));
 }
 
+export function toPumpingTimeline(sessions, volumeUnit = "mL") {
+  return sessions.map((p) => ({
+    time: formatTime(p.end || p.start),
+    label: p.amount ? `${p.amount} ${volumeUnit}` : formatDuration(p.duration),
+    detail: timeAgo(p.end || p.start),
+    amount: p.amount || 0,
+    entry: p,
+  }));
+}
+
 export function toNoteTimeline(notes) {
   return notes.map((n) => ({
     time: formatTime(n.time),
@@ -219,7 +229,9 @@ function getLastNDays(n) {
   return result;
 }
 
-export function dailyFeedingTotals(entries, numDays = 30) {
+// Generic amount-per-day aggregator over the last N days; used for the
+// 30-day feeding and pumping trend charts.
+export function dailyAmountTotals(entries, numDays = 30) {
   const days = getLastNDays(numDays);
   const sums = {};
   days.forEach((d) => (sums[d.dateStr] = 0));
@@ -229,6 +241,21 @@ export function dailyFeedingTotals(entries, numDays = 30) {
   });
   const result = days.map((d) => ({ date: d.label, amount: Math.round(sums[d.dateStr]) }));
   const firstNonZero = result.findIndex((d) => d.amount > 0);
+  return firstNonZero > 0 ? result.slice(firstNonZero) : result;
+}
+
+// Generic entries-per-day counter over the last N days; used for the
+// 30-day pumping count chart. Leading zero-only days are trimmed.
+export function dailyCounts(entries, numDays = 30) {
+  const days = getLastNDays(numDays);
+  const sums = {};
+  days.forEach((d) => (sums[d.dateStr] = 0));
+  entries.forEach((e) => {
+    const key = entryDateStr(e.start || e.time || e.date);
+    if (key in sums) sums[key] += 1;
+  });
+  const result = days.map((d) => ({ date: d.label, count: sums[d.dateStr] }));
+  const firstNonZero = result.findIndex((d) => d.count > 0);
   return firstNonZero > 0 ? result.slice(firstNonZero) : result;
 }
 

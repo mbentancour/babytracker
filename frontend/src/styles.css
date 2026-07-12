@@ -487,6 +487,22 @@ body {
 .fade-in-5 { animation-delay: 0.25s; }
 .fade-in-6 { animation-delay: 0.30s; }
 
+/* Overview quick-stat grid. The desktop override shrinks the per-card
+   minimum so five cards (feeding, sleep, diaper, tummy, pumping) share one
+   row inside the 960px app column instead of wrapping 4 + 1; narrower
+   viewports keep the roomier 180px minimum and wrap as before. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+@media (min-width: 840px) {
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -41,7 +41,7 @@ const PictureFrame = lazy(() => import("./components/PictureFrame"));
 import "./styles.css";
 
 const TABS = [
-  { id: "overview", labelKey: "nav.overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "temp", "medication"] },
+  { id: "overview", labelKey: "nav.overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "pumping", "temp", "medication"] },
   { id: "growth", labelKey: "nav.growth", icon: <Icons.TrendUp />, features: ["weight", "height", "headcirc", "bmi"] },
   { id: "notes", labelKey: "nav.journal", icon: <Icons.StickyNote />, features: ["note", "milestone", "medication"] },
   { id: "gallery", labelKey: "nav.photos", icon: <Icons.Baby />, features: ["photo"] },
@@ -56,7 +56,7 @@ const ACTION_GROUPS = [
       { id: "sleep", labelKey: "action.sleep", icon: <Icons.Moon />, color: colors.sleep },
       { id: "diaper", labelKey: "action.diaper", icon: <Icons.Droplet />, color: colors.diaper },
       { id: "tummy", labelKey: "action.tummy", icon: <Icons.Sun />, color: colors.tummy },
-      { id: "pumping", labelKey: "action.pumping", icon: <Icons.Bottle />, color: "#6C5CE7" },
+      { id: "pumping", labelKey: "action.pumping", icon: <Icons.Bottle />, color: colors.pumping },
     ],
   },
   {
@@ -686,6 +686,8 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             changes={data.changes}
             tummyTimes={data.tummyTimes}
             weeklyTummyTimes={data.weeklyTummyTimes}
+            pumpingSessions={data.pumpingSessions}
+            weeklyPumping={data.weeklyPumping}
             temperatures={data.temperatures}
             medications={data.medications}
             tagMaps={data.tagMaps}
@@ -702,6 +704,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             bmiEntries={data.bmiEntries}
             monthlyFeedings={data.monthlyFeedings}
             monthlySleep={data.monthlySleep}
+            monthlyPumping={data.monthlyPumping}
             child={data.child}
             tagMaps={data.tagMaps}
             onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}

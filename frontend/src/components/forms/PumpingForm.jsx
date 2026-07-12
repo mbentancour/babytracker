@@ -4,6 +4,7 @@ import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Mo
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import { useUnits } from "../../utils/units";
+import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
@@ -36,17 +37,24 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
         start: localInputToUTC(start),
         end: localInputToUTC(end),
       };
-      if (amount) data.amount = parseFloat(amount);
       let result;
       if (isEdit) {
-        result = await api.updatePumping?.(entry.id, data);
+        // Always send amount so clearing the field clears the value.
+        data.amount = amount ? parseFloat(amount) : null;
+        result = await api.updatePumping(entry.id, data);
       } else {
+        if (amount) data.amount = parseFloat(amount);
         data.child = childId;
         result = await api.createPumping(data);
       }
-      if (photoFile && result?.id) {
-        try { await api.uploadEntryPhoto("pumping", result.id, photoFile); }
+      const entryId = result?.id || entry?.id;
+      if (photoFile && entryId) {
+        try { await api.uploadEntryPhoto("pumping", entryId, photoFile); }
         catch (err) { console.error("photo upload failed", err); }
+      }
+      if (entryId) {
+        try { await api.setEntityTags("pumping", entryId, tagIds); }
+        catch (err) { console.error("tag set failed", err); }
       }
       onDone();
     } catch {
@@ -70,7 +78,7 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
           <TagPicker value={tagIds} onChange={setTagIds} />
         </FormField>
         <PhotoPicker currentPhoto={entry?.photo} onPhotoSelected={setPhotoFile} />
-        <FormButton color="#6C5CE7" disabled={saving}>
+        <FormButton color={colors.pumping} disabled={saving}>
           {saving ? t("form.saving") : isEdit ? t("pumping.edit") : t("pumping.log")}
         </FormButton>
       </form>

@@ -213,6 +213,8 @@ export const api = {
   getPumping: (params) => request(`pumping/${qs(params)}`),
   createPumping: (data) =>
     request("pumping/", { method: "POST", body: JSON.stringify(data) }),
+  updatePumping: (id, data) =>
+    request(`pumping/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // Notes
   getNotes: (params) => request(`notes/${qs(params)}`),
