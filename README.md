@@ -22,6 +22,9 @@ Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow
 
 - **Track everything**: feedings, sleep, diapers, tummy time, temperature, weight, height, head circumference, pumping, BMI, medications, milestones, notes, and photos. Multi-child support.
 - **WHO growth percentile charts** overlaid on weight/height/head circumference/BMI curves for context
+- **Day view** — one day's activity in the order it happened, across every entry type, for any date
+- **Routine view** — a week on a 24-hour grid, so day/night rhythms are visible at a glance
+- **Milk stock** — estimated stored breast milk (pumped − expressed-milk bottles − discarded), with logging for milk poured away
 - **Self-contained Go binary** with embedded React SPA -- nothing else to install
 - **PostgreSQL** database with automatic migrations
 - **JWT authentication** with role-based access control (RBAC)
@@ -34,7 +37,7 @@ Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow
 - **Restore from backup at first boot** — bring an instance back up on a new machine without re-creating accounts
 - **Baby Buddy data import**
 - **API tokens and webhooks** for external integrations
-- **Multi-language**: English, Spanish, Danish
+- **Multi-language**: English, Danish, German, Spanish, French, Italian
 - **Light / dark / system theme**
 - **HTTPS by default** on port 443 (self-signed certificate, upgradeable to Let's Encrypt via DNS-01 with Cloudflare, Route53, DuckDNS, Namecheap, or Simply.com)
 - **CSV data export**

@@ -24,7 +24,7 @@ Response:
 {
   "access_token": "eyJ...",
   "token_type": "Bearer",
-  "expires_in": 900
+  "expires_in": 3600
 }
 ```
 
@@ -32,6 +32,57 @@ Use in requests:
 ```
 Authorization: Bearer <access_token>
 ```
+
+The access token lasts an hour. Renew it with:
+
+```
+POST /api/auth/refresh
+```
+
+which reads the long-lived (30-day) refresh token from the `refresh_token`
+cookie set at login, rotates it, and returns a fresh access token.
+
+`POST /api/auth/logout` revokes the session server-side.
+
+#### Sessions under Home Assistant ingress
+
+Inside the ingress iframe the browser frequently drops the refresh cookie. When
+BabyTracker detects it is running as an add-on, the login/refresh response
+additionally carries the refresh token in the body:
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "..."
+}
+```
+
+and `/api/auth/refresh` and `/api/auth/logout` accept it back the same way:
+
+```
+POST /api/auth/refresh
+Content-Type: application/json
+
+{"refresh_token": "..."}
+```
+
+The body token takes precedence over the cookie there, because a cookie the
+browser kept after missing a `Set-Cookie` points at a rotation that has already
+happened. **Outside the add-on this field is absent and a body token is
+ignored** — the cookie works there and is `HttpOnly`, which is worth keeping.
+
+#### Rate limits
+
+`/api/auth/login` allows 10 attempts per minute **per account**, and
+`/api/auth/refresh` 30 per minute **per user**. They are deliberately not keyed
+by IP: under ingress every request arrives from the Supervisor's proxy, so an
+IP-keyed limit is a single allowance shared by the entire household. Coarser
+per-address ceilings still apply as flood guards.
+
+Exceeding a limit returns `429` with a `Retry-After` header. A `429` is a
+transient condition — **only `401` means the session is gone.**
 
 ### API Token (for integrations)
 
@@ -367,6 +418,45 @@ DELETE /api/pumping/{id}/      Delete
 
 Body: `{child, start, end, amount}`
 
+### Uneaten milk
+
+Expressed milk that was prepared but poured away. It is not a feeding — it never
+counts as intake — but it does leave the stash, so the milk-stock balance
+subtracts it. `amount` is required and must be greater than zero.
+
+```
+GET    /api/milk-waste/        List
+POST   /api/milk-waste/        Create
+PATCH  /api/milk-waste/{id}/   Update
+DELETE /api/milk-waste/{id}/   Delete
+```
+
+Body: `{child, time, amount, notes}`
+
+Gated by the `pumping` RBAC feature rather than one of its own, so no extra role
+permissions are needed. Unlike the other entry types it carries no photo and
+cannot be tagged.
+
+### Milk stock
+
+```
+GET /api/milk-stock?child=1
+```
+
+Returns the running stash balance over all time — a stash is cumulative, so a
+per-period figure would be meaningless:
+
+```json
+{"pumped": 200, "bottle_fed": 70, "discarded": 30, "stock": 100}
+```
+
+`bottle_fed` counts only bottle feeds of `breast milk` or `fortified breast
+milk`: nursing at the breast never touches the stash, and formula never came
+from it. The balance is an estimate — it only reconciles if every pumping
+session and every bottle is logged with an amount. A negative `stock` is
+returned as-is rather than clamped, because it means something isn't being
+logged.
+
 ### Medications
 
 ```
@@ -485,7 +575,7 @@ Thumbnails are generated on first request, cached on disk, and respect EXIF orie
 GET /api/export/csv?child=1&type=all
 ```
 
-Types: `all`, `feedings`, `sleep`, `changes`, `weight`, `height`, `head_circumference`, `temperature`, `medications`, `milestones`
+Types: `all`, `feedings`, `sleep`, `changes`, `tummy_times`, `weight`, `height`, `head_circumference`, `temperature`, `pumping`, `milk_waste`, `medications`, `milestones`
 
 Returns a CSV file download.
 
@@ -586,6 +676,7 @@ Activity events fire on `POST` (or `DELETE` for timers):
 | `diaper.created` | `POST /api/changes/` |
 | `tummy_time.created` | `POST /api/tummy-times/` |
 | `pumping.created` | `POST /api/pumping/` |
+| `milk_waste.created` | `POST /api/milk-waste/` |
 | `temperature.created` | `POST /api/temperature/` |
 | `medication.created` | `POST /api/medications/` |
 | `note.created` | `POST /api/notes/` |

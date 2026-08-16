@@ -28,6 +28,11 @@ var childOwnedTables = map[string]string{
 	"milestones":         "milestone",
 	"notes":              "note",
 	"timers":             "feeding",
+	// Uneaten milk shares the pumping permission rather than getting its own
+	// feature. It's the same activity from the household's point of view, and
+	// a separate feature would need role_permissions rows backfilled into
+	// every existing install to avoid silently denying everyone.
+	"milk_waste": "pumping",
 }
 
 // Sentinel errors returned by EnsureRecordWritable so handlers can map them

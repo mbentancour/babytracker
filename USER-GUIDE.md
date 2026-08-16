@@ -23,11 +23,26 @@ To **add another baby** later, tap your current baby's name or photo to open the
 
 ## The Dashboard
 
-Your baby's dashboard is organized into four tabs:
+Your baby's dashboard is organized into tabs. Four are always there; **Day** and
+**Routine** are optional and can be switched off per device under
+Settings → Preferences → Views.
 
 - **Overview** -- Today's summary at a glance: last feeding, last sleep, last diaper change, and any active timers.
 
   ![Overview tab](docs/screenshots/Overview.png)
+
+- **Day** -- Everything logged on a single day, in the order it happened: feeds,
+  naps, changes, measurements, notes. Use the arrows or the date field to look
+  back at any past day. Tap a row to edit that entry. A sleep that started the
+  previous evening appears at the top of the day with an arrow, so a long night
+  isn't missing from the morning.
+
+- **Routine** -- The last seven days on a 24-hour grid, one column per day. Each
+  entry is a coloured mark placed at the hour it happened; sleep and tummy time
+  are drawn as bars spanning the hours they cover. This is where a rhythm becomes
+  visible — that nights are getting longer, or that feeds have drifted an hour
+  later across the week. Use the chips above the grid to hide activity types you
+  aren't looking at.
 
 - **Growth** -- Charts showing weight, height, head circumference, and BMI over time, with optional WHO percentile overlays.
 
@@ -113,6 +128,27 @@ Track pumping sessions with the amount collected and the duration. Today's
 sessions appear on the Overview alongside a weekly chart, and the Growth tab
 shows 30-day amount and session-count trends.
 
+### Milk stock and uneaten milk
+
+If you pump and store, turn on **Milk stock** in Settings → Preferences → Views.
+A card then appears on the Overview showing your running balance:
+
+**pumped − bottles of expressed milk − milk poured away**
+
+Only bottles count against the stash: nursing at the breast never touches it, and
+formula never came from it. Fortified breast milk does count, since its base is
+thawed expressed milk.
+
+Turning the view on also adds an **Uneaten** action for logging milk that was
+prepared but poured away. It's a separate kind of entry on purpose — you thaw
+120 mL, the baby drinks 90, and the 30 mL you tip out has to come off the stash
+without being counted as a feed.
+
+The figure is an estimate and only reconciles if every pumping session and every
+bottle is logged with an amount. If it goes negative, that's information rather
+than an error: something isn't being logged — often nursing recorded as a bottle,
+or pumping logged without amounts.
+
 ---
 
 ## Using Timers
@@ -170,6 +206,7 @@ Some settings are saved **in this device's browser only**, others are stored on 
 - Picture frame timeout and overlay items
 - Device name
 - Feature visibility toggles
+- Optional view toggles (Day, Routine, Milk stock)
 - Form defaults (feeding type/method, diaper color, medication dosage unit, auto-calculate BMI)
 
 **Shared** (stored on the server, same for everyone):
@@ -200,7 +237,7 @@ device. The tab is split into sections:
 
 - **Unit system:** metric or imperial.
 - **Theme:** light, dark, or match your system setting.
-- **Language:** English, Spanish, or Danish.
+- **Language:** English, Danish, German, Spanish, French, or Italian.
 - **Device name:** give this device a name used for remote display control and HA integrations.
 
 **Picture frame** — all the slideshow controls. Timeout, slide duration,
@@ -210,6 +247,13 @@ include, and the live status overlay toggles.
 **Features** — toggle which tracking features are visible on this device.
 If you don't track pumping or medications, for example, you can hide them
 to keep the interface simple.
+
+**Views** — extra ways of looking at the data you already track, rather than new
+things to track. **Day** and **Routine** add their own tabs and are on by
+default; **Milk stock** adds the stash card and the Uneaten action and is off by
+default, since it only means anything if you both pump and store. Switching a
+view off removes its tab and stops it fetching anything, so the app costs exactly
+what it did before.
 
 **Defaults** — save time by setting default values for things you log often:
 

@@ -5,7 +5,7 @@ import { UnitContext } from "./utils/units";
 import { Icons } from "./components/Icons";
 import { colors } from "./utils/colors";
 import { getAge, formatElapsed } from "./utils/formatters";
-import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPersistence } from "./api";
+import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPersistence, bootstrapSession } from "./api";
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "./utils/datetime";
@@ -15,6 +15,8 @@ import { toLocalDatetime, localInputToUTC } from "./utils/datetime";
 const OverviewTab = lazy(() => import("./tabs/OverviewTab"));
 const GrowthTab = lazy(() => import("./tabs/GrowthTab"));
 const NotesTab = lazy(() => import("./tabs/NotesTab"));
+const DayTab = lazy(() => import("./tabs/DayTab"));
+const RoutineTab = lazy(() => import("./tabs/RoutineTab"));
 import FeedingForm from "./components/forms/FeedingForm";
 import SleepForm from "./components/forms/SleepForm";
 import DiaperForm from "./components/forms/DiaperForm";
@@ -27,6 +29,7 @@ import HeadCircumferenceForm from "./components/forms/HeadCircumferenceForm";
 import MedicationForm from "./components/forms/MedicationForm";
 import MilestoneForm from "./components/forms/MilestoneForm";
 import PumpingForm from "./components/forms/PumpingForm";
+import MilkWasteForm from "./components/forms/MilkWasteForm";
 import BMIForm from "./components/forms/BMIForm";
 import TimerButton from "./components/TimerButton";
 import LoginScreen from "./components/LoginScreen";
@@ -40,8 +43,13 @@ const GalleryTab = lazy(() => import("./tabs/GalleryTab"));
 const PictureFrame = lazy(() => import("./components/PictureFrame"));
 import "./styles.css";
 
+// `view` marks a tab as optional: it appears only when that per-device view
+// preference is on (Settings > Preferences > Views). Tabs without one are the
+// original four and are always present, subject to the usual read permissions.
 const TABS = [
   { id: "overview", labelKey: "nav.overview", icon: <Icons.Activity />, features: ["feeding", "sleep", "diaper", "tummy", "pumping", "temp", "medication"] },
+  { id: "day", labelKey: "nav.day", icon: <Icons.Clock />, view: "day", features: ["feeding", "sleep", "diaper", "tummy", "pumping", "temp", "medication", "note"] },
+  { id: "routine", labelKey: "nav.routine", icon: <Icons.Timer />, view: "routine", features: ["feeding", "sleep", "diaper", "tummy", "pumping"] },
   { id: "growth", labelKey: "nav.growth", icon: <Icons.TrendUp />, features: ["weight", "height", "headcirc", "bmi"] },
   { id: "notes", labelKey: "nav.journal", icon: <Icons.StickyNote />, features: ["note", "milestone", "medication"] },
   { id: "gallery", labelKey: "nav.photos", icon: <Icons.Baby />, features: ["photo"] },
@@ -57,6 +65,10 @@ const ACTION_GROUPS = [
       { id: "diaper", labelKey: "action.diaper", icon: <Icons.Droplet />, color: colors.diaper },
       { id: "tummy", labelKey: "action.tummy", icon: <Icons.Sun />, color: colors.tummy },
       { id: "pumping", labelKey: "action.pumping", icon: <Icons.Bottle />, color: colors.pumping },
+      // Rides on the pumping permission (it has no RBAC feature of its own)
+      // and only appears when the milk-stock view is switched on, since
+      // logging discards is pointless without a balance to subtract from.
+      { id: "milkWaste", labelKey: "action.milkWaste", icon: <Icons.BottleOff />, color: colors.milkWaste, feature: "pumping", view: "milkStock" },
     ],
   },
   {
@@ -81,6 +93,13 @@ const ACTION_GROUPS = [
   },
 ];
 
+// Entry types whose permission lives under another feature. Uneaten milk is
+// gated by the pumping permission server-side (see internal/models/access.go
+// and pathFeatureMap in internal/middleware/rbac.go), so the client has to ask
+// the same question or the edit forms silently refuse to open.
+const ENTRY_FEATURE_OVERRIDES = { milkWaste: "pumping" };
+const entryFeature = (type) => ENTRY_FEATURE_OVERRIDES[type] || type;
+
 const TIMER_TYPES = [
   { id: "feeding", labelKey: "timer.feeding", icon: <Icons.Bottle />, color: colors.feeding },
   { id: "sleep", labelKey: "timer.sleep", icon: <Icons.Moon />, color: colors.sleep },
@@ -94,30 +113,6 @@ function timerNameToType(name) {
   if (n.includes("sleep")) return "sleep";
   if (n.includes("tummy")) return "tummy";
   return "feeding";
-}
-
-// bootRefresh tries the boot-time /auth/refresh, distinguishing transient
-// failures (network, 5xx) from real "no session" rejections (4xx). Returns
-// "ok" on success, "expired" on 4xx, "transient" if all attempts failed for
-// non-auth reasons. The caller decides what to do with each.
-async function bootRefresh(attempts) {
-  let lastReason = "transient";
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const r = await fetch("./api/auth/refresh", { method: "POST", credentials: "include" });
-      if (r.ok) {
-        const data = await r.json();
-        setAccessToken(data.access_token);
-        return "ok";
-      }
-      if (r.status >= 400 && r.status < 500) return "expired";
-      lastReason = "transient";
-    } catch {
-      lastReason = "transient";
-    }
-    if (i < attempts - 1) await new Promise((res) => setTimeout(res, 800));
-  }
-  return lastReason;
 }
 
 export default function App() {
@@ -170,11 +165,11 @@ export default function App() {
         setAuthState("authenticated");
         return;
       }
-      // No persisted token — try refreshing from the cookie. Retry once on
-      // transient failures (network blip, proxy hiccup) before falling back
-      // to login, so a flaky network on first paint doesn't strand the user
-      // at a login screen when their session is actually fine.
-      bootRefresh(2).then((outcome) => {
+      // No persisted access token — re-establish from the refresh token
+      // (persisted under ingress, the cookie elsewhere). Retries transient
+      // failures so a flaky network on first paint doesn't strand the user at
+      // a login screen when their session is actually fine.
+      bootstrapSession(2).then((outcome) => {
         if (outcome === "ok") setAuthState("authenticated");
         else setAuthState("login");
       });
@@ -231,7 +226,7 @@ export default function App() {
 
 function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupIntentConsumed }) {
   const { t: tr } = useI18n();
-  const { isFeatureEnabled, getFormDefault, prefs } = usePreferences();
+  const { isFeatureEnabled, isViewEnabled, getFormDefault, prefs } = usePreferences();
   const [activeTab, setActiveTab] = useState("overview");
   const [modal, setModal] = useState(null);
   const [showActions, setShowActions] = useState(false);
@@ -271,7 +266,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
   );
 
   // Data fetching — canRead is now defined before this call
-  const data = useBabyData(canRead);
+  const data = useBabyData(canRead, { milkStockEnabled: isViewEnabled("milkStock") });
   const timer = useTimers(data.timers, data.child?.id);
 
   // Keep selectedChildId in sync with the active child
@@ -294,13 +289,21 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
     }
   }, [permissionsLoaded, data.child?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-select first visible tab if current tab becomes hidden
+  // A tab is visible when the user can read at least one of its features and,
+  // for the optional views, when that view is switched on for this device.
+  const isTabVisible = useCallback(
+    (tab) => (!tab.view || isViewEnabled(tab.view)) && tab.features.some((f) => canRead(f)),
+    [canRead, isViewEnabled],
+  );
+
+  // Auto-select first visible tab if current tab becomes hidden — including
+  // when the user switches an optional view off while standing on it.
   useEffect(() => {
-    const visibleTabs = TABS.filter((tab) => tab.features.some((f) => canRead(f)));
+    const visibleTabs = TABS.filter(isTabVisible);
     if (visibleTabs.length > 0 && !visibleTabs.find((t) => t.id === activeTab)) {
       setActiveTab(visibleTabs[0].id);
     }
-  }, [canRead, activeTab]);
+  }, [isTabVisible, activeTab]);
 
   // Picture frame screensaver
   const slideshowParam = new URLSearchParams(window.location.search).get("slideshow") === "true";
@@ -470,6 +473,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         milestone: api.deleteMilestone,
         note: api.deleteNote,
         pumping: api.deletePumping,
+        milkWaste: api.deleteMilkWaste,
         bmi: api.deleteBMI,
         child: api.deleteChild,
       };
@@ -541,7 +545,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
               {data.child?.first_name || tr("general.baby")}
             </h1>
             {data.child?.birth_date && (
-              <span className="baby-age">{getAge(data.child.birth_date)}</span>
+              <span className="baby-age">{getAge(data.child.birth_date, tr)}</span>
             )}
           </div>
         </div>
@@ -638,7 +642,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
 
       {/* Tab Navigation — bar on desktop, dropdown on mobile */}
       {(() => {
-        const visibleTabs = TABS.filter((tab) => tab.features.some((f) => canRead(f)));
+        const visibleTabs = TABS.filter(isTabVisible);
         return (
           <>
             <nav className="tab-nav tab-nav-desktop fade-in">
@@ -684,17 +688,31 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             sleepEntries={data.sleepEntries}
             weeklySleep={data.weeklySleep}
             changes={data.changes}
+            weeklyChanges={data.weeklyChanges}
             tummyTimes={data.tummyTimes}
             weeklyTummyTimes={data.weeklyTummyTimes}
             pumpingSessions={data.pumpingSessions}
             weeklyPumping={data.weeklyPumping}
+            weeklyMilkWaste={data.weeklyMilkWaste}
+            milkStock={data.milkStock}
             temperatures={data.temperatures}
             medications={data.medications}
             tagMaps={data.tagMaps}
-            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
-            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            onEditEntry={(type, entry) => canWrite(entryFeature(type)) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(entryFeature(type)) && handleDeleteEntry(type, id)}
             canWrite={canWrite}
           />
+        )}
+        {activeTab === "day" && (
+          <DayTab
+            childId={data.child?.id}
+            canRead={canRead}
+            canWrite={canWrite}
+            onEditEntry={(type, entry) => canWrite(entryFeature(type)) && setModal({ type, entry })}
+          />
+        )}
+        {activeTab === "routine" && (
+          <RoutineTab childId={data.child?.id} canRead={canRead} />
         )}
         {activeTab === "growth" && (
           <GrowthTab
@@ -707,8 +725,8 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             monthlyPumping={data.monthlyPumping}
             child={data.child}
             tagMaps={data.tagMaps}
-            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
-            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            onEditEntry={(type, entry) => canWrite(entryFeature(type)) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(entryFeature(type)) && handleDeleteEntry(type, id)}
             canWrite={canWrite}
           />
         )}
@@ -718,8 +736,8 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             milestones={data.milestones}
             medications={data.medications}
             tagMaps={data.tagMaps}
-            onEditEntry={(type, entry) => canWrite(type) && setModal({ type, entry })}
-            onDeleteEntry={(type, id) => canWrite(type) && handleDeleteEntry(type, id)}
+            onEditEntry={(type, entry) => canWrite(entryFeature(type)) && setModal({ type, entry })}
+            onDeleteEntry={(type, id) => canWrite(entryFeature(type)) && handleDeleteEntry(type, id)}
             canWrite={canWrite}
           />
         )}
@@ -734,7 +752,13 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         {showActions && (
           <div className="fab-menu fade-in">
             {ACTION_GROUPS.map((group) => {
-              const filteredActions = group.actions.filter((a) => isFeatureEnabled(a.id) && canWrite(a.id));
+              const filteredActions = group.actions.filter((a) => {
+                // An action may borrow another feature's permission (`feature`)
+                // and may additionally be gated on an optional view (`view`).
+                if (a.view && !isViewEnabled(a.view)) return false;
+                const feature = a.feature || a.id;
+                return isFeatureEnabled(feature) && canWrite(feature);
+              });
               if (filteredActions.length === 0) return null;
               const isOpen = expandedGroup === group.id;
               return (
@@ -932,6 +956,15 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           onDone={handleFormDone}
           onClose={closeModal}
           onDelete={modal.entry ? () => { handleDeleteEntry("pumping", modal.entry.id); closeModal(); } : undefined}
+        />
+      )}
+      {modal?.type === "milkWaste" && (
+        <MilkWasteForm
+          childId={data.child?.id}
+          entry={modal.entry}
+          onDone={handleFormDone}
+          onClose={closeModal}
+          onDelete={modal.entry ? () => { handleDeleteEntry("milkWaste", modal.entry.id); closeModal(); } : undefined}
         />
       )}
       {modal?.type === "milestone" && (

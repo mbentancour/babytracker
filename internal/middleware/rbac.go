@@ -23,6 +23,10 @@ var pathFeatureMap = map[string]string{
 	"/api/height/":             "height",
 	"/api/head-circumference/": "headcirc",
 	"/api/pumping/":            "pumping",
+	// Uneaten milk and the stock summary derived from it are gated by the
+	// pumping permission — see the note in models/access.go.
+	"/api/milk-waste/": "pumping",
+	"/api/milk-stock":  "pumping",
 	"/api/bmi/":                "bmi",
 	"/api/medications/":        "medication",
 	"/api/milestones/":         "milestone",

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
-import { timeAgo, formatElapsed } from "../utils/formatters";
+import { timeAgo, formatElapsed, getDisplayLocale } from "../utils/formatters";
 import { agoAnchor, formatAwake } from "../utils/overlayTime";
 import { useScreenWakeLock } from "../utils/wakeLock";
 import { fullscreenPhotoUrl } from "../utils/photoUrl";
@@ -231,7 +231,7 @@ function StatusOverlay({ overlay, children }) {
 
   summary("feedings", "🍼", "feeding", (item) => {
     const d = agoAnchor(item);
-    return d ? `${t("pictureFrame.lastFed")} ${timeAgo(d)}` : null;
+    return d ? `${t("pictureFrame.lastFed")} ${timeAgo(d, t)}` : null;
   });
   // The sleep line only renders when no sleep timer is running — i.e. the
   // child is awake — so report how long they've been awake, measured from
@@ -242,13 +242,13 @@ function StatusOverlay({ overlay, children }) {
   });
   summary("changes", "👶", null, (item) => {
     const d = agoAnchor(item);
-    return d ? `${t("pictureFrame.lastChanged")} ${timeAgo(d)}` : null;
+    return d ? `${t("pictureFrame.lastChanged")} ${timeAgo(d, t)}` : null;
   });
 
   if (overlay.currentTime) {
     lines.push({
       icon: "🕐",
-      text: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      text: new Date(now).toLocaleTimeString(getDisplayLocale(), { hour: "2-digit", minute: "2-digit" }),
     });
   }
 

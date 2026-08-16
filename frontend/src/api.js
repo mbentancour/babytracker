@@ -4,36 +4,62 @@ const AUTH_BASE = "./api/auth";
 
 // Token management
 //
-// In HA add-on (iframe) contexts, cookies are unreliable, so we persist the
-// access token to localStorage as a workaround. Outside HA, we use in-memory
-// only — the refresh cookie is the canonical session, and we avoid the small
-// XSS risk of localStorage tokens.
+// In HA add-on (iframe) contexts, cookies are unreliable, so both tokens are
+// persisted to localStorage as a workaround. Outside HA, we use in-memory only
+// — the refresh cookie is the canonical session, and we avoid the small XSS
+// risk of localStorage tokens.
+//
+// Persisting the *refresh* token matters as much as the access token. Storing
+// only the access token bought an hour: after it expired, renewal fell back on
+// the very cookie the persistence was working around, so ingress users were
+// signed out roughly hourly. The server only returns a refresh token in the
+// body when it is itself running under ingress (see issueTokens in auth.go).
 //
 // Persistence is opt-in via enableTokenPersistence(), called by App.jsx once
 // the /api/config response arrives with ha_ingress=true.
 const TOKEN_KEY = "babytracker_access_token";
+const REFRESH_KEY = "babytracker_refresh_token";
 let persistTokens = false;
 let accessToken = null;
+let refreshToken = null;
 let onAuthRequired = null;
 
 export function enableTokenPersistence() {
   persistTokens = true;
-  // Pick up an existing persisted token (e.g. from a previous page load)
-  if (!accessToken) {
-    try {
-      const stored = localStorage.getItem(TOKEN_KEY);
-      if (stored) accessToken = stored;
-    } catch { /* localStorage may be disabled */ }
-  }
+  // Pick up existing persisted tokens (e.g. from a previous page load)
+  try {
+    if (!accessToken) accessToken = localStorage.getItem(TOKEN_KEY) || null;
+    if (!refreshToken) refreshToken = localStorage.getItem(REFRESH_KEY) || null;
+  } catch { /* localStorage may be disabled */ }
+}
+
+function persist(key, value) {
+  if (!persistTokens) return;
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch { /* localStorage may be disabled */ }
 }
 
 export function setAccessToken(token) {
   accessToken = token;
-  if (!persistTokens) return;
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch { /* localStorage may be disabled */ }
+  persist(TOKEN_KEY, token);
+}
+
+// Kept in step with the access token by storeSession(); exported for the
+// sign-out path, which has to clear both.
+export function setRefreshToken(token) {
+  refreshToken = token;
+  persist(REFRESH_KEY, token);
+}
+
+// storeSession takes an /auth/{login,register,refresh} response and keeps
+// whichever tokens it carries. `refresh_token` is absent outside ingress.
+function storeSession(data) {
+  if (!data) return data;
+  if (data.access_token) setAccessToken(data.access_token);
+  if (data.refresh_token) setRefreshToken(data.refresh_token);
+  return data;
 }
 
 export function getAccessToken() {
@@ -72,16 +98,112 @@ function refreshAccessToken() {
 // blip or proxy hiccup during the refresh would kick the user to the login
 // screen even though their refresh cookie was still good, and a page reload
 // later would succeed.
+// Request timeouts
+//
+// Every fetch in this file used to run without one. A request that *fails*
+// settles fine, but a request that merely stalls — a backgrounded mobile tab, a
+// flaky link, an ingress proxy that drops the response without closing the
+// socket — never settles at all. The boot path awaits getConfig() and the first
+// data load before clearing the loading state, so one stalled request left the
+// app on "Loading..." indefinitely with no way out but a manual reload.
+//
+// A timeout converts that into an ordinary rejection, which flows into the
+// error handling that already exists: the header's connection-error banner and
+// the null-safe empty states.
+const DEFAULT_TIMEOUT_MS = 15000;
+
+// Uploads, downloads and restores move real payloads over real links, and a
+// bulk photo upload or a backup restore legitimately runs for minutes. They
+// still get a ceiling — a dead socket should eventually fail rather than hang
+// for the life of the tab — just a far more generous one.
+const TRANSFER_TIMEOUT_MS = 10 * 60 * 1000;
+
+// withTimeout runs `work` with an abort signal that fires after `timeoutMs`.
+// The budget deliberately covers the *whole* operation rather than just the
+// fetch call: reading the body is where a proxy that sends headers and then
+// stalls would otherwise slip through, and for a download the body read is the
+// entire transfer. `url` is only used to make the error message legible.
+async function withTimeout(timeoutMs, url, work) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await work(controller.signal);
+  } catch (err) {
+    // The only thing aborting this signal is our own timer, so an AbortError
+    // here is always a timeout and never a caller cancelling deliberately.
+    if (err?.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms: ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Shared shape for the multipart upload endpoints: same auth, same cookie
+// handling, same tolerant response parsing, same generous transfer budget.
+function uploadRequest(url, formData, { auth = true } = {}) {
+  return withTimeout(TRANSFER_TIMEOUT_MS, url, (signal) =>
+    fetch(url, {
+      method: "POST",
+      headers: auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      credentials: "include",
+      body: formData,
+      signal,
+    }).then(handleUploadResponse),
+  );
+}
+
+// jsonRequest is the unauthenticated counterpart to request() — used by the
+// config and auth endpoints, which run before (or instead of) a session.
+function jsonRequest(url, options = {}) {
+  return withTimeout(DEFAULT_TIMEOUT_MS, url, (signal) =>
+    fetch(url, { ...options, signal }).then((r) => r.json()),
+  );
+}
+
 async function doRefresh() {
-  const response = await fetch(`${AUTH_BASE}/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
-  if (response.status >= 400 && response.status < 500) return "expired";
+  // Its own budget rather than the caller's: refreshes are coalesced across
+  // concurrent callers, so one caller's timeout must not abort the shared
+  // refresh out from under the others.
+  const response = await withTimeout(DEFAULT_TIMEOUT_MS, `${AUTH_BASE}/refresh`, (signal) =>
+    fetch(`${AUTH_BASE}/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      // Empty outside ingress, where the cookie is the session and the server
+      // ignores the body anyway.
+      body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+      signal,
+    }),
+  );
+
+  // Only 401 means the session is genuinely gone. This used to be `< 500`,
+  // which swept in 429 — so a rate-limited refresh wiped the stored tokens and
+  // bounced the user to the login screen, exactly when the household was
+  // already contending for one shared bucket.
+  if (response.status === 401) return "expired";
   if (!response.ok) throw new Error(`refresh failed: HTTP ${response.status}`);
-  const data = await response.json();
-  setAccessToken(data.access_token);
+
+  storeSession(await response.json());
   return "ok";
+}
+
+// bootstrapSession re-establishes a session at startup from whatever is
+// persisted. Returns "ok", "expired" (log in again) or "transient" (something
+// is wrong that isn't the session).
+//
+// Retries only transient failures — a network blip on first paint shouldn't
+// strand someone at a login screen when their session is fine.
+export async function bootstrapSession(attempts = 2) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await refreshAccessToken();
+    } catch {
+      if (i < attempts - 1) await new Promise((res) => setTimeout(res, 800));
+    }
+  }
+  return "transient";
 }
 
 async function request(endpoint, options = {}) {
@@ -98,31 +220,40 @@ async function request(endpoint, options = {}) {
     ...options,
   };
 
-  let response = await fetch(url, config);
+  // One budget for the whole logical operation — the initial call, the 401
+  // refresh and retry below, and the body read at the end. Giving each leg its
+  // own window would let them stack into a 45s hang, which is exactly the
+  // failure mode this is here to prevent.
+  return withTimeout(DEFAULT_TIMEOUT_MS, url, async (signal) => {
+    if (!config.signal) config.signal = signal;
 
-  // If unauthorized, try to refresh the token (whether or not we had one).
-  // The refresh cookie may still be valid even if the access token is gone.
-  // A *transient* refresh failure (network, 5xx) propagates as-is — only an
-  // explicit "expired" answer from the server kicks the user to login.
-  if (response.status === 401) {
-    const result = await refreshAccessToken();
-    if (result === "ok") {
-      config.headers["Authorization"] = `Bearer ${accessToken}`;
-      response = await fetch(url, config);
-    } else {
-      setAccessToken(null);
-      if (onAuthRequired) onAuthRequired();
-      throw new Error("Authentication required");
+    let response = await fetch(url, config);
+
+    // If unauthorized, try to refresh the token (whether or not we had one).
+    // The refresh cookie may still be valid even if the access token is gone.
+    // A *transient* refresh failure (network, 5xx) propagates as-is — only an
+    // explicit "expired" answer from the server kicks the user to login.
+    if (response.status === 401) {
+      const result = await refreshAccessToken();
+      if (result === "ok") {
+        config.headers["Authorization"] = `Bearer ${accessToken}`;
+        response = await fetch(url, config);
+      } else {
+        setAccessToken(null);
+        setRefreshToken(null);
+        if (onAuthRequired) onAuthRequired();
+        throw new Error("Authentication required");
+      }
     }
-  }
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`API error ${response.status}: ${text}`);
-  }
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`API error ${response.status}: ${text}`);
+    }
 
-  if (response.status === 204) return null;
-  return response.json();
+    if (response.status === 204) return null;
+    return response.json();
+  });
 }
 
 // handleUploadResponse is the error-tolerant response parser used by the
@@ -216,6 +347,16 @@ export const api = {
   updatePumping: (id, data) =>
     request(`pumping/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  // Uneaten milk, and the stash balance derived from it. getMilkStock is a
+  // server-side aggregate over all time — the running total can't be computed
+  // from the 7/30-day windows the rest of the app fetches.
+  getMilkWaste: (params) => request(`milk-waste/${qs(params)}`),
+  createMilkWaste: (data) =>
+    request("milk-waste/", { method: "POST", body: JSON.stringify(data) }),
+  updateMilkWaste: (id, data) =>
+    request(`milk-waste/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  getMilkStock: (childId) => request(`milk-stock${qs({ child: childId })}`),
+
   // Notes
   getNotes: (params) => request(`notes/${qs(params)}`),
   createNote: (data) =>
@@ -287,6 +428,7 @@ export const api = {
   deleteWeight: (id) => request(`weight/${id}/`, { method: "DELETE" }),
   deleteHeight: (id) => request(`height/${id}/`, { method: "DELETE" }),
   deletePumping: (id) => request(`pumping/${id}/`, { method: "DELETE" }),
+  deleteMilkWaste: (id) => request(`milk-waste/${id}/`, { method: "DELETE" }),
   deleteNote: (id) => request(`notes/${id}/`, { method: "DELETE" }),
   deleteChild: (id) => request(`children/${id}/`, { method: "DELETE" }),
 
@@ -306,12 +448,16 @@ export const api = {
 
   // Data export - fetches with auth and triggers download
   exportCSV: async (childId, type = "all") => {
-    const resp = await fetch(`${API_BASE}/export/csv?child=${childId}&type=${type}`, {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
+    const endpoint = `${API_BASE}/export/csv?child=${childId}&type=${type}`;
+    const blob = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
+      const resp = await fetch(endpoint, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        credentials: "include",
+        signal,
+      });
+      if (!resp.ok) throw new Error("Export failed");
+      return resp.blob();
     });
-    if (!resp.ok) throw new Error("Export failed");
-    const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -324,12 +470,7 @@ export const api = {
   uploadChildPhoto: (childId, file) => {
     const formData = new FormData();
     formData.append("photo", file);
-    return fetch(`${API_BASE}/children/${childId}/photo`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/children/${childId}/photo`, formData);
   },
   setChildPhotoFromFilename: (childId, filename) =>
     request(`children/${childId}/photo`, { method: "PUT", body: JSON.stringify({ filename }) }),
@@ -338,22 +479,12 @@ export const api = {
   uploadEntryPhoto: (entityType, entityId, file) => {
     const formData = new FormData();
     formData.append("photo", file);
-    return fetch(`${API_BASE}/${entityType}/${entityId}/photo`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/${entityType}/${entityId}/photo`, formData);
   },
   uploadMilestonePhoto: (milestoneId, file) => {
     const formData = new FormData();
     formData.append("photo", file);
-    return fetch(`${API_BASE}/milestones/${milestoneId}/photo`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/milestones/${milestoneId}/photo`, formData);
   },
 
   // Standalone photos
@@ -365,12 +496,7 @@ export const api = {
     for (const file of files) {
       formData.append("photos", file);
     }
-    return fetch(`${API_BASE}/photos/`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/photos/`, formData);
   },
   updatePhoto: (id, data) =>
     request(`photos/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -395,12 +521,16 @@ export const api = {
   downloadBackup: async (name, destinationId) => {
     const params = new URLSearchParams({ name });
     if (destinationId != null) params.set("destination_id", String(destinationId));
-    const resp = await fetch(`${API_BASE}/backups/download?${params.toString()}`, {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
+    const endpoint = `${API_BASE}/backups/download?${params.toString()}`;
+    const blob = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
+      const resp = await fetch(endpoint, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        credentials: "include",
+        signal,
+      });
+      if (!resp.ok) throw new Error("Download failed");
+      return resp.blob();
     });
-    if (!resp.ok) throw new Error("Download failed");
-    const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -418,12 +548,7 @@ export const api = {
     formData.append("backup", file);
     if (passphrase) formData.append("passphrase", passphrase);
     if (wipePhotos) formData.append("wipe_photos", "true");
-    return fetch(`${API_BASE}/backups/restore`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/backups/restore`, formData);
   },
   restoreBackupFromDestination: (destinationId, name, passphrase, wipePhotos) => {
     const formData = new FormData();
@@ -431,12 +556,7 @@ export const api = {
     formData.append("name", name);
     if (passphrase) formData.append("passphrase", passphrase);
     if (wipePhotos) formData.append("wipe_photos", "true");
-    return fetch(`${API_BASE}/backups/restore`, {
-      method: "POST",
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    return uploadRequest(`${API_BASE}/backups/restore`, formData);
   },
 
   // Backup destinations (admin)
@@ -513,44 +633,61 @@ export const api = {
   deleteRole: (id) => request(`roles/${id}/`, { method: "DELETE" }),
 
   // Config
-  getConfig: () => fetch(CONFIG_PATH).then((r) => r.json()),
+  //
+  // This one gates the whole boot sequence, so its timeout is what stops a
+  // stalled config request from pinning the app on the loading spinner.
+  getConfig: () => jsonRequest(CONFIG_PATH),
 
   // Auth
-  getAuthStatus: () => fetch(`${AUTH_BASE}/status`).then((r) => r.json()),
+  getAuthStatus: () => jsonRequest(`${AUTH_BASE}/status`),
   setupRestore: (file, passphrase, wipePhotos) => {
     const formData = new FormData();
     formData.append("backup", file);
     if (passphrase) formData.append("passphrase", passphrase);
     if (wipePhotos) formData.append("wipe_photos", "true");
-    return fetch(`${AUTH_BASE}/setup-restore`, {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    }).then(handleUploadResponse);
+    // No auth header: this runs during first-boot setup, before any session.
+    return uploadRequest(`${AUTH_BASE}/setup-restore`, formData, { auth: false });
   },
   register: (username, password) =>
-    fetch(`${AUTH_BASE}/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ username, password }),
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    }),
+    withTimeout(DEFAULT_TIMEOUT_MS, `${AUTH_BASE}/register`, (signal) =>
+      fetch(`${AUTH_BASE}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password }),
+        signal,
+      }).then(async (r) => {
+        if (!r.ok) return r.json().then((e) => Promise.reject(e));
+        return storeSession(await r.json());
+      }),
+    ),
   login: (username, password) =>
-    fetch(`${AUTH_BASE}/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ username, password }),
-    }).then((r) => {
-      if (!r.ok) return r.json().then((e) => Promise.reject(e));
-      return r.json();
-    }),
-  logout: () =>
-    fetch(`${AUTH_BASE}/logout`, {
-      method: "POST",
-      credentials: "include",
-    }),
+    withTimeout(DEFAULT_TIMEOUT_MS, `${AUTH_BASE}/login`, (signal) =>
+      fetch(`${AUTH_BASE}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password }),
+        signal,
+      }).then(async (r) => {
+        if (!r.ok) return r.json().then((e) => Promise.reject(e));
+        return storeSession(await r.json());
+      }),
+    ),
+  // Sends the stored refresh token so the server can revoke that session even
+  // when the cookie never made it into the ingress iframe — otherwise signing
+  // out would leave a working 30-day token behind on the server.
+  logout: () => {
+    const presented = refreshToken;
+    setRefreshToken(null);
+    return withTimeout(DEFAULT_TIMEOUT_MS, `${AUTH_BASE}/logout`, (signal) =>
+      fetch(`${AUTH_BASE}/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(presented ? { refresh_token: presented } : {}),
+        signal,
+      }),
+    );
+  },
 };

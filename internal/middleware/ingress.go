@@ -13,6 +13,11 @@ import (
 // the request path without opening a routing-confusion vector.
 var inHAIngress = os.Getenv("SUPERVISOR_TOKEN") != "" || os.Getenv("HASSIO_TOKEN") != ""
 
+// InIngress reports whether this process is running as a Home Assistant
+// add-on. Handlers use it to decide whether the browser can be expected to
+// keep a cookie — inside the ingress iframe it often can't.
+func InIngress() bool { return inHAIngress }
+
 // Ingress strips the X-Ingress-Path prefix from all request paths when running
 // under HA ingress (where all requests arrive with a prefix like
 // /api/hassio_ingress/<token>/). Outside HA the header is ignored entirely.

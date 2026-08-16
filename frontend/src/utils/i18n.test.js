@@ -31,6 +31,26 @@ describe("i18n translation parity", () => {
         .map(([k]) => k);
       expect(blank).toEqual([]);
     });
+
+    // t() substitutes by name, so a placeholder dropped or mistyped in a
+    // translation doesn't fall back to English — it renders the literal
+    // "{{count}}" to that user, or silently loses the number entirely.
+    it(`${locale}: keeps every interpolation placeholder`, () => {
+      const placeholders = (s) =>
+        (typeof s === "string" ? s.match(/\{\{[^}]+\}\}/g) || [] : []).sort();
+
+      const mismatched = enKeys
+        .filter((k) => k in translations[locale])
+        .map((k) => ({
+          key: k,
+          en: placeholders(en[k]),
+          translated: placeholders(translations[locale][k]),
+        }))
+        .filter((r) => r.en.join(",") !== r.translated.join(","))
+        .map((r) => `${r.key}: expected [${r.en}], got [${r.translated}]`);
+
+      expect(mismatched).toEqual([]);
+    });
   }
 
   it("every advertised language has a translation table", () => {

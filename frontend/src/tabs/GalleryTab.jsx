@@ -5,21 +5,22 @@ import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
 import { fullscreenPhotoUrl } from "../utils/photoUrl";
 
-const TYPE_LABELS = {
-  shared: "Shared",
-  photo: "Photo",
-  profile: "Profile",
-  weight: "Weight",
-  height: "Height",
-  head_circumference: "Head Circ.",
-  milestone: "Milestone",
-  temperature: "Temperature",
-  medication: "Medication",
-  feeding: "Feeding",
-  sleep: "Sleep",
-  tummy_time: "Tummy Time",
-  diaper: "Diaper",
-  note: "Note",
+// i18n keys, not labels — resolved through typeLabel() at render time.
+const TYPE_LABEL_KEYS = {
+  shared: "gallery.shared",
+  photo: "gallery.typePhoto",
+  profile: "gallery.typeProfile",
+  weight: "growth.weight",
+  height: "growth.height",
+  head_circumference: "growth.headCirc",
+  milestone: "action.milestone",
+  temperature: "overview.temperature",
+  medication: "gallery.typeMedication",
+  feeding: "action.feeding",
+  sleep: "action.sleep",
+  tummy_time: "overview.tummyTime",
+  diaper: "action.diaper",
+  note: "action.note",
 };
 
 const TYPE_COLORS = {
@@ -57,6 +58,9 @@ const TYPE_API_PATH = {
 
 export default function GalleryTab({ childId, children = [], canWrite = false }) {
   const { t } = useI18n();
+  // Entity types come from the API, so an unrecognised one falls back to its
+  // raw value rather than rendering a missing key.
+  const typeLabel = (type) => (TYPE_LABEL_KEYS[type] ? t(TYPE_LABEL_KEYS[type]) : type);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -87,7 +91,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const handleDeletePhoto = async (item) => {
-    if (!confirm(`Remove this ${TYPE_LABELS[item.entity_type] || ""} photo?`)) return;
+    if (!confirm(t("gallery.removeConfirm", { type: typeLabel(item.entity_type) }))) return;
     try {
       if (item.entity_type === "photo") {
         // Standalone photo — delete the whole record
@@ -180,7 +184,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
-        Loading photos...
+        {t("gallery.loading")}
       </div>
     );
   }
@@ -220,7 +224,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           <FilterChip
             active={filter === "all"}
             onClick={() => setFilter("all")}
-            label={`All (${items.length})`}
+            label={`${t("gallery.all")} (${items.length})`}
           />
           {taggedCount > 0 && (
             <FilterChip
@@ -230,13 +234,13 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
               label={`${childName} (${taggedCount})`}
             />
           )}
-          {entryTypes.map((t) => (
+          {entryTypes.map((type) => (
             <FilterChip
-              key={t}
-              active={filter === t}
-              onClick={() => setFilter(t)}
-              color={TYPE_COLORS[t]}
-              label={`${TYPE_LABELS[t] || t} (${entryTypeCounts[t]})`}
+              key={type}
+              active={filter === type}
+              onClick={() => setFilter(type)}
+              color={TYPE_COLORS[type]}
+              label={`${typeLabel(type)} (${entryTypeCounts[type]})`}
             />
           ))}
           {sharedCount > 0 && (
@@ -244,7 +248,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
               active={filter === "shared"}
               onClick={() => setFilter("shared")}
               color={TYPE_COLORS.shared}
-              label={`Shared (${sharedCount})`}
+              label={`${t("gallery.shared")} (${sharedCount})`}
             />
           )}
         </div>
@@ -334,7 +338,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
                           borderRadius: 4,
                         }}
                       >
-                        {TYPE_LABELS[item.entity_type] || item.entity_type}
+                        {typeLabel(item.entity_type)}
                       </span>
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>

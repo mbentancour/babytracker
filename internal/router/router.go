@@ -36,6 +36,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	weightH := handlers.NewWeightHandler(db)
 	heightH := handlers.NewHeightHandler(db)
 	pumpingH := handlers.NewPumpingHandler(db)
+	milkWasteH := handlers.NewMilkWasteHandler(db)
+	milkStockH := handlers.NewMilkStockHandler(db)
 	notesH := handlers.NewNotesHandler(db)
 	configH := handlers.NewConfigHandler(cfg)
 	displayH := handlers.NewDisplayHandler(db)
@@ -71,18 +73,23 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	// and tries to log in doesn't hit a rate limit burned by their browser's
 	// background /status and /refresh calls.
 	//
-	//   Login/register — strict: the brute-force surface.
-	//   Refresh        — looser: gated by a valid refresh_token cookie already,
-	//                    only tightens if that cookie is compromised.
+	//   Login/register — the brute-force surface.
+	//   Refresh        — gated by a valid refresh token already.
 	//   Logout/status  — unthrottled: logout invalidates the attacker's own
 	//                    session, status is a read-only "am I logged in".
+	//
+	// These IP-keyed ceilings are whole-deployment flood guards, not per-client
+	// limits: under HA ingress every request carries the Supervisor's address,
+	// so this key cannot tell one family member from another. They're sized to
+	// let a household through. The limits that actually protect an account live
+	// in the handlers, keyed by username and by session — see auth.go.
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.RateLimit(10, time.Minute))
+		r.Use(middleware.RateLimit(60, time.Minute))
 		r.Post("/api/auth/register", authH.Register)
 		r.Post("/api/auth/login", authH.Login)
 	})
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.RateLimit(30, time.Minute))
+		r.Use(middleware.RateLimit(180, time.Minute))
 		r.Post("/api/auth/refresh", authH.Refresh)
 	})
 	r.Post("/api/auth/logout", authH.Logout)
@@ -182,6 +189,14 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Post("/api/pumping/", pumpingH.Create)
 		r.Patch("/api/pumping/{id}/", pumpingH.Update)
 		r.Delete("/api/pumping/{id}/", deleteH.DeletePumping())
+
+		// Uneaten milk, and the stash balance derived from it. Both gated by
+		// the pumping feature — see pathFeatureMap in middleware/rbac.go.
+		r.Get("/api/milk-waste/", milkWasteH.List)
+		r.Post("/api/milk-waste/", milkWasteH.Create)
+		r.Patch("/api/milk-waste/{id}/", milkWasteH.Update)
+		r.Delete("/api/milk-waste/{id}/", deleteH.DeleteMilkWaste())
+		r.Get("/api/milk-stock", milkStockH.Get)
 
 		// Notes
 		r.Get("/api/notes/", notesH.List)
