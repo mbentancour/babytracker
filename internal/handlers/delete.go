@@ -82,5 +82,6 @@ func (h *GenericDeleteHandler) DeleteTemperature() http.HandlerFunc { return h.d
 func (h *GenericDeleteHandler) DeleteWeight() http.HandlerFunc      { return h.deleteEntity("weight") }
 func (h *GenericDeleteHandler) DeleteHeight() http.HandlerFunc      { return h.deleteEntity("height") }
 func (h *GenericDeleteHandler) DeletePumping() http.HandlerFunc     { return h.deleteEntity("pumping") }
+func (h *GenericDeleteHandler) DeleteMilkWaste() http.HandlerFunc   { return h.deleteEntity("milk_waste") }
 func (h *GenericDeleteHandler) DeleteNote() http.HandlerFunc        { return h.deleteEntity("notes") }
 func (h *GenericDeleteHandler) DeleteChild() http.HandlerFunc       { return h.deleteEntity("children") }

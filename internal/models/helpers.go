@@ -72,7 +72,7 @@ var deletableTables = map[string]bool{
 	"feedings": true, "sleep": true, "changes": true, "tummy_times": true,
 	"temperature": true, "weight": true, "height": true, "head_circumference": true,
 	"pumping": true, "medications": true, "milestones": true, "notes": true,
-	"bmi": true, "children": true,
+	"bmi": true, "children": true, "milk_waste": true,
 }
 
 // Generic delete helper. The table name is interpolated, so it must come from

@@ -33,6 +33,7 @@ var AllowedOrderFields = map[string]map[string]string{
 	"weight":             {"date": "date", "weight": "weight"},
 	"height":             {"date": "date", "height": "height"},
 	"pumping":            {"start": "start_time", "end": "end_time"},
+	"milk_waste":         {"time": "time", "amount": "amount"},
 	"notes":              {"time": "time"},
 	"timers":             {"start": "start_time"},
 	"children":           {"first_name": "first_name", "id": "id"},

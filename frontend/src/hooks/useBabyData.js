@@ -32,9 +32,15 @@ function fixChildPicture(c) {
 
 const emptyPage = { results: [], count: 0 };
 
-export function useBabyData(canReadFn) {
+// `milkStockEnabled` gates two extra requests (the week's uneaten-milk rows and
+// the all-time stash balance). It's a per-device preference that defaults off,
+// and this hook already fires 20+ requests per poll, so households that don't
+// track a stash shouldn't pay for it.
+export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
   const canReadRef = useRef(canReadFn || (() => true));
   canReadRef.current = canReadFn || (() => true);
+  const milkStockRef = useRef(milkStockEnabled);
+  milkStockRef.current = milkStockEnabled;
   const [children, setChildren] = useState([]);
   const [child, setChild] = useState(null);
   const [feedings, setFeedings] = useState([]);
@@ -42,6 +48,7 @@ export function useBabyData(canReadFn) {
   const [sleepEntries, setSleepEntries] = useState([]);
   const [weeklySleep, setWeeklySleep] = useState([]);
   const [changes, setChanges] = useState([]);
+  const [weeklyChanges, setWeeklyChanges] = useState([]);
   const [tummyTimes, setTummyTimes] = useState([]);
   const [weeklyTummyTimes, setWeeklyTummyTimes] = useState([]);
   const [pumpingSessions, setPumpingSessions] = useState([]);
@@ -58,6 +65,8 @@ export function useBabyData(canReadFn) {
   const [medications, setMedications] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [bmiEntries, setBmiEntries] = useState([]);
+  const [weeklyMilkWaste, setWeeklyMilkWaste] = useState([]);
+  const [milkStock, setMilkStock] = useState(null);
   // Per-entity-type tag maps: `tagMaps[entityType][entity_id] = [tag...]`.
   // Populated from the /api/tags/bulk endpoint on every refresh so list
   // views can render tag chips without N+1 fetches.
@@ -128,6 +137,7 @@ export function useBabyData(canReadFn) {
         sleepRes,
         weeklySleepRes,
         changesRes,
+        weeklyChangesRes,
         tummyRes,
         weeklyTummyRes,
         pumpingRes,
@@ -144,32 +154,51 @@ export function useBabyData(canReadFn) {
         medicationsRes,
         milestonesRes,
         bmiRes,
+        milkWasteRes,
+        milkStockRes,
       ] = await Promise.all((() => {
-        // Only fetch data for features the user can read
+        // Only fetch data for features the user can read.
+        //
+        // `call` is a thunk, not a promise. Passing the promise directly meant
+        // the request was issued while evaluating the argument, before this
+        // function could decide to skip it — so a restricted user still sent
+        // every request and merely discarded the results.
         const ep = emptyPage;
-        const q = (feature, call) => canReadRef.current(feature) ? call : Promise.resolve(ep);
+        const q = (feature, call) => canReadRef.current(feature) ? call() : Promise.resolve(ep);
+        // Uneaten milk rides on the pumping permission (see the note in
+        // internal/models/access.go) and is additionally gated on the
+        // per-device milk-stock preference.
+        const stockOn = milkStockRef.current && canReadRef.current("pumping");
         return [
-        q("feeding", api.getFeedings({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
-        q("feeding", api.getFeedings({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
-        q("sleep", api.getSleep({ child: c, start_min: sleepMin, limit: 100, ordering: "-start" })),
-        q("sleep", api.getSleep({ child: c, start_min: weekSleepMin, limit: 200, ordering: "-start" })),
-        q("diaper", api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" })),
-        q("tummy", api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
-        q("tummy", api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
-        q("pumping", api.getPumping({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
-        q("pumping", api.getPumping({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
-        q("temp", api.getTemperature({ child: c, limit: 10, ordering: "-time" })),
-        q("weight", api.getWeight({ child: c, limit: 20, ordering: "-date" })),
-        q("height", api.getHeight({ child: c, limit: 20, ordering: "-date" })),
-        q("feeding", api.getTimers()),
-        q("note", api.getNotes({ child: c, limit: 20, ordering: "-time" })),
-        q("feeding", api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
-        q("sleep", api.getSleep({ child: c, start_min: monthSleepMin, limit: 500, ordering: "-start" })),
-        q("pumping", api.getPumping({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
-        q("headcirc", api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" })),
-        q("medication", api.getMedications({ child: c, limit: 20, ordering: "-time" })),
-        q("milestone", api.getMilestones({ child: c, limit: 50, ordering: "-date" })),
-        q("bmi", api.getBMI({ child: c, limit: 20, ordering: "-date" })),
+        q("feeding", () => api.getFeedings({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("feeding", () => api.getFeedings({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("sleep", () => api.getSleep({ child: c, start_min: sleepMin, limit: 100, ordering: "-start" })),
+        q("sleep", () => api.getSleep({ child: c, start_min: weekSleepMin, limit: 200, ordering: "-start" })),
+        q("diaper", () => api.getChanges({ child: c, date_min: todayMin, date_max: todayMax, limit: 100, ordering: "-time" })),
+        // Diapers were the one type fetched for today only, so just after
+        // midnight the card had nothing to report a "last change" from.
+        q("diaper", () => api.getChanges({ child: c, date_min: weekMin, limit: 200, ordering: "-time" })),
+        q("tummy", () => api.getTummyTimes({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("tummy", () => api.getTummyTimes({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("pumping", () => api.getPumping({ child: c, start_min: todayMin, start_max: todayMax, limit: 100, ordering: "-start" })),
+        q("pumping", () => api.getPumping({ child: c, start_min: weekMin, limit: 200, ordering: "-start" })),
+        q("temp", () => api.getTemperature({ child: c, limit: 10, ordering: "-time" })),
+        q("weight", () => api.getWeight({ child: c, limit: 20, ordering: "-date" })),
+        q("height", () => api.getHeight({ child: c, limit: 20, ordering: "-date" })),
+        q("feeding", () => api.getTimers()),
+        q("note", () => api.getNotes({ child: c, limit: 20, ordering: "-time" })),
+        q("feeding", () => api.getFeedings({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
+        q("sleep", () => api.getSleep({ child: c, start_min: monthSleepMin, limit: 500, ordering: "-start" })),
+        q("pumping", () => api.getPumping({ child: c, start_min: monthMin, limit: 500, ordering: "-start" })),
+        q("headcirc", () => api.getHeadCircumference({ child: c, limit: 20, ordering: "-date" })),
+        q("medication", () => api.getMedications({ child: c, limit: 20, ordering: "-time" })),
+        q("milestone", () => api.getMilestones({ child: c, limit: 50, ordering: "-date" })),
+        q("bmi", () => api.getBMI({ child: c, limit: 20, ordering: "-date" })),
+        stockOn ? api.getMilkWaste({ child: c, date_min: weekMin, limit: 200, ordering: "-time" }) : Promise.resolve(ep),
+        // Whole-history aggregate, so it can't be derived from the windows
+        // above. Null (not an empty page) when off, which is what the card
+        // reads as "no balance to show".
+        stockOn && c ? api.getMilkStock(c) : Promise.resolve(null),
         ];
       })());
 
@@ -180,6 +209,7 @@ export function useBabyData(canReadFn) {
       setSleepEntries(sleepRes.results || []);
       setWeeklySleep(weeklySleepRes.results || []);
       setChanges(changesRes.results || []);
+      setWeeklyChanges(weeklyChangesRes.results || []);
       setTummyTimes(tummyRes.results || []);
       setWeeklyTummyTimes(weeklyTummyRes.results || []);
       setPumpingSessions(pumpingRes.results || []);
@@ -196,6 +226,8 @@ export function useBabyData(canReadFn) {
       setMedications(medicationsRes.results || []);
       setMilestones(milestonesRes.results || []);
       setBmiEntries(bmiRes.results || []);
+      setWeeklyMilkWaste(milkWasteRes.results || []);
+      setMilkStock(milkStockRes);
 
       // Fetch tag maps for every taggable entity type in parallel. Each
       // returns `{ "<entity_id>": [tag, tag, ...] }`; we only populate
@@ -355,6 +387,7 @@ export function useBabyData(canReadFn) {
     sleepEntries,
     weeklySleep,
     changes,
+    weeklyChanges,
     tummyTimes,
     weeklyTummyTimes,
     pumpingSessions,
@@ -371,6 +404,8 @@ export function useBabyData(canReadFn) {
     medications,
     milestones,
     bmiEntries,
+    weeklyMilkWaste,
+    milkStock,
     tagMaps,
     loading,
     error,

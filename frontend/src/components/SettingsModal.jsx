@@ -7,6 +7,7 @@ import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
 import {
   usePreferences,
   FEATURE_LIST,
+  VIEW_LIST,
   FEEDING_TYPES,
   FEEDING_METHODS,
 } from "../utils/preferences";
@@ -41,7 +42,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
-  const { prefs, setFeatureEnabled, setFormDefault, setPref } = usePreferences();
+  const { prefs, setFeatureEnabled, setViewEnabled, setFormDefault, setPref } = usePreferences();
   const [deviceName, setDeviceName] = useState(
     () => localStorage.getItem("babytracker_device_name") || ""
   );
@@ -364,6 +365,31 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                         type="checkbox"
                         checked={prefs.features[f.id] !== false}
                         onChange={(e) => setFeatureEnabled(f.id, e.target.checked)}
+                        className="settings-checkbox"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <h4 className="settings-section-subtitle" style={{ marginTop: 20 }}>{t("settings.views")}</h4>
+                <p className="settings-hint" style={{ marginBottom: 8 }}>
+                  {t("settings.viewsHint")}
+                </p>
+                <div className="settings-card">
+                  {VIEW_LIST.map((v, i) => (
+                    <label
+                      key={v.id}
+                      className="settings-toggle-row"
+                      style={{ borderTop: i > 0 ? "1px solid var(--border)" : "none" }}
+                    >
+                      <div>
+                        <div className="settings-toggle-label">{t(v.labelKey)}</div>
+                        <div className="settings-toggle-desc">{t(v.descKey)}</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={prefs.views?.[v.id] === true}
+                        onChange={(e) => setViewEnabled(v.id, e.target.checked)}
                         className="settings-checkbox"
                       />
                     </label>

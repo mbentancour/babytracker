@@ -1,6 +1,6 @@
 import AddButton from "./AddButton";
 
-export default function StatCard({ icon, label, value, sub, color, accent, onAdd, addLabel }) {
+export default function StatCard({ icon, label, value, sub, foot, color, accent, onAdd, addLabel }) {
   return (
     <div
       style={{
@@ -74,6 +74,14 @@ export default function StatCard({ icon, label, value, sub, color, accent, onAdd
       {sub && (
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -2 }}>
           {sub}
+        </div>
+      )}
+      {/* How long ago this last happened. In the card's own colour rather than
+          the muted grey of `sub`, because at 3am it's the line you're actually
+          looking for. */}
+      {foot && (
+        <div style={{ fontSize: 12, fontWeight: 600, color, marginTop: -2 }}>
+          {foot}
         </div>
       )}
     </div>

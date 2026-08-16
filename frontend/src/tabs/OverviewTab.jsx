@@ -15,6 +15,7 @@ import DiaperBadge from "../components/DiaperBadge";
 import CustomTooltip from "../components/CustomTooltip";
 import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
+import MilkStock from "../components/MilkStock";
 import TagChips from "../components/TagChips";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
@@ -29,6 +30,9 @@ import {
   getEntriesForDay,
   overlapHours,
   parseDuration,
+  getDisplayLocale,
+  mostRecentAt,
+  lastSeenLabel,
 } from "../utils/formatters";
 import { useUnits } from "../utils/units";
 import { usePreferences } from "../utils/preferences";
@@ -36,22 +40,22 @@ import { useI18n } from "../utils/i18n";
 
 const COLLAPSED_COUNT = 2;
 
-export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, tummyTimes, weeklyTummyTimes, pumpingSessions = [], weeklyPumping = [], temperatures, medications, tagMaps = {}, onEditEntry, onDeleteEntry, canWrite = () => true }) {
+export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRaw, sleepEntries, weeklySleep, changes, weeklyChanges = [], tummyTimes, weeklyTummyTimes, pumpingSessions = [], weeklyPumping = [], weeklyMilkWaste = [], milkStock = null, temperatures, medications, tagMaps = {}, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
-  const { isFeatureEnabled } = usePreferences();
+  const { isFeatureEnabled, isViewEnabled } = usePreferences();
   const [expanded, setExpanded] = useState({});
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const feedingTimeline = toFeedingTimeline(feedings, units.volume);
-  const diaperTimeline = toDiaperTimeline(changes);
+  const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
+  const diaperTimeline = toDiaperTimeline(changes, t);
   const sleepBlocks = toSleepBlocks(sleepEntries);
   const weeklyFeedings = aggregateByDayOfWeek(weeklyFeedingsRaw, "amount");
   const sleepByDay = aggregateSleepByDay(weeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
-  const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume);
+  const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume, t);
   const pumpingByDay = aggregateByDayOfWeek(weeklyPumping, "amount");
 
   const totalFeeding = feedings.reduce((s, f) => s + (f.amount || 0), 0);
@@ -72,6 +76,22 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       ? tummyTimes.reduce((s, t) => s + parseDuration(t.duration) * 60, 0) /
         tummyTimes.length
       : 0;
+
+  // "Last: 5m ago" for each stat card.
+  //
+  // Read from the seven-day sets, not the today-only ones the numbers above
+  // come from. That is the whole point: at 00:30 today's feeding count is 0
+  // and the last feed was at 23:40, and reading "0 feedings today" told you
+  // nothing about whether that was twenty minutes or six hours back.
+  const lastSeen = (entries) => {
+    const at = mostRecentAt(entries);
+    return at === null ? null : lastSeenLabel(at, t);
+  };
+  const lastFeeding = lastSeen(weeklyFeedingsRaw);
+  const lastSleep = lastSeen(weeklySleep);
+  const lastDiaper = lastSeen(weeklyChanges.length ? weeklyChanges : changes);
+  const lastTummy = lastSeen(weeklyTummyTimes);
+  const lastPumping = lastSeen(weeklyPumping);
 
   const wetCount = changes.filter((c) => c.wet && !c.solid).length;
   const solidCount = changes.filter((c) => c.solid && !c.wet).length;
@@ -115,7 +135,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Bottle />}
               label={t("overview.feedings")}
               value={totalFeeding > 0 ? `${Math.round(totalFeeding)} ${units.volume}` : `${feedings.length}`}
-              sub={`${feedings.length} feeding${feedings.length !== 1 ? "s" : ""} today`}
+              sub={t(feedings.length === 1 ? "overview.feedingsToday_one" : "overview.feedingsToday_other", { count: feedings.length })}
+              foot={lastFeeding}
               color={colors.feeding}
               onAdd={canWrite("feeding") ? () => onEditEntry?.("feeding") : undefined}
               addLabel={t("action.feeding")}
@@ -128,7 +149,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Moon />}
               label={t("overview.sleep")}
               value={`${totalSleep.toFixed(1)}h`}
-              sub="Last 24 hours"
+              sub={t("overview.sleepLast24")}
+              foot={lastSleep}
               color={colors.sleep}
               onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
               addLabel={t("action.sleep")}
@@ -141,7 +163,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Droplet />}
               label={t("overview.diapers")}
               value={totalDiapers}
-              sub={`${wetCount} wet · ${solidCount} solid · ${bothCount} both`}
+              sub={t("overview.diaperBreakdown", { wet: wetCount, solid: solidCount, both: bothCount })}
+              foot={lastDiaper}
               color={colors.diaper}
               onAdd={canWrite("diaper") ? () => onEditEntry?.("diaper") : undefined}
               addLabel={t("action.diaper")}
@@ -154,7 +177,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Sun />}
               label={t("overview.tummyTime")}
               value={`${Math.round(avgTummy)}m`}
-              sub={`${tummyTimes.length} session${tummyTimes.length !== 1 ? "s" : ""} today`}
+              sub={t(tummyTimes.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: tummyTimes.length })}
+              foot={lastTummy}
               color={colors.tummy}
               onAdd={canWrite("tummy") ? () => onEditEntry?.("tummy") : undefined}
               addLabel={t("action.tummy")}
@@ -167,7 +191,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Bottle />}
               label={t("overview.pumping")}
               value={totalPumping > 0 ? `${Math.round(totalPumping)} ${units.volume}` : `${pumpingSessions.length}`}
-              sub={`${pumpingSessions.length} session${pumpingSessions.length !== 1 ? "s" : ""} today`}
+              sub={t(pumpingSessions.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: pumpingSessions.length })}
+              foot={lastPumping}
               color={colors.pumping}
               onAdd={canWrite("pumping") ? () => onEditEntry?.("pumping") : undefined}
               addLabel={t("action.pumping")}
@@ -249,8 +274,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
-                      label={`${s.duration.toFixed(1)}h${s.nap ? " · Nap" : ""}`}
-                      detail={`${s.start} to ${s.end}`}
+                      label={`${s.duration.toFixed(1)}h${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                      detail={t("general.timeRange", { from: s.start, to: s.end })}
                       color={colors.sleep}
                       isLast={i === arr.length - 1}
                       tags={tagMaps.sleep?.[s.entry?.id]}
@@ -407,9 +432,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   >
                     <Icons.TrendUp />
                     <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      Avg{" "}
-                      <strong style={{ color: colors.tummy }}>{Math.round(avgTummy)} min</strong>{" "}
-                      per session
+                      {t("overview.avgPerSession", { value: Math.round(avgTummy) })}
                     </span>
                   </div>
                 )}
@@ -478,6 +501,19 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
           </SectionCard>
         </div>}
 
+        {/* Milk stock — opt-in (Settings > Preferences > Views) and, like the
+            pumping card above, only useful with the pumping feature on */}
+        {isViewEnabled("milkStock") && isFeatureEnabled("pumping") && <div className="fade-in fade-in-6">
+          <MilkStock
+            stock={milkStock}
+            weeklyPumping={weeklyPumping}
+            weeklyFeedings={weeklyFeedingsRaw}
+            weeklyMilkWaste={weeklyMilkWaste}
+            onEditEntry={onEditEntry}
+            canWrite={canWrite}
+          />
+        </div>}
+
         {/* Temperature */}
         {isFeatureEnabled("temp") && temperatures && temperatures.length > 0 && (
           <div className="fade-in fade-in-7">
@@ -523,7 +559,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                       )}
                       <TagChips tags={tagMaps.medication?.[m.id]} size="sm" />
                       <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: "auto" }}>
-                        {new Date(m.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(m.time).toLocaleTimeString(getDisplayLocale(), { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                     {canWrite("medication") && <button className="delete-entry-btn" onClick={() => onDeleteEntry?.("medication", m.id)} title={t("general.delete")}>x</button>}

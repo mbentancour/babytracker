@@ -13,6 +13,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import SectionCard from "../components/SectionCard";
+import StatCard from "../components/StatCard";
 import CustomTooltip from "../components/CustomTooltip";
 import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
@@ -21,7 +22,7 @@ import AddButton from "../components/AddButton";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
-import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, FEEDING_COUNT_KEYS } from "../utils/formatters";
+import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, avgFeedingGap, avgBreastDuration, formatHoursMinutes, FEEDING_COUNT_KEYS } from "../utils/formatters";
 import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
@@ -113,6 +114,11 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const avgSleep = sleepDays.length
     ? (sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length).toFixed(1)
     : 0;
+  // Both derived from the raw 30-day entries rather than the daily buckets:
+  // spacing and session length are properties of individual feeds, and the
+  // per-day totals have already thrown that away.
+  const feedingGap = avgFeedingGap(monthlyFeedings);
+  const breastDuration = avgBreastDuration(monthlyFeedings);
 
   // Recharts v3 removed `activePayload` from the chart click event — we have
   // `activeLabel`, `activeTooltipIndex`/`activeIndex`, `activeDataKey` and
@@ -323,6 +329,52 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
           </div>
         </div>}
       </div>
+
+      {/* Activity averages over the trailing 30 days */}
+      {(isFeatureEnabled("feeding") || isFeatureEnabled("sleep")) && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 14,
+            marginBottom: 20,
+          }}
+        >
+          {isFeatureEnabled("feeding") && (
+            <div className="fade-in fade-in-5">
+              <StatCard
+                icon={<Icons.Bottle />}
+                label={t("growth.avgFeeding")}
+                value={avgFeeding ? `${avgFeeding} ${units.volume}` : "—"}
+                color={colors.feeding}
+                sub={
+                  <>
+                    <div>{t("growth.perDay30d")}</div>
+                    {feedingGap !== null && (
+                      <div>{t("growth.avgGap", { value: formatHoursMinutes(feedingGap) })}</div>
+                    )}
+                    {breastDuration !== null && (
+                      <div>{t("growth.avgBreastDuration", { value: formatHoursMinutes(breastDuration) })}</div>
+                    )}
+                  </>
+                }
+              />
+            </div>
+          )}
+
+          {isFeatureEnabled("sleep") && (
+            <div className="fade-in fade-in-5">
+              <StatCard
+                icon={<Icons.Moon />}
+                label={t("growth.avgSleep")}
+                value={avgSleep ? `${avgSleep}h` : "—"}
+                color={colors.sleep}
+                sub={t("growth.perDay30d")}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts */}
       <div

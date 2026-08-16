@@ -81,17 +81,17 @@ func TestRateLimitPerIPIsolation(t *testing.T) {
 }
 
 func TestRateLimitWindowExpiry(t *testing.T) {
-	rl := newRateLimiter(1, 30*time.Millisecond)
+	rl := NewLimiter(1, 30*time.Millisecond)
 
-	if !rl.allow("10.0.0.5") {
+	if !rl.Allow("10.0.0.5") {
 		t.Fatal("first attempt should be allowed")
 	}
-	if rl.allow("10.0.0.5") {
+	if rl.Allow("10.0.0.5") {
 		t.Fatal("second attempt inside window should be blocked")
 	}
 
 	time.Sleep(40 * time.Millisecond)
-	if !rl.allow("10.0.0.5") {
+	if !rl.Allow("10.0.0.5") {
 		t.Fatal("attempt after window expiry should be allowed")
 	}
 }

@@ -87,6 +87,10 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 		h.exportHeight(writer, childID)
 	case "head_circumference":
 		h.exportHeadCircumference(writer, childID)
+	case "pumping":
+		h.exportPumping(writer, childID)
+	case "milk_waste":
+		h.exportMilkWaste(writer, childID)
 	case "medications":
 		h.exportMedications(writer, childID)
 	case "milestones":
@@ -186,6 +190,35 @@ func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) {
 	}
 }
 
+// Pumping and uneaten milk are exported together with the bottle feeds above
+// because those three are what the milk-stock balance is computed from —
+// exporting one without the others leaves the figure unreconstructable.
+func (h *ExportHandler) exportPumping(w *csv.Writer, childID int) {
+	w.Write([]string{"Start", "End", "Amount", "Duration"})
+	var rows []models.Pumping
+	h.db.Select(&rows, `SELECT * FROM pumping WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	for _, r := range rows {
+		amount := ""
+		if r.Amount != nil {
+			amount = fmt.Sprintf("%.1f", *r.Amount)
+		}
+		dur := ""
+		if r.Duration != nil {
+			dur = *r.Duration
+		}
+		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), amount, dur})
+	}
+}
+
+func (h *ExportHandler) exportMilkWaste(w *csv.Writer, childID int) {
+	w.Write([]string{"Time", "Amount", "Notes"})
+	var rows []models.MilkWaste
+	h.db.Select(&rows, `SELECT * FROM milk_waste WHERE child_id = $1 ORDER BY time DESC`, childID)
+	for _, r := range rows {
+		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Amount), csvSafe(r.Notes)})
+	}
+}
+
 func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) {
 	w.Write([]string{"Time", "Name", "Dosage", "Unit", "Notes"})
 	var rows []models.Medication
@@ -228,6 +261,12 @@ func (h *ExportHandler) exportAll(w *csv.Writer, childID int) {
 	w.Write([]string{""})
 	w.Write([]string{"--- HEAD CIRCUMFERENCE ---"})
 	h.exportHeadCircumference(w, childID)
+	w.Write([]string{""})
+	w.Write([]string{"--- PUMPING ---"})
+	h.exportPumping(w, childID)
+	w.Write([]string{""})
+	w.Write([]string{"--- UNEATEN MILK ---"})
+	h.exportMilkWaste(w, childID)
 	w.Write([]string{""})
 	w.Write([]string{"--- MEDICATIONS ---"})
 	h.exportMedications(w, childID)

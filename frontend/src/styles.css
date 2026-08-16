@@ -1192,3 +1192,283 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Day view — date navigation above the chronological list
+   --------------------------------------------------------------------------- */
+
+.day-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.day-nav-btn {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.day-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.day-nav-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+}
+
+.day-nav-today {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.day-nav-today:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+   Routine view — an actogram: one column per day, midnight to midnight
+   --------------------------------------------------------------------------- */
+
+/* Shared by the track and the hour axis, so the labels line up with the marks. */
+.routine-plot {
+  --routine-track-h: 460px;
+  /* Night shading. A neutral grey at low alpha darkens the light theme and
+     lightens the dark one, so one value covers both. */
+  --routine-night: rgba(128, 132, 148, 0.14);
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.routine-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.routine-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.routine-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* An "on" chip is the default state — the chips filter *out*, so the muted
+   look means hidden, not unselected. */
+.routine-filter-on {
+  color: var(--text);
+  border-color: var(--routine-accent);
+  box-shadow: inset 0 0 0 1px var(--routine-accent);
+}
+
+.routine-filter svg {
+  width: 14px;
+  height: 14px;
+}
+
+.routine-filter:not(.routine-filter-on) svg {
+  opacity: 0.4;
+}
+
+/* Segmented control for the window length. */
+.routine-periods {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.routine-period {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.routine-period-on {
+  background: var(--border);
+  color: var(--text);
+}
+
+.routine-subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.routine-axis {
+  position: relative;
+  height: var(--routine-track-h);
+}
+
+.routine-axis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* A month of columns is wider than a phone. Scroll the plot inside its own box
+   rather than letting the page scroll sideways. */
+.routine-scroll {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.routine-cols {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: min-content;
+}
+
+.routine-col {
+  flex: 1 1 0;
+  min-width: 20px;
+  /* Without a ceiling, seven columns stretch across a desktop and every mark
+     reads as a wide bar rather than a moment. */
+  max-width: 46px;
+}
+
+.routine-cols-dense {
+  gap: 2px;
+}
+
+.routine-cols-dense .routine-col {
+  min-width: 11px;
+}
+
+/* One continuous 24-hour track. The night band and the six-hourly rules are
+   painted as backgrounds, so the day needs no child elements of its own and a
+   long sleep stays a single unbroken block. */
+.routine-track {
+  position: relative;
+  height: var(--routine-track-h);
+  border-radius: 5px;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--text) 4%, transparent);
+  background-image:
+    linear-gradient(
+      to bottom,
+      var(--routine-night) 0 29.1667%,
+      transparent 29.1667% 83.3333%,
+      var(--routine-night) 83.3333% 100%
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 calc(25% - 1px),
+      var(--border) calc(25% - 1px) 25%
+    );
+}
+
+.routine-mark {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 3px;
+  opacity: 0.92;
+}
+
+/* A point activity has no duration to draw, so it gets a short dash — narrower
+   than a span, so the two read as different kinds of thing. Raised above the
+   spans, and fully opaque, so a feed during a nap stays legible on top of the
+   sleep block rather than washing out through it. */
+.routine-mark-point {
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 1;
+  z-index: 2;
+}
+
+/* Today is only partly elapsed; without this the empty evening reads as a
+   suspiciously quiet day rather than one that hasn't happened yet. */
+.routine-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--text-muted);
+  opacity: 0.75;
+}
+
+.routine-col-head {
+  padding-top: 6px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.routine-col-day {
+  display: block;
+}
+
+.routine-col-date {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.routine-col-head-today {
+  color: var(--text);
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .routine-plot {
+    --routine-track-h: 380px;
+  }
+}

@@ -8,12 +8,14 @@ import { useI18n } from "../../utils/i18n";
 import { usePreferences } from "../../utils/preferences";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
 
+// Labels are i18n keys, resolved at render time — the module-scope constant
+// can't call t() itself.
 const COLORS = [
-  { value: "", label: "Not specified" },
-  { value: "black", label: "Black" },
-  { value: "brown", label: "Brown" },
-  { value: "green", label: "Green" },
-  { value: "yellow", label: "Yellow" },
+  { value: "", labelKey: "diaper.notSpecified" },
+  { value: "black", labelKey: "diaper.black" },
+  { value: "brown", labelKey: "diaper.brown" },
+  { value: "green", labelKey: "diaper.green" },
+  { value: "yellow", labelKey: "diaper.yellow" },
 ];
 
 export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, preset }) {
@@ -105,7 +107,7 @@ export default function DiaperForm({ childId, entry, onDone, onClose, onDelete, 
         </div>
         {solid && (
           <FormField label={t("diaper.color")}>
-            <FormSelect options={COLORS} value={color} onChange={(e) => setColor(e.target.value)} />
+            <FormSelect options={COLORS.map((c) => ({ value: c.value, label: t(c.labelKey) }))} value={color} onChange={(e) => setColor(e.target.value)} />
           </FormField>
         )}
         <FormField label={t("general.notes")}>

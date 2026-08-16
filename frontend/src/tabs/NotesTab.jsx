@@ -46,7 +46,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
     () => medications.filter((m) => matchesTag("medication", m.id)),
     [medications, tagMaps, filterTag]
   );
-  const noteTimeline = toNoteTimeline((notes || []).filter((n) => matchesTag("note", n.id)));
+  const noteTimeline = toNoteTimeline((notes || []).filter((n) => matchesTag("note", n.id)), t);
 
   return (
     <>

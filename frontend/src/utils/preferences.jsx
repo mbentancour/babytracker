@@ -23,6 +23,28 @@ const DEFAULT_PREFERENCES = {
     note: true,
   },
 
+  // Optional views. Kept separate from `features` above because those ids are
+  // also the RBAC feature namespace (App.jsx's TABS pass them to canRead), and
+  // these are presentation-only — there is no server-side "day" permission.
+  //
+  // Day and Routine default on, matching the convention that features ship
+  // enabled. Milk stock defaults off: it adds a new logging action and only
+  // means anything if you both pump and store, so it's opt-in.
+  views: {
+    day: true,
+    routine: true,
+    milkStock: false,
+  },
+
+  // How many days the Routine view plots. A week is too short to read a trend
+  // off — the point of that view is spotting a rhythm shifting, which needs
+  // several weeks of context.
+  routineDays: 14,
+
+  // Activity types hidden on the Routine plot. Empty means show everything —
+  // the chips narrow the view rather than building it up.
+  routineHidden: [],
+
   // Auto-calculate BMI from weight/height when no manual entry exists for a date
   autoCalculateBMI: true,
 
@@ -84,7 +106,10 @@ function loadPreferences() {
       // Deep merge with defaults to handle new fields
       return {
         features: { ...DEFAULT_PREFERENCES.features, ...parsed.features },
+        views: { ...DEFAULT_PREFERENCES.views, ...parsed.views },
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
+        routineDays: parsed.routineDays ?? DEFAULT_PREFERENCES.routineDays,
+        routineHidden: parsed.routineHidden ?? DEFAULT_PREFERENCES.routineHidden,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         photoQuality: parsed.photoQuality ?? DEFAULT_PREFERENCES.photoQuality,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,
@@ -111,8 +136,10 @@ function savePreferences(prefs) {
 const PreferencesContext = createContext({
   prefs: DEFAULT_PREFERENCES,
   setFeatureEnabled: () => {},
+  setViewEnabled: () => {},
   setFormDefault: () => {},
   isFeatureEnabled: () => true,
+  isViewEnabled: () => false,
   getFormDefault: () => undefined,
 });
 
@@ -131,6 +158,17 @@ export function PreferencesProvider({ children }) {
       const next = {
         ...prev,
         features: { ...prev.features, [feature]: enabled },
+      };
+      savePreferences(next);
+      return next;
+    });
+  }, []);
+
+  const setViewEnabled = useCallback((view, enabled) => {
+    setPrefs((prev) => {
+      const next = {
+        ...prev,
+        views: { ...prev.views, [view]: enabled },
       };
       savePreferences(next);
       return next;
@@ -156,6 +194,13 @@ export function PreferencesProvider({ children }) {
     [prefs.features]
   );
 
+  // Unlike isFeatureEnabled, an unknown view reads as disabled: views are
+  // opt-in surfaces, and a typo should hide one rather than silently show it.
+  const isViewEnabled = useCallback(
+    (view) => prefs.views?.[view] === true,
+    [prefs.views]
+  );
+
   const getFormDefault = useCallback(
     (formType, field) => prefs.defaults[formType]?.[field],
     [prefs.defaults]
@@ -170,7 +215,7 @@ export function PreferencesProvider({ children }) {
   }, []);
 
   return (
-    <PreferencesContext.Provider value={{ prefs, setFeatureEnabled, setFormDefault, isFeatureEnabled, getFormDefault, setPref }}>
+    <PreferencesContext.Provider value={{ prefs, setFeatureEnabled, setViewEnabled, setFormDefault, isFeatureEnabled, isViewEnabled, getFormDefault, setPref }}>
       {children}
     </PreferencesContext.Provider>
   );
@@ -197,6 +242,17 @@ export const FEATURE_LIST = [
   { id: "note", labelKey: "feature.note", descKey: "feature.noteDesc" },
 ];
 
+// Optional-view metadata for the settings UI, mirroring FEATURE_LIST.
+// Periods offered by the Routine view. 7 days barely shows a rhythm; 30 is
+// where a drift in bedtime or a lengthening night becomes obvious.
+export const ROUTINE_PERIODS = [7, 14, 30];
+
+export const VIEW_LIST = [
+  { id: "day", labelKey: "view.day", descKey: "view.dayDesc" },
+  { id: "routine", labelKey: "view.routine", descKey: "view.routineDesc" },
+  { id: "milkStock", labelKey: "view.milkStock", descKey: "view.milkStockDesc" },
+];
+
 // These use i18n keys — translate with t() at render time
 export const FEEDING_TYPES = [
   { value: "breast milk", labelKey: "feeding.breastMilk" },
@@ -213,3 +269,15 @@ export const FEEDING_METHODS = [
   { value: "parent fed", labelKey: "feeding.parentFed" },
   { value: "self fed", labelKey: "feeding.selfFed" },
 ];
+
+// The feeding types that come out of the expressed-milk stash. Fortified
+// breast milk counts because its base is thawed expressed milk; formula and
+// solids never came from the stash. Must stay in step with the type filter in
+// models.GetMilkStock, or the chart and the headline balance disagree.
+export const BREAST_MILK_TYPES = ["breast milk", "fortified breast milk"];
+
+// The subset of FEEDING_METHODS that is nursing at the breast. These are timed
+// rather than measured, so duration is the meaningful number for them — every
+// other method either records an amount or isn't a milk feed at all. Values
+// match the CHECK constraint on feedings.method.
+export const BREAST_METHODS = ["left breast", "right breast", "both breasts"];
