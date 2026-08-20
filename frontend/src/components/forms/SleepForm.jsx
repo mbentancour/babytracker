@@ -95,30 +95,31 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
           </>
         )}
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-          <button
-            type="button"
-            onClick={() => setNap(!nap)}
-            style={{
-              flex: 1,
-              padding: "10px 16px",
-              borderRadius: 10,
-              border: nap
-                ? `2px solid ${colors.sleep}`
-                : "1px solid var(--border)",
-              background: nap
-                ? `${colors.sleep}15`
-                : "var(--bg)",
-              color: nap
-                ? colors.sleep
-                : "var(--text-muted)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Nap
-          </button>
+          {[
+            { key: "nap", label: t("sleep.nap"), active: nap },
+            { key: "night", label: t("sleep.night"), active: !nap },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              type="button"
+              aria-pressed={btn.active}
+              onClick={() => setNap(btn.key === "nap")}
+              style={{
+                flex: 1,
+                padding: "10px 16px",
+                borderRadius: 10,
+                border: btn.active ? `2px solid ${colors.sleep}` : "1px solid var(--border)",
+                background: btn.active ? `${colors.sleep}15` : "var(--bg)",
+                color: btn.active ? colors.sleep : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {btn.label}
+            </button>
+          ))}
         </div>
         <FormField label={t("general.notes")}>
           <FormInput
