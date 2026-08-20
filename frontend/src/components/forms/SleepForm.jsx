@@ -14,6 +14,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
+  const [nap, setNap] = useState(entry?.nap ?? false);
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -36,11 +37,12 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
         const data = {
           start: localInputToUTC(start),
           end: localInputToUTC(end),
+          nap,
         };
         if (notes.trim()) data.notes = notes.trim();
         result = await api.updateSleep(entry.id, data);
       } else {
-        const data = { child: childId };
+        const data = { child: childId, nap };
         if (notes.trim()) data.notes = notes.trim();
         if (timerId) {
           data.timer = timerId;
@@ -92,6 +94,33 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
             </FormField>
           </>
         )}
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          {[
+            { key: "nap", label: t("sleep.nap"), active: nap },
+            { key: "night", label: t("sleep.night"), active: !nap },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              type="button"
+              aria-pressed={btn.active}
+              onClick={() => setNap(btn.key === "nap")}
+              style={{
+                flex: 1,
+                padding: "10px 16px",
+                borderRadius: 10,
+                border: btn.active ? `2px solid ${colors.sleep}` : "1px solid var(--border)",
+                background: btn.active ? `${colors.sleep}15` : "var(--bg)",
+                color: btn.active ? colors.sleep : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
         <FormField label={t("general.notes")}>
           <FormInput
             type="text"
