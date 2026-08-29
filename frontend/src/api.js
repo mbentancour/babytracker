@@ -449,19 +449,28 @@ export const api = {
   // Data export - fetches with auth and triggers download
   exportCSV: async (childId, type = "all") => {
     const endpoint = `${API_BASE}/export/csv?child=${childId}&type=${type}`;
-    const blob = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
+    const { blob, filename } = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
       const resp = await fetch(endpoint, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         credentials: "include",
         signal,
       });
-      if (!resp.ok) throw new Error("Export failed");
-      return resp.blob();
+      if (!resp.ok) {
+        try {
+          const error = await resp.json();
+          throw new Error(error.message || "Export failed");
+        } catch {
+          throw new Error(`Export failed: ${resp.statusText}`);
+        }
+      }
+      const blob = await resp.blob();
+      const filename = resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "babytracker-export.csv";
+      return { blob, filename };
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "babytracker-export.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   },

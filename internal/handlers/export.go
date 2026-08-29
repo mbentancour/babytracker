@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -72,40 +73,94 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	switch entityType {
 	case "feedings":
-		h.exportFeedings(writer, childID)
+		if err := h.exportFeedings(writer, childID); err != nil {
+			slog.Error("export feedings failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "sleep":
-		h.exportSleep(writer, childID)
+		if err := h.exportSleep(writer, childID); err != nil {
+			slog.Error("export sleep failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "changes":
-		h.exportChanges(writer, childID)
+		if err := h.exportChanges(writer, childID); err != nil {
+			slog.Error("export changes failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "tummy_times":
-		h.exportTummyTimes(writer, childID)
+		if err := h.exportTummyTimes(writer, childID); err != nil {
+			slog.Error("export tummy times failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "temperature":
-		h.exportTemperature(writer, childID)
+		if err := h.exportTemperature(writer, childID); err != nil {
+			slog.Error("export temperature failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "weight":
-		h.exportWeight(writer, childID)
+		if err := h.exportWeight(writer, childID); err != nil {
+			slog.Error("export weight failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "height":
-		h.exportHeight(writer, childID)
+		if err := h.exportHeight(writer, childID); err != nil {
+			slog.Error("export height failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "head_circumference":
-		h.exportHeadCircumference(writer, childID)
+		if err := h.exportHeadCircumference(writer, childID); err != nil {
+			slog.Error("export head circumference failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "pumping":
-		h.exportPumping(writer, childID)
+		if err := h.exportPumping(writer, childID); err != nil {
+			slog.Error("export pumping failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "milk_waste":
-		h.exportMilkWaste(writer, childID)
+		if err := h.exportMilkWaste(writer, childID); err != nil {
+			slog.Error("export milk waste failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "medications":
-		h.exportMedications(writer, childID)
+		if err := h.exportMedications(writer, childID); err != nil {
+			slog.Error("export medications failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "milestones":
-		h.exportMilestones(writer, childID)
+		if err := h.exportMilestones(writer, childID); err != nil {
+			slog.Error("export milestones failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	case "all":
-		h.exportAll(writer, childID)
+		if err := h.exportAll(writer, childID); err != nil {
+			slog.Error("export all failed", "error", err)
+			pagination.WriteError(w, http.StatusInternalServerError, "export failed")
+			return
+		}
 	default:
 		pagination.WriteError(w, http.StatusBadRequest, "unknown export type")
 	}
 }
 
-func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) error {
 	w.Write([]string{"Type", "Start", "End", "Method", "Amount", "Duration", "Notes"})
 	var rows []models.Feeding
-	h.db.Select(&rows, `SELECT * FROM feedings WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM feedings WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
+		return fmt.Errorf("query feedings: %w", err)
+	}
 	for _, r := range rows {
 		amount := ""
 		if r.Amount != nil {
@@ -117,12 +172,15 @@ func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) {
 		}
 		w.Write([]string{r.Type, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.Method, amount, dur, csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) error {
 	w.Write([]string{"Start", "End", "Duration", "Nap", "Notes"})
 	var rows []models.Sleep
-	h.db.Select(&rows, `SELECT * FROM sleep WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM sleep WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
+		return fmt.Errorf("query sleep: %w", err)
+	}
 	for _, r := range rows {
 		dur := ""
 		if r.Duration != nil {
@@ -130,21 +188,27 @@ func (h *ExportHandler) exportSleep(w *csv.Writer, childID int) {
 		}
 		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, fmt.Sprintf("%t", r.Nap), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportChanges(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportChanges(w *csv.Writer, childID int) error {
 	w.Write([]string{"Time", "Wet", "Solid", "Color", "Notes"})
 	var rows []models.Change
-	h.db.Select(&rows, `SELECT * FROM changes WHERE child_id = $1 ORDER BY time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM changes WHERE child_id = $1 ORDER BY time DESC`, childID); err != nil {
+		return fmt.Errorf("query changes: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%t", r.Wet), fmt.Sprintf("%t", r.Solid), r.Color, csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) error {
 	w.Write([]string{"Start", "End", "Duration", "Milestone", "Notes"})
 	var rows []models.TummyTime
-	h.db.Select(&rows, `SELECT * FROM tummy_times WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM tummy_times WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
+		return fmt.Errorf("query tummy times: %w", err)
+	}
 	for _, r := range rows {
 		dur := ""
 		if r.Duration != nil {
@@ -152,51 +216,66 @@ func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) {
 		}
 		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, csvSafe(r.Milestone),csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportTemperature(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportTemperature(w *csv.Writer, childID int) error {
 	w.Write([]string{"Time", "Temperature", "Notes"})
 	var rows []models.Temperature
-	h.db.Select(&rows, `SELECT * FROM temperature WHERE child_id = $1 ORDER BY time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM temperature WHERE child_id = $1 ORDER BY time DESC`, childID); err != nil {
+		return fmt.Errorf("query temperature: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Temperature), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportWeight(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportWeight(w *csv.Writer, childID int) error {
 	w.Write([]string{"Date", "Weight", "Notes"})
 	var rows []models.Weight
-	h.db.Select(&rows, `SELECT * FROM weight WHERE child_id = $1 ORDER BY date DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM weight WHERE child_id = $1 ORDER BY date DESC`, childID); err != nil {
+		return fmt.Errorf("query weight: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.2f", r.Weight), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportHeight(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportHeight(w *csv.Writer, childID int) error {
 	w.Write([]string{"Date", "Height", "Notes"})
 	var rows []models.Height
-	h.db.Select(&rows, `SELECT * FROM height WHERE child_id = $1 ORDER BY date DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM height WHERE child_id = $1 ORDER BY date DESC`, childID); err != nil {
+		return fmt.Errorf("query height: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.Height), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) error {
 	w.Write([]string{"Date", "Head Circumference", "Notes"})
 	var rows []models.HeadCircumference
-	h.db.Select(&rows, `SELECT * FROM head_circumference WHERE child_id = $1 ORDER BY date DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM head_circumference WHERE child_id = $1 ORDER BY date DESC`, childID); err != nil {
+		return fmt.Errorf("query head circumference: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Date, fmt.Sprintf("%.1f", r.HeadCircumference), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
 // Pumping and uneaten milk are exported together with the bottle feeds above
 // because those three are what the milk-stock balance is computed from —
 // exporting one without the others leaves the figure unreconstructable.
-func (h *ExportHandler) exportPumping(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportPumping(w *csv.Writer, childID int) error {
 	w.Write([]string{"Start", "End", "Amount", "Duration"})
 	var rows []models.Pumping
-	h.db.Select(&rows, `SELECT * FROM pumping WHERE child_id = $1 ORDER BY start_time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM pumping WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
+		return fmt.Errorf("query pumping: %w", err)
+	}
 	for _, r := range rows {
 		amount := ""
 		if r.Amount != nil {
@@ -208,69 +287,104 @@ func (h *ExportHandler) exportPumping(w *csv.Writer, childID int) {
 		}
 		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), amount, dur})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportMilkWaste(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportMilkWaste(w *csv.Writer, childID int) error {
 	w.Write([]string{"Time", "Amount", "Notes"})
 	var rows []models.MilkWaste
-	h.db.Select(&rows, `SELECT * FROM milk_waste WHERE child_id = $1 ORDER BY time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM milk_waste WHERE child_id = $1 ORDER BY time DESC`, childID); err != nil {
+		return fmt.Errorf("query milk waste: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), fmt.Sprintf("%.1f", r.Amount), csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportMedications(w *csv.Writer, childID int) error {
 	w.Write([]string{"Time", "Name", "Dosage", "Unit", "Notes"})
 	var rows []models.Medication
-	h.db.Select(&rows, `SELECT * FROM medications WHERE child_id = $1 ORDER BY time DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM medications WHERE child_id = $1 ORDER BY time DESC`, childID); err != nil {
+		return fmt.Errorf("query medications: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Time.Format(time.RFC3339), csvSafe(r.Name), csvSafe(r.Dosage), r.DosageUnit, csvSafe(r.Notes)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportMilestones(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportMilestones(w *csv.Writer, childID int) error {
 	w.Write([]string{"Date", "Title", "Category", "Description"})
 	var rows []models.Milestone
-	h.db.Select(&rows, `SELECT * FROM milestones WHERE child_id = $1 ORDER BY date DESC`, childID)
+	if err := h.db.Select(&rows, `SELECT * FROM milestones WHERE child_id = $1 ORDER BY date DESC`, childID); err != nil {
+		return fmt.Errorf("query milestones: %w", err)
+	}
 	for _, r := range rows {
 		w.Write([]string{r.Date, csvSafe(r.Title), r.Category, csvSafe(r.Description)})
 	}
+	return nil
 }
 
-func (h *ExportHandler) exportAll(w *csv.Writer, childID int) {
+func (h *ExportHandler) exportAll(w *csv.Writer, childID int) error {
 	w.Write([]string{"--- FEEDINGS ---"})
-	h.exportFeedings(w, childID)
+	if err := h.exportFeedings(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- SLEEP ---"})
-	h.exportSleep(w, childID)
+	if err := h.exportSleep(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- DIAPER CHANGES ---"})
-	h.exportChanges(w, childID)
+	if err := h.exportChanges(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- TUMMY TIME ---"})
-	h.exportTummyTimes(w, childID)
+	if err := h.exportTummyTimes(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- TEMPERATURE ---"})
-	h.exportTemperature(w, childID)
+	if err := h.exportTemperature(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- WEIGHT ---"})
-	h.exportWeight(w, childID)
+	if err := h.exportWeight(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- HEIGHT ---"})
-	h.exportHeight(w, childID)
+	if err := h.exportHeight(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- HEAD CIRCUMFERENCE ---"})
-	h.exportHeadCircumference(w, childID)
+	if err := h.exportHeadCircumference(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- PUMPING ---"})
-	h.exportPumping(w, childID)
+	if err := h.exportPumping(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- UNEATEN MILK ---"})
-	h.exportMilkWaste(w, childID)
+	if err := h.exportMilkWaste(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- MEDICATIONS ---"})
-	h.exportMedications(w, childID)
+	if err := h.exportMedications(w, childID); err != nil {
+		return err
+	}
 	w.Write([]string{""})
 	w.Write([]string{"--- MILESTONES ---"})
-	h.exportMilestones(w, childID)
+	if err := h.exportMilestones(w, childID); err != nil {
+		return err
+	}
+	return nil
 }

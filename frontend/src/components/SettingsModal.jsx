@@ -51,8 +51,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
     setExporting(true);
     try {
       await api.exportCSV(childId, type);
-    } catch {
-      alert("Export failed");
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
     }
     setExporting(false);
   };
