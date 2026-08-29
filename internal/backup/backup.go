@@ -130,8 +130,14 @@ func BuildArchive(databaseURL, dataDir string) (string, error) {
 	cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges")
 	cmd.Env = env
 	cmd.Stdout = tmpSQL
+	stderrBuf := new(strings.Builder)
+	cmd.Stderr = stderrBuf
 	if err := cmd.Run(); err != nil {
 		tmpSQL.Close()
+		stderr := stderrBuf.String()
+		if stderr != "" {
+			return cleanup(fmt.Errorf("pg_dump: %w (stderr: %s)", err, stderr))
+		}
 		return cleanup(fmt.Errorf("pg_dump: %w", err))
 	}
 	tmpSQL.Close()
