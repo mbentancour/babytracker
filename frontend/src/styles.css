@@ -259,6 +259,42 @@ body {
   background: #EF444425;
 }
 
+.timer-pause-btn {
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  border-radius: 8px;
+  border: 1px solid #8B5CF640;
+  background: #8B5CF615;
+  color: #8B5CF6;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.timer-pause-btn:hover {
+  background: #8B5CF625;
+}
+
+.timer-resume-btn {
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  border-radius: 8px;
+  border: 1px solid #06B6D440;
+  background: #06B6D415;
+  color: #06B6D4;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.timer-resume-btn:hover {
+  background: #06B6D425;
+}
+
+.timer-bar-paused {
+  opacity: 0.85;
+}
+
 /* Clickable entries */
 .entry-clickable {
   cursor: pointer;

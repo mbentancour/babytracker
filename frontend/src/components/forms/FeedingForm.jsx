@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
+import TimerPauseInfo from "../TimerPauseInfo";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
@@ -39,6 +40,23 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tagIds, setTagIds] = useState([]);
+  const [timer, setTimer] = useState(null);
+  // Load full timer data when using a timer (new entry) or when editing an entry that was created with a timer
+  useEffect(() => {
+    const loadTimer = async () => {
+      const tId = timerId || entry?.timer;
+      console.log("[FeedingForm] Loading timer. timerId:", timerId, "entry?.timer:", entry?.timer, "resolved tId:", tId);
+      if (!tId) return;
+      try {
+        const timerData = await api.getTimer(tId);
+        console.log("[FeedingForm] Timer loaded:", timerData);
+        setTimer(timerData);
+      } catch (err) {
+        console.error("[FeedingForm] Error loading timer:", err);
+      }
+    };
+    loadTimer();
+  }, [timerId, entry?.timer]);
   // Load existing tags when editing an entry so the picker starts pre-populated.
   useEffect(() => {
     if (!entry?.id) return;
@@ -119,6 +137,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
             </FormField>
           </>
         )}
+        {timer && <TimerPauseInfo timer={timer} />}
         <FormField label={t("general.notes")}>
           <FormInput
             type="text"
