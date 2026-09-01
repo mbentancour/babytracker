@@ -43,6 +43,8 @@ export default {
   "timer.feeding": "Repas",
   "timer.sleep": "Sommeil",
   "timer.tummy": "Temps sur le ventre",
+  "timer.actualDuration": "Durée réelle",
+  "timer.pauses": "Pauses",
 
   // Overview
   "overview.feedings": "Repas",
@@ -667,6 +669,8 @@ export default {
   "general.tapToEdit": "Touchez pour modifier",
   "general.baby": "Bébé",
   "timer.editStart": "Cliquez pour modifier l'heure de début",
+  "timer.pause": "Pause",
+  "timer.resume": "Reprendre",
   "general.addBaby": "Ajouter un bébé",
   "general.notes": "Notes",
   "general.time": "Heure",

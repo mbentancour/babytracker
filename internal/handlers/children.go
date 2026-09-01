@@ -140,6 +140,24 @@ func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startSt
 			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
 			return
 		}
+		
+		// Calculate end time: now - total pause duration
+		now := time.Now()
+		totalPauseDuration := time.Duration(0)
+		
+		// Sum up all completed pauses (those with both start and end times)
+		if len(timer.Pauses) > 0 {
+			for _, pause := range timer.Pauses {
+				if pause.Start != nil && pause.End != nil {
+					pauseDur := pause.End.Sub(*pause.Start)
+					totalPauseDuration += pauseDur
+				}
+			}
+		}
+		
+		// Subtract pause duration from now to get the actual end time
+		end = now.Add(-totalPauseDuration)
+		
 		// Timer cleanup is best-effort — the entry has already been logically
 		// derived from the timer, so we don't roll back on a stale timer row.
 		// But we *do* log it: a silent failure leaves a zombie timer in the
@@ -147,7 +165,7 @@ func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startSt
 		if err := models.DeleteTimer(db, *timerID); err != nil {
 			slog.Warn("timer cleanup failed after entry creation", "timer_id", *timerID, "error", err)
 		}
-		return timer.Start, time.Now(), timerID, true
+		return timer.Start, end, timerID, true
 	}
 	var err error
 	start, err = time.Parse("2006-01-02T15:04:05", startStr)

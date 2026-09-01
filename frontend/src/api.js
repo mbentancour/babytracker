@@ -366,10 +366,15 @@ export const api = {
 
   // Timers
   getTimers: () => request("timers/"),
+  getTimer: (id) => request(`timers/${id}/`),
   createTimer: (data) =>
     request("timers/", { method: "POST", body: JSON.stringify(data) }),
   updateTimer: (id, data) =>
     request(`timers/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  pauseTimer: (id) =>
+    request(`timers/${id}/pause/`, { method: "POST" }),
+  resumeTimer: (id) =>
+    request(`timers/${id}/resume/`, { method: "POST" }),
   deleteTimer: (id) => request(`timers/${id}/`, { method: "DELETE" }),
 
   // BMI

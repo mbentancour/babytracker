@@ -41,6 +41,8 @@ export default {
   "timer.feeding": "Måltid",
   "timer.sleep": "Søvn",
   "timer.tummy": "Mavetid",
+  "timer.actualDuration": "Faktisk varighed",
+  "timer.pauses": "Pauser",
 
   // Overview
   "overview.feedings": "Måltider",
@@ -638,6 +640,8 @@ export default {
   "general.tapToEdit": "Tryk for at redigere",
   "general.baby": "Baby",
   "timer.editStart": "Klik for at redigere starttid",
+  "timer.pause": "Pause",
+  "timer.resume": "Genoptag",
   "general.addBaby": "Tilføj baby",
   "general.notes": "Noter",
   "general.time": "Tid",

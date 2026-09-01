@@ -43,6 +43,8 @@ export default {
   "timer.feeding": "Mahlzeit",
   "timer.sleep": "Schlaf",
   "timer.tummy": "Bauchlage",
+  "timer.actualDuration": "Echte Dauer",
+  "timer.pauses": "Pausen",
 
   // Overview
   "overview.feedings": "Mahlzeiten",
@@ -667,6 +669,8 @@ export default {
   "general.tapToEdit": "Zum Bearbeiten tippen",
   "general.baby": "Baby",
   "timer.editStart": "Klicken, um die Startzeit zu bearbeiten",
+  "timer.pause": "Pausieren",
+  "timer.resume": "Fortsetzen",
   "general.addBaby": "Baby hinzufügen",
   "general.notes": "Notizen",
   "general.time": "Uhrzeit",

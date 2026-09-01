@@ -45,6 +45,8 @@ export default {
   "timer.feeding": "Feeding",
   "timer.sleep": "Sleep",
   "timer.tummy": "Tummy Time",
+  "timer.actualDuration": "Actual Duration",
+  "timer.pauses": "Pauses",
 
   // Overview
   "overview.feedings": "Feedings",
@@ -669,6 +671,8 @@ export default {
   "general.tapToEdit": "Tap to edit",
   "general.baby": "Baby",
   "timer.editStart": "Click to edit start time",
+  "timer.pause": "Pause",
+  "timer.resume": "Resume",
   "general.addBaby": "Add baby",
   "general.notes": "Notes",
   "general.time": "Time",
