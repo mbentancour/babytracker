@@ -130,6 +130,12 @@ function timerNameToType(name) {
   return "feeding";
 }
 
+function getTimerLabel(name, tr) {
+  const timerType = timerNameToType(name);
+  const timer = TIMER_TYPES.find((t) => t.id === timerType);
+  return timer ? tr(timer.labelKey) : name;
+}
+
 export default function App() {
   const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup-choice, setup, login, authenticated
@@ -599,7 +605,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             <Icons.Timer />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 500 }}>
-                {t.name}
+                {getTimerLabel(t.name, tr)}
                 {data.children.length > 1 && (
                   <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 6 }}>
                     ({data.children.find((c) => c.id === t.childId)?.first_name})
@@ -608,7 +614,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
               </span>
               {formatPauses(t.pauses) && (
                 <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
-                  Pause: {formatPauses(t.pauses)}
+                  {tr("timer.pauses")}: {formatPauses(t.pauses)}
                 </span>
               )}
             </div>
@@ -657,12 +663,16 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                   setModal({ type: timerNameToType(stopped.name), timerId: stopped.id });
                 }
               }}
+              title={tr("timer.save")}
+              aria-label={tr("timer.save")}
             >
-              {tr("timer.save")}
+              <Icons.Save />
             </button>
             <button
               className="timer-discard-btn"
               onClick={() => timer.discardTimer(t.id)}
+              title={tr("timer.discard")}
+              aria-label={tr("timer.discard")}
             >
               <Icons.X />
             </button>
@@ -678,7 +688,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             <Icons.Timer style={{ opacity: 0.7 }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.8 }}>
-                {t.name}
+                {getTimerLabel(t.name, tr)}
                 {data.children.length > 1 && (
                   <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 6 }}>
                     ({data.children.find((c) => c.id === t.childId)?.first_name})
@@ -687,7 +697,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
               </span>
               {formatPauses(t.pauses) && (
                 <span style={{ fontSize: 10, color: "var(--text-dim)", opacity: 0.7 }}>
-                  Pause: {formatPauses(t.pauses)}
+                  {tr("timer.pauses")}: {formatPauses(t.pauses)}
                 </span>
               )}
             </div>
@@ -736,8 +746,10 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                   setModal({ type: timerNameToType(stopped.name), timerId: stopped.id });
                 }
               }}
+              title={tr("timer.save")}
+              aria-label={tr("timer.save")}
             >
-              {tr("timer.save")}
+              <Icons.Save />
             </button>
             <button
               className="timer-discard-btn"

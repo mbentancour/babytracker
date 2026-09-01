@@ -3,7 +3,6 @@ import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
-import TimerPauseInfo from "../TimerPauseInfo";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
@@ -19,23 +18,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tagIds, setTagIds] = useState([]);
-  const [timer, setTimer] = useState(null);
-  // Load full timer data when using a timer (new entry) or when editing an entry that was created with a timer
-  useEffect(() => {
-    const loadTimer = async () => {
-      const tId = timerId || entry?.timer;
-      console.log("[TummyTimeForm] Loading timer. timerId:", timerId, "entry?.timer:", entry?.timer, "resolved tId:", tId);
-      if (!tId) return;
-      try {
-        const timerData = await api.getTimer(tId);
-        console.log("[TummyTimeForm] Timer loaded:", timerData);
-        setTimer(timerData);
-      } catch (err) {
-        console.error("[TummyTimeForm] Error loading timer:", err);
-      }
-    };
-    loadTimer();
-  }, [timerId, entry?.timer]);
+
   // Load existing tags when editing an entry so the picker starts pre-populated.
   useEffect(() => {
     if (!entry?.id) return;
@@ -108,7 +91,6 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
             </FormField>
           </>
         )}
-        {!isEdit && timerId && timer && <TimerPauseInfo timer={timer} />}
         <FormField label={`${t("milestone.title")} (${t("form.optional").toLowerCase()})`}>
           <FormInput
             value={milestone}

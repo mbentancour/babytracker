@@ -151,17 +151,12 @@ func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startSt
 				if pause.Start != nil && pause.End != nil {
 					pauseDur := pause.End.Sub(*pause.Start)
 					totalPauseDuration += pauseDur
-					slog.Info("pause found", "start", pause.Start, "end", pause.End, "duration", pauseDur.Seconds())
 				}
 			}
 		}
 		
-		slog.Info("resolveEntryTimes timer", "timerID", *timerID, "timerStart", timer.Start, "pauseCount", len(timer.Pauses), "totalPauseDuration", totalPauseDuration.Seconds())
-		
 		// Subtract pause duration from now to get the actual end time
 		end = now.Add(-totalPauseDuration)
-		
-		slog.Info("resolveEntryTimes result", "start", timer.Start, "end", end, "expectedDuration", end.Sub(timer.Start).Seconds())
 		
 		// Timer cleanup is best-effort — the entry has already been logically
 		// derived from the timer, so we don't roll back on a stale timer row.

@@ -227,17 +227,17 @@ body {
 }
 
 .timer-save-btn {
-  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  padding: 5px;
   border-radius: 8px;
-  border: 1px solid #22C55E40;
+  border: 1px solid #22c55e3d;;
   background: #22C55E15;
   color: #22C55E;
-  font-size: 12px;
-  font-weight: 600;
   cursor: pointer;
-  font-family: inherit;
   transition: background 0.2s;
 }
+
 
 .timer-save-btn:hover {
   background: #22C55E25;
