@@ -1,4 +1,3 @@
 -- Add pause support to timers
 ALTER TABLE timers ADD COLUMN IF NOT EXISTS is_paused BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE timers ADD COLUMN IF NOT EXISTS paused_elapsed INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE timers ADD COLUMN IF NOT EXISTS pauses JSONB DEFAULT '[]'::jsonb;

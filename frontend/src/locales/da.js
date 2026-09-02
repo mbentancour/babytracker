@@ -41,7 +41,6 @@ export default {
   "timer.feeding": "Måltid",
   "timer.sleep": "Søvn",
   "timer.tummy": "Mavetid",
-  "timer.actualDuration": "Faktisk varighed",
   "timer.pauses": "Pauser",
 
   // Overview
@@ -50,7 +49,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} måltider i dag",
   "overview.sleep": "Søvn",
   "overview.sleepLast24": "Sidste 24 timer",
-  "overview.diaperBreakdown": "{{wet}} våde · {{solid}} faste · {{both}} begge",
+  "overview.diaperBreakdown": "{{wet}} våde · {{solid}} faste ({{both}} begge)",
   "overview.sessionsToday_one": "{{count}} session i dag",
   "overview.sessionsToday_other": "{{count}} sessioner i dag",
   "overview.lastEntry": "For {{value}} siden",

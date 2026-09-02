@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -63,25 +65,6 @@ func (h *TimersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	webhooks.Fire("timer.started", t)
 	pagination.WriteJSON(w, http.StatusCreated, t)
-}
-
-func (h *TimersHandler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	if !ensureWritable(w, r, h.db, "timers", id) {
-		return
-	}
-
-	timer, err := models.GetTimer(h.db, id)
-	if err != nil || timer == nil {
-		pagination.WriteError(w, http.StatusNotFound, "timer not found")
-		return
-	}
-
-	pagination.WriteJSON(w, http.StatusOK, timer)
 }
 
 func (h *TimersHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -157,16 +140,25 @@ func (h *TimersHandler) Pause(w http.ResponseWriter, r *http.Request) {
 		UPDATE timers
 		SET pauses = COALESCE(pauses, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('start', to_jsonb($1::timestamptz), 'end', 'null'::jsonb)),
 		    is_paused = true
-		WHERE id = $2
-		RETURNING id, child_id, name, start_time, is_paused, paused_elapsed, COALESCE(pauses, '[]'::jsonb) as pauses, created_at
+		WHERE id = $2 AND is_paused = false
+		RETURNING id, child_id, name, start_time, is_paused, COALESCE(pauses, '[]'::jsonb) as pauses, created_at
 	`
 	timer := &models.Timer{}
 	err = h.db.QueryRowx(query, now, id).StructScan(timer)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Guarded so a second pause (stale client, double POST) can't append a
+		// second open entry that Resume would never close.
+		pagination.WriteError(w, http.StatusConflict, "timer not found or already paused")
+		return
+	}
+	if err == nil {
+		err = timer.UnmarshalPauses()
+	}
 	if err != nil {
 		pagination.WriteError(w, http.StatusInternalServerError, "failed to pause timer")
 		return
 	}
-	timer.UnmarshalPauses()
+	webhooks.Fire("timer.paused", timer)
 
 	pagination.WriteJSON(w, http.StatusOK, timer)
 }
@@ -187,15 +179,22 @@ func (h *TimersHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		SET pauses = jsonb_set(COALESCE(pauses, '[]'::jsonb), ('{' || (jsonb_array_length(COALESCE(pauses, '[]'::jsonb)) - 1) || ',end}')::text[], to_jsonb($1::timestamptz)),
 		    is_paused = false
 		WHERE id = $2 AND is_paused = true
-		RETURNING id, child_id, name, start_time, is_paused, paused_elapsed, COALESCE(pauses, '[]'::jsonb) as pauses, created_at
+		RETURNING id, child_id, name, start_time, is_paused, COALESCE(pauses, '[]'::jsonb) as pauses, created_at
 	`
 	timer := &models.Timer{}
 	err = h.db.QueryRowx(query, now, id).StructScan(timer)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		pagination.WriteError(w, http.StatusNotFound, "timer not found or not paused")
 		return
 	}
-	timer.UnmarshalPauses()
+	if err == nil {
+		err = timer.UnmarshalPauses()
+	}
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to resume timer")
+		return
+	}
+	webhooks.Fire("timer.resumed", timer)
 
 	pagination.WriteJSON(w, http.StatusOK, timer)
 }

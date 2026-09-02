@@ -4,7 +4,7 @@ import { useTimers } from "./hooks/useTimers";
 import { UnitContext } from "./utils/units";
 import { Icons } from "./components/Icons";
 import { colors } from "./utils/colors";
-import { getAge, formatElapsed } from "./utils/formatters";
+import { getAge, formatElapsed, formatTime } from "./utils/formatters";
 import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPersistence, bootstrapSession } from "./api";
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
@@ -100,12 +100,6 @@ const ACTION_GROUPS = [
 const ENTRY_FEATURE_OVERRIDES = { milkWaste: "pumping" };
 const entryFeature = (type) => ENTRY_FEATURE_OVERRIDES[type] || type;
 
-const formatTime = (date) => {
-  if (!date) return "";
-  const d = new Date(date);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-};
-
 const formatPauses = (pauses) => {
   if (!pauses || pauses.length === 0) return "";
   const completedPauses = pauses.filter((p) => p.start && p.end);
@@ -131,8 +125,11 @@ function timerNameToType(name) {
 }
 
 function getTimerLabel(name, tr) {
-  const timerType = timerNameToType(name);
-  const timer = TIMER_TYPES.find((t) => t.id === timerType);
+  // Only the app's own timer kinds get a translated label; a custom name
+  // created through the API is shown verbatim.
+  const n = (name || "").toLowerCase();
+  if (!n.includes("feed") && !n.includes("sleep") && !n.includes("tummy")) return name;
+  const timer = TIMER_TYPES.find((t) => t.id === timerNameToType(name));
   return timer ? tr(timer.labelKey) : name;
 }
 
@@ -754,6 +751,8 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
             <button
               className="timer-discard-btn"
               onClick={() => timer.discardTimer(t.id)}
+              title={tr("timer.discard")}
+              aria-label={tr("timer.discard")}
             >
               <Icons.X />
             </button>

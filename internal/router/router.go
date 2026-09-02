@@ -163,7 +163,6 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		// Timers
 		r.Get("/api/timers/", timersH.List)
 		r.Post("/api/timers/", timersH.Create)
-		r.Get("/api/timers/{id}/", timersH.Get)
 		r.Patch("/api/timers/{id}/", timersH.Update)
 		r.Post("/api/timers/{id}/pause/", timersH.Pause)
 		r.Post("/api/timers/{id}/resume/", timersH.Resume)
