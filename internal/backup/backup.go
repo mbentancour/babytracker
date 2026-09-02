@@ -130,8 +130,17 @@ func BuildArchive(databaseURL, dataDir string) (string, error) {
 	cmd := exec.Command("pg_dump", "--clean", "--if-exists", "--no-owner", "--no-privileges")
 	cmd.Env = env
 	cmd.Stdout = tmpSQL
+	stderrBuf := new(strings.Builder)
+	cmd.Stderr = stderrBuf
+	slog.Debug("running pg_dump", "host", os.Getenv("PGHOST"), "database", os.Getenv("PGDATABASE"))
 	if err := cmd.Run(); err != nil {
 		tmpSQL.Close()
+		stderr := stderrBuf.String()
+		if stderr != "" {
+			slog.Error("pg_dump failed", "error", err, "stderr", stderr)
+			return cleanup(fmt.Errorf("pg_dump: %w (stderr: %s)", err, stderr))
+		}
+		slog.Error("pg_dump failed", "error", err, "stderr", "(empty)")
 		return cleanup(fmt.Errorf("pg_dump: %w", err))
 	}
 	tmpSQL.Close()
@@ -520,8 +529,13 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			reset := exec.Command("psql", "-v", "ON_ERROR_STOP=1",
 				"-c", "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
 			reset.Env = env
-			reset.Stderr = os.Stderr
+			resetStderr := new(strings.Builder)
+			reset.Stderr = resetStderr
 			if err := reset.Run(); err != nil {
+				stderr := resetStderr.String()
+				if stderr != "" {
+					return fmt.Errorf("schema reset: %w (stderr: %s)", err, stderr)
+				}
 				return fmt.Errorf("schema reset: %w", err)
 			}
 			// Run the dump in a single transaction with ON_ERROR_STOP so any
@@ -533,12 +547,17 @@ func restoreFromReader(r io.Reader, databaseURL, dataDir string, wipePhotos bool
 			cmd.Env = env
 			filtered := filterIncompatibleSQL(tr)
 			cmd.Stdin = filtered
-			cmd.Stderr = os.Stderr
+			cmdStderr := new(strings.Builder)
+			cmd.Stderr = cmdStderr
 			runErr := cmd.Run()
 			// Always close: on a mid-stream psql abort this unblocks the
 			// feeder goroutine that would otherwise leak (see the func doc).
 			filtered.Close()
 			if runErr != nil {
+				stderr := cmdStderr.String()
+				if stderr != "" {
+					return fmt.Errorf("database restore: %w (stderr: %s)", runErr, stderr)
+				}
 				return fmt.Errorf("database restore: %w", runErr)
 			}
 			slog.Info("database restored from backup")

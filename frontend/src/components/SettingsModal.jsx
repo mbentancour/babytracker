@@ -51,8 +51,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
     setExporting(true);
     try {
       await api.exportCSV(childId, type);
-    } catch {
-      alert("Export failed");
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
     }
     setExporting(false);
   };
@@ -86,7 +86,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
           {/* Mobile: dropdown */}
           <div className="settings-nav-mobile">
             <select
-              className="form-select"
+              className="tab-select"
               value={section}
               onChange={(e) => setSection(e.target.value)}
             >

@@ -164,6 +164,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/timers/", timersH.List)
 		r.Post("/api/timers/", timersH.Create)
 		r.Patch("/api/timers/{id}/", timersH.Update)
+		r.Post("/api/timers/{id}/pause/", timersH.Pause)
+		r.Post("/api/timers/{id}/resume/", timersH.Resume)
 		r.Delete("/api/timers/{id}/", timersH.Delete)
 
 		// Temperature

@@ -88,6 +88,18 @@ func TestRBACTagCarveOut(t *testing.T) {
 	}
 }
 
+// Pause/resume are POSTs on an existing timer with no child in the request;
+// they must pass RBAC like PATCH/DELETE (the handler enforces ownership)
+// rather than hit the "child parameter required" branch meant for creates.
+func TestRBACTimerActionPostsPass(t *testing.T) {
+	for _, path := range []string{"/api/timers/5/pause/", "/api/timers/5/resume/"} {
+		rec, next := rbacRequest(t, http.MethodPost, path, false, "")
+		if rec.Code != http.StatusOK || !next.called {
+			t.Errorf("POST %s: non-admin timer action blocked: got %d", path, rec.Code)
+		}
+	}
+}
+
 func TestRBACUnknownPathDeniedByDefault(t *testing.T) {
 	rec, next := rbacRequest(t, http.MethodGet, "/api/does-not-exist", false, "")
 	if rec.Code != http.StatusForbidden {

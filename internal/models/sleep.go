@@ -7,16 +7,18 @@ import (
 )
 
 type Sleep struct {
-	ID        int       `db:"id" json:"id"`
-	ChildID   int       `db:"child_id" json:"child"`
-	Start     time.Time `db:"start_time" json:"start"`
-	End       time.Time `db:"end_time" json:"end"`
-	Duration  *string   `db:"duration" json:"duration"`
-	Nap       bool      `db:"nap" json:"nap"`
-	Notes     string    `db:"notes" json:"notes"`
-	TimerID   *int      `db:"timer_id" json:"timer"`
-	Photo     string    `db:"photo" json:"photo"`
-	CreatedAt time.Time `db:"created_at" json:"-"`
+	ID       int       `db:"id" json:"id"`
+	ChildID  int       `db:"child_id" json:"child"`
+	Start    time.Time `db:"start_time" json:"start"`
+	End      time.Time `db:"end_time" json:"end"`
+	Duration *string   `db:"duration" json:"duration"`
+	// Seconds the source timer spent paused; duration excludes them.
+	PausedSeconds int       `db:"paused_seconds" json:"paused_seconds"`
+	Nap           bool      `db:"nap" json:"nap"`
+	Notes         string    `db:"notes" json:"notes"`
+	TimerID       *int      `db:"timer_id" json:"timer"`
+	Photo         string    `db:"photo" json:"photo"`
+	CreatedAt     time.Time `db:"created_at" json:"-"`
 }
 
 type SleepInput struct {
@@ -30,9 +32,9 @@ type SleepInput struct {
 
 func CreateSleep(db *sqlx.DB, s *Sleep) error {
 	return db.QueryRowx(
-		`INSERT INTO sleep (child_id, start_time, end_time, nap, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-		s.ChildID, s.Start, s.End, s.Nap, s.Notes, s.TimerID,
+		`INSERT INTO sleep (child_id, start_time, end_time, paused_seconds, nap, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		s.ChildID, s.Start, s.End, s.PausedSeconds, s.Nap, s.Notes, s.TimerID,
 	).StructScan(s)
 }
 

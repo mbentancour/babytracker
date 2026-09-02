@@ -43,6 +43,7 @@ export default {
   "timer.feeding": "Repas",
   "timer.sleep": "Sommeil",
   "timer.tummy": "Temps sur le ventre",
+  "timer.pauses": "Pauses",
 
   // Overview
   "overview.feedings": "Repas",
@@ -50,7 +51,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} repas aujourd'hui",
   "overview.sleep": "Sommeil",
   "overview.sleepLast24": "Dernières 24 heures",
-  "overview.diaperBreakdown": "{{wet}} urine · {{solid}} selles · {{both}} les deux",
+  "overview.diaperBreakdown": "{{wet}} urine · {{solid}} selles ({{both}} les deux)",
   "overview.sessionsToday_one": "{{count}} séance aujourd'hui",
   "overview.sessionsToday_other": "{{count}} séances aujourd'hui",
   "overview.lastEntry": "Il y a {{value}}",
@@ -667,6 +668,8 @@ export default {
   "general.tapToEdit": "Touchez pour modifier",
   "general.baby": "Bébé",
   "timer.editStart": "Cliquez pour modifier l'heure de début",
+  "timer.pause": "Pause",
+  "timer.resume": "Reprendre",
   "general.addBaby": "Ajouter un bébé",
   "general.notes": "Notes",
   "general.time": "Heure",

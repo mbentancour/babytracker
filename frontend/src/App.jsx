@@ -4,7 +4,7 @@ import { useTimers } from "./hooks/useTimers";
 import { UnitContext } from "./utils/units";
 import { Icons } from "./components/Icons";
 import { colors } from "./utils/colors";
-import { getAge, formatElapsed } from "./utils/formatters";
+import { getAge, formatElapsed, formatTime } from "./utils/formatters";
 import { api, setAccessToken, getAccessToken, setOnAuthRequired, enableTokenPersistence, bootstrapSession } from "./api";
 import { usePreferences } from "./utils/preferences";
 import { useI18n } from "./utils/i18n";
@@ -100,6 +100,15 @@ const ACTION_GROUPS = [
 const ENTRY_FEATURE_OVERRIDES = { milkWaste: "pumping" };
 const entryFeature = (type) => ENTRY_FEATURE_OVERRIDES[type] || type;
 
+const formatPauses = (pauses) => {
+  if (!pauses || pauses.length === 0) return "";
+  const completedPauses = pauses.filter((p) => p.start && p.end);
+  if (completedPauses.length === 0) return "";
+  return completedPauses
+    .map((p) => `${formatTime(p.start)}-${formatTime(p.end)}`)
+    .join(", ");
+};
+
 const TIMER_TYPES = [
   { id: "feeding", labelKey: "timer.feeding", icon: <Icons.Bottle />, color: colors.feeding },
   { id: "sleep", labelKey: "timer.sleep", icon: <Icons.Moon />, color: colors.sleep },
@@ -113,6 +122,15 @@ function timerNameToType(name) {
   if (n.includes("sleep")) return "sleep";
   if (n.includes("tummy")) return "tummy";
   return "feeding";
+}
+
+function getTimerLabel(name, tr) {
+  // Only the app's own timer kinds get a translated label; a custom name
+  // created through the API is shown verbatim.
+  const n = (name || "").toLowerCase();
+  if (!n.includes("feed") && !n.includes("sleep") && !n.includes("tummy")) return name;
+  const timer = TIMER_TYPES.find((t) => t.id === timerNameToType(name));
+  return timer ? tr(timer.labelKey) : name;
 }
 
 export default function App() {
@@ -582,14 +600,21 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="timer-pulse" />
             <Icons.Timer />
-            <span style={{ fontSize: 13, fontWeight: 500 }}>
-              {t.name}
-              {data.children.length > 1 && (
-                <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 6 }}>
-                  ({data.children.find((c) => c.id === t.childId)?.first_name})
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>
+                {getTimerLabel(t.name, tr)}
+                {data.children.length > 1 && (
+                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 6 }}>
+                    ({data.children.find((c) => c.id === t.childId)?.first_name})
+                  </span>
+                )}
+              </span>
+              {formatPauses(t.pauses) && (
+                <span style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                  {tr("timer.pauses")}: {formatPauses(t.pauses)}
                 </span>
               )}
-            </span>
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {editingTimerId === t.id ? (
@@ -620,6 +645,14 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
               </span>
             )}
             <button
+              className="timer-pause-btn"
+              onClick={() => timer.pauseTimer(t.id)}
+              title={tr("timer.pause")}
+              aria-label={tr("timer.pause")}
+            >
+              <Icons.Pause />
+            </button>
+            <button
               className="timer-save-btn"
               onClick={async () => {
                 const stopped = await timer.stopTimer(t.id);
@@ -627,12 +660,99 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
                   setModal({ type: timerNameToType(stopped.name), timerId: stopped.id });
                 }
               }}
+              title={tr("timer.save")}
+              aria-label={tr("timer.save")}
             >
-              {tr("timer.save")}
+              <Icons.Save />
             </button>
             <button
               className="timer-discard-btn"
               onClick={() => timer.discardTimer(t.id)}
+              title={tr("timer.discard")}
+              aria-label={tr("timer.discard")}
+            >
+              <Icons.X />
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* Paused Timer Bars */}
+      {timer.pausedTimers.map((t) => (
+        <div key={t.id} className="timer-bar timer-bar-paused fade-in">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="timer-pulse" style={{ opacity: 0.5 }} />
+            <Icons.Timer style={{ opacity: 0.7 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.8 }}>
+                {getTimerLabel(t.name, tr)}
+                {data.children.length > 1 && (
+                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 6 }}>
+                    ({data.children.find((c) => c.id === t.childId)?.first_name})
+                  </span>
+                )}
+              </span>
+              {formatPauses(t.pauses) && (
+                <span style={{ fontSize: 10, color: "var(--text-dim)", opacity: 0.7 }}>
+                  {tr("timer.pauses")}: {formatPauses(t.pauses)}
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {editingTimerId === t.id ? (
+              <input
+                type="datetime-local"
+                className="timer-edit-input"
+                defaultValue={toLocalDatetime(t.start)}
+                autoFocus
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    timer.editTimer(t.id, localInputToUTC(e.target.value));
+                  }
+                  setEditingTimerId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.target.blur();
+                  if (e.key === "Escape") setEditingTimerId(null);
+                }}
+              />
+            ) : (
+              <span
+                className="timer-elapsed"
+                style={{ cursor: "pointer" }}
+                title={tr("timer.editStart")}
+                onClick={() => setEditingTimerId(t.id)}
+              >
+                {formatElapsed(timer.elapsedMap[t.id] || 0)}
+              </span>
+            )}
+            <button
+              className="timer-resume-btn"
+              onClick={() => timer.resumePausedTimer(t.id)}
+              title={tr("timer.resume")}
+              aria-label={tr("timer.resume")}
+            >
+              <Icons.Play />
+            </button>
+            <button
+              className="timer-save-btn"
+              onClick={async () => {
+                const stopped = await timer.stopTimer(t.id);
+                if (stopped) {
+                  setModal({ type: timerNameToType(stopped.name), timerId: stopped.id });
+                }
+              }}
+              title={tr("timer.save")}
+              aria-label={tr("timer.save")}
+            >
+              <Icons.Save />
+            </button>
+            <button
+              className="timer-discard-btn"
+              onClick={() => timer.discardTimer(t.id)}
+              title={tr("timer.discard")}
+              aria-label={tr("timer.discard")}
             >
               <Icons.X />
             </button>

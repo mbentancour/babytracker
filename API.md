@@ -497,10 +497,17 @@ Body: `{child, time, note}`
 GET    /api/timers/            List all active timers
 POST   /api/timers/            Create
 PATCH  /api/timers/{id}/       Update (e.g., change start time)
+POST   /api/timers/{id}/pause/ Pause a running timer (409 if already paused)
+POST   /api/timers/{id}/resume/ Resume a paused timer (404 if not paused)
 DELETE /api/timers/{id}/       Delete (discard timer)
 ```
 
 Body (create): `{child, name}` — `name` is e.g. "Feeding", "Sleep", "Tummy Time"
+
+Timer responses carry `is_paused` and `pauses`, a list of `{start, end}`
+periods where `end` is `null` for the pause that is still open. When an entry
+is created from a timer, its `end` is the real end time and the paused time is
+stored in `paused_seconds`; the entry's `duration` excludes it.
 
 ---
 
@@ -686,6 +693,8 @@ Activity events fire on `POST` (or `DELETE` for timers):
 | `head_circumference.created` | `POST /api/head-circumference/` |
 | `bmi.created` | `POST /api/bmi/` |
 | `timer.started` | `POST /api/timers/` |
+| `timer.paused` | `POST /api/timers/{id}/pause/` |
+| `timer.resumed` | `POST /api/timers/{id}/resume/` |
 | `timer.stopped` | `DELETE /api/timers/{id}/` |
 
 `*.updated` / `*.deleted` events are not emitted in v1 — use polling (or the explicit API) to reconcile state changes.

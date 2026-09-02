@@ -7,16 +7,18 @@ import (
 )
 
 type TummyTime struct {
-	ID        int       `db:"id" json:"id"`
-	ChildID   int       `db:"child_id" json:"child"`
-	Start     time.Time `db:"start_time" json:"start"`
-	End       time.Time `db:"end_time" json:"end"`
-	Duration  *string   `db:"duration" json:"duration"`
-	Milestone string    `db:"milestone" json:"milestone"`
-	Notes     string    `db:"notes" json:"notes"`
-	TimerID   *int      `db:"timer_id" json:"timer"`
-	Photo     string    `db:"photo" json:"photo"`
-	CreatedAt time.Time `db:"created_at" json:"-"`
+	ID       int       `db:"id" json:"id"`
+	ChildID  int       `db:"child_id" json:"child"`
+	Start    time.Time `db:"start_time" json:"start"`
+	End      time.Time `db:"end_time" json:"end"`
+	Duration *string   `db:"duration" json:"duration"`
+	// Seconds the source timer spent paused; duration excludes them.
+	PausedSeconds int       `db:"paused_seconds" json:"paused_seconds"`
+	Milestone     string    `db:"milestone" json:"milestone"`
+	Notes         string    `db:"notes" json:"notes"`
+	TimerID       *int      `db:"timer_id" json:"timer"`
+	Photo         string    `db:"photo" json:"photo"`
+	CreatedAt     time.Time `db:"created_at" json:"-"`
 }
 
 type TummyTimeInput struct {
@@ -30,9 +32,9 @@ type TummyTimeInput struct {
 
 func CreateTummyTime(db *sqlx.DB, t *TummyTime) error {
 	return db.QueryRowx(
-		`INSERT INTO tummy_times (child_id, start_time, end_time, milestone, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-		t.ChildID, t.Start, t.End, t.Milestone, t.Notes, t.TimerID,
+		`INSERT INTO tummy_times (child_id, start_time, end_time, paused_seconds, milestone, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+		t.ChildID, t.Start, t.End, t.PausedSeconds, t.Milestone, t.Notes, t.TimerID,
 	).StructScan(t)
 }
 

@@ -7,18 +7,20 @@ import (
 )
 
 type Feeding struct {
-	ID        int        `db:"id" json:"id"`
-	ChildID   int        `db:"child_id" json:"child"`
-	Start     time.Time  `db:"start_time" json:"start"`
-	End       time.Time  `db:"end_time" json:"end"`
-	Type      string     `db:"type" json:"type"`
-	Method    string     `db:"method" json:"method"`
-	Amount    *float64   `db:"amount" json:"amount"`
-	Duration  *string    `db:"duration" json:"duration"`
-	Notes     string     `db:"notes" json:"notes"`
-	TimerID   *int       `db:"timer_id" json:"timer"`
-	Photo     string     `db:"photo" json:"photo"`
-	CreatedAt time.Time  `db:"created_at" json:"-"`
+	ID       int       `db:"id" json:"id"`
+	ChildID  int       `db:"child_id" json:"child"`
+	Start    time.Time `db:"start_time" json:"start"`
+	End      time.Time `db:"end_time" json:"end"`
+	Type     string    `db:"type" json:"type"`
+	Method   string    `db:"method" json:"method"`
+	Amount   *float64  `db:"amount" json:"amount"`
+	Duration *string   `db:"duration" json:"duration"`
+	// Seconds the source timer spent paused; duration excludes them.
+	PausedSeconds int       `db:"paused_seconds" json:"paused_seconds"`
+	Notes         string    `db:"notes" json:"notes"`
+	TimerID       *int      `db:"timer_id" json:"timer"`
+	Photo         string    `db:"photo" json:"photo"`
+	CreatedAt     time.Time `db:"created_at" json:"-"`
 }
 
 type FeedingInput struct {
@@ -34,9 +36,9 @@ type FeedingInput struct {
 
 func CreateFeeding(db *sqlx.DB, f *Feeding) error {
 	return db.QueryRowx(
-		`INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-		f.ChildID, f.Start, f.End, f.Type, f.Method, f.Amount, f.Notes, f.TimerID,
+		`INSERT INTO feedings (child_id, start_time, end_time, paused_seconds, type, method, amount, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+		f.ChildID, f.Start, f.End, f.PausedSeconds, f.Type, f.Method, f.Amount, f.Notes, f.TimerID,
 	).StructScan(f)
 }
 

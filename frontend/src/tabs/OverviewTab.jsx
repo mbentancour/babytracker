@@ -93,8 +93,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const lastTummy = lastSeen(weeklyTummyTimes);
   const lastPumping = lastSeen(weeklyPumping);
 
-  const wetCount = changes.filter((c) => c.wet && !c.solid).length;
-  const solidCount = changes.filter((c) => c.solid && !c.wet).length;
+  const wetCount = changes.filter((c) => c.wet).length;
+  const solidCount = changes.filter((c) => c.solid).length;
   const bothCount = changes.filter((c) => c.wet && c.solid).length;
 
   // Recharts v3 dropped `activePayload` from chart click events, so we can't

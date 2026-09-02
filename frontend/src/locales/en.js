@@ -45,6 +45,7 @@ export default {
   "timer.feeding": "Feeding",
   "timer.sleep": "Sleep",
   "timer.tummy": "Tummy Time",
+  "timer.pauses": "Pauses",
 
   // Overview
   "overview.feedings": "Feedings",
@@ -52,7 +53,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} feedings today",
   "overview.sleep": "Sleep",
   "overview.sleepLast24": "Last 24 hours",
-  "overview.diaperBreakdown": "{{wet}} wet · {{solid}} solid · {{both}} both",
+  "overview.diaperBreakdown": "{{wet}} wet · {{solid}} solid ({{both}} both)",
   "overview.sessionsToday_one": "{{count}} session today",
   "overview.sessionsToday_other": "{{count}} sessions today",
   "overview.lastEntry": "Last: {{value}} ago",
@@ -669,6 +670,8 @@ export default {
   "general.tapToEdit": "Tap to edit",
   "general.baby": "Baby",
   "timer.editStart": "Click to edit start time",
+  "timer.pause": "Pause",
+  "timer.resume": "Resume",
   "general.addBaby": "Add baby",
   "general.notes": "Notes",
   "general.time": "Time",

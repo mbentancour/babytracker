@@ -19,6 +19,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tagIds, setTagIds] = useState([]);
+
   // Load existing tags when editing an entry so the picker starts pre-populated.
   useEffect(() => {
     if (!entry?.id) return;

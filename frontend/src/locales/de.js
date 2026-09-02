@@ -43,6 +43,7 @@ export default {
   "timer.feeding": "Mahlzeit",
   "timer.sleep": "Schlaf",
   "timer.tummy": "Bauchlage",
+  "timer.pauses": "Pausen",
 
   // Overview
   "overview.feedings": "Mahlzeiten",
@@ -50,7 +51,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} Mahlzeiten heute",
   "overview.sleep": "Schlaf",
   "overview.sleepLast24": "Letzte 24 Stunden",
-  "overview.diaperBreakdown": "{{wet}} nass · {{solid}} fest · {{both}} beides",
+  "overview.diaperBreakdown": "{{wet}} nass · {{solid}} fest ({{both}} beides)",
   "overview.sessionsToday_one": "{{count}} Einheit heute",
   "overview.sessionsToday_other": "{{count}} Einheiten heute",
   "overview.lastEntry": "Vor {{value}}",
@@ -667,6 +668,8 @@ export default {
   "general.tapToEdit": "Zum Bearbeiten tippen",
   "general.baby": "Baby",
   "timer.editStart": "Klicken, um die Startzeit zu bearbeiten",
+  "timer.pause": "Pausieren",
+  "timer.resume": "Fortsetzen",
   "general.addBaby": "Baby hinzufügen",
   "general.notes": "Notizen",
   "general.time": "Uhrzeit",

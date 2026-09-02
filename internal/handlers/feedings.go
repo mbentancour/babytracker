@@ -59,12 +59,13 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:   input.Notes,
 	}
 
-	start, end, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	start, end, pausedSeconds, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
 	if !ok {
 		return
 	}
 	f.Start = start
 	f.End = end
+	f.PausedSeconds = pausedSeconds
 	f.TimerID = timerID
 
 	if f.Type == "" {

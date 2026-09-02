@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -57,6 +58,11 @@ var adminWritePaths = map[string]bool{
 	"/api/users/":    true,
 	"/api/roles/":    true,
 }
+
+// Action POSTs on an existing timer row. They carry no child in the body or
+// query, so like PATCH/DELETE the handler's ensureWritable resolves the row's
+// real child_id and checks ownership; the middleware just lets them through.
+var timerActionPath = regexp.MustCompile(`^/api/timers/\d+/(pause|resume)/$`)
 
 // RBAC middleware checks per-child, per-feature permissions for non-admin users.
 func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
@@ -139,6 +145,10 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 
 			// Determine child ID from query param or request body
 			childID := getChildIDFromRequest(r)
+			if childID == 0 && r.Method == http.MethodPost && timerActionPath.MatchString(path) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if childID == 0 {
 				// Caller has to have access to at least one child. If they
 				// do, we decide how strict to be based on method:

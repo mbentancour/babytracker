@@ -370,6 +370,10 @@ export const api = {
     request("timers/", { method: "POST", body: JSON.stringify(data) }),
   updateTimer: (id, data) =>
     request(`timers/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  pauseTimer: (id) =>
+    request(`timers/${id}/pause/`, { method: "POST" }),
+  resumeTimer: (id) =>
+    request(`timers/${id}/resume/`, { method: "POST" }),
   deleteTimer: (id) => request(`timers/${id}/`, { method: "DELETE" }),
 
   // BMI
@@ -449,19 +453,33 @@ export const api = {
   // Data export - fetches with auth and triggers download
   exportCSV: async (childId, type = "all") => {
     const endpoint = `${API_BASE}/export/csv?child=${childId}&type=${type}`;
-    const blob = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
+    const { blob, filename } = await withTimeout(TRANSFER_TIMEOUT_MS, endpoint, async (signal) => {
       const resp = await fetch(endpoint, {
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         credentials: "include",
         signal,
       });
-      if (!resp.ok) throw new Error("Export failed");
-      return resp.blob();
+      if (!resp.ok) {
+        // Prefer the server's {error} body; fall back to the HTTP status
+        // (statusText is empty over HTTP/2). The caller adds the
+        // "Export failed:" prefix, so don't repeat it here.
+        let message = resp.statusText || `HTTP ${resp.status}`;
+        try {
+          const body = await resp.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // not a JSON body
+        }
+        throw new Error(message);
+      }
+      const blob = await resp.blob();
+      const filename = resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "babytracker-export.csv";
+      return { blob, filename };
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = resp.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "babytracker-export.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   },

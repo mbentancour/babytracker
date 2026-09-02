@@ -129,17 +129,41 @@ func filterAllowed(body map[string]any, allowed map[string]string) map[string]an
 
 // resolveEntryTimes derives start/end for a duration-style entry (feeding,
 // sleep, tummy time). When timerID is set the timer's start anchors the
-// entry, "now" closes it, and the timer is consumed; otherwise the caller's
-// startStr/endStr are parsed as the API's tz-naive
+// entry, "now" closes it, the time the timer spent paused is returned as
+// pausedSeconds (the entry stores it so the generated duration excludes it
+// while end_time stays the real end), and the timer is consumed; otherwise
+// the caller's startStr/endStr are parsed as the API's tz-naive
 // "2006-01-02T15:04:05" UTC layout. On any error it writes the response
 // itself and returns ok=false; the caller should just `return`.
-func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startStr, endStr string) (start, end time.Time, resolvedTimer *int, ok bool) {
+func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startStr, endStr string) (start, end time.Time, pausedSeconds int, resolvedTimer *int, ok bool) {
 	if timerID != nil {
 		timer, err := models.GetTimer(db, *timerID)
 		if err != nil {
 			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
 			return
 		}
+
+		end = time.Now()
+		// The timer start is freely editable, so it can land in the future;
+		// refuse rather than persist an inverted row.
+		if end.Before(timer.Start) {
+			pagination.WriteError(w, http.StatusBadRequest, "timer start is later than its end")
+			return
+		}
+		// A pause that is still open (timer saved while paused) runs until now.
+		var paused time.Duration
+		for _, pause := range timer.Pauses {
+			if pause.Start == nil {
+				continue
+			}
+			pauseEnd := end
+			if pause.End != nil {
+				pauseEnd = *pause.End
+			}
+			paused += pauseEnd.Sub(*pause.Start)
+		}
+		pausedSeconds = int(paused / time.Second)
+
 		// Timer cleanup is best-effort — the entry has already been logically
 		// derived from the timer, so we don't roll back on a stale timer row.
 		// But we *do* log it: a silent failure leaves a zombie timer in the
@@ -147,7 +171,7 @@ func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startSt
 		if err := models.DeleteTimer(db, *timerID); err != nil {
 			slog.Warn("timer cleanup failed after entry creation", "timer_id", *timerID, "error", err)
 		}
-		return timer.Start, time.Now(), timerID, true
+		return timer.Start, end, pausedSeconds, timerID, true
 	}
 	var err error
 	start, err = time.Parse("2006-01-02T15:04:05", startStr)

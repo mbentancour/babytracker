@@ -41,6 +41,7 @@ export default {
   "timer.feeding": "Måltid",
   "timer.sleep": "Søvn",
   "timer.tummy": "Mavetid",
+  "timer.pauses": "Pauser",
 
   // Overview
   "overview.feedings": "Måltider",
@@ -48,7 +49,7 @@ export default {
   "overview.feedingsToday_other": "{{count}} måltider i dag",
   "overview.sleep": "Søvn",
   "overview.sleepLast24": "Sidste 24 timer",
-  "overview.diaperBreakdown": "{{wet}} våde · {{solid}} faste · {{both}} begge",
+  "overview.diaperBreakdown": "{{wet}} våde · {{solid}} faste ({{both}} begge)",
   "overview.sessionsToday_one": "{{count}} session i dag",
   "overview.sessionsToday_other": "{{count}} sessioner i dag",
   "overview.lastEntry": "For {{value}} siden",
@@ -638,6 +639,8 @@ export default {
   "general.tapToEdit": "Tryk for at redigere",
   "general.baby": "Baby",
   "timer.editStart": "Klik for at redigere starttid",
+  "timer.pause": "Pause",
+  "timer.resume": "Genoptag",
   "general.addBaby": "Tilføj baby",
   "general.notes": "Noter",
   "general.time": "Tid",
