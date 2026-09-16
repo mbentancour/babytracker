@@ -1,7 +1,7 @@
 # Stage 1: Build frontend
 # Pinned to BUILDPLATFORM: the output is plain JS/CSS/HTML with no architecture
 # of its own, so running npm under QEMU once per target arch was pure waste.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
