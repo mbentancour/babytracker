@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormSelect, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
+import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
@@ -35,6 +36,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
   const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount) : "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
+  const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -59,6 +61,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
       if (isEdit) {
         data.start = localInputToUTC(start);
         data.end = localInputToUTC(end);
+        data.paused_seconds = Math.max(0, Math.round(Number(pausedMinutes) || 0) * 60);
         result = await api.updateFeeding(entry.id, data);
       } else {
         data.child = childId;
@@ -119,6 +122,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
             </FormField>
           </>
         )}
+        <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <FormField label={t("general.notes")}>
           <FormInput
             type="text"

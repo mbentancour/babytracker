@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
+import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
@@ -15,6 +16,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   const [milestone, setMilestone] = useState(entry?.milestone || "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(tenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
+  const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tagIds, setTagIds] = useState([]);
@@ -35,6 +37,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
       let result;
       if (isEdit) {
         const data = { start: localInputToUTC(start), end: localInputToUTC(end) };
+        data.paused_seconds = Math.max(0, Math.round(Number(pausedMinutes) || 0) * 60);
         if (milestone.trim()) data.milestone = milestone.trim();
         result = await api.updateTummyTime(entry.id, data);
       } else {
@@ -91,6 +94,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
             </FormField>
           </>
         )}
+        <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <FormField label={`${t("milestone.title")} (${t("form.optional").toLowerCase()})`}>
           <FormInput
             value={milestone}

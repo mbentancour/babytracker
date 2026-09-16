@@ -5,6 +5,10 @@ FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
+# Vite 8.x permits every Rolldown 1.2.x release, but 1.2.8 has a native
+# binding enum mismatch on Node 26 Alpine. Keep Vite unchanged and use the
+# compatible Rolldown patch only in this Linux build environment.
+RUN npm install --no-save --package-lock=false rolldown@1.2.4
 COPY frontend/ ./
 RUN npm run build
 

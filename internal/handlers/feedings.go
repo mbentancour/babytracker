@@ -98,15 +98,20 @@ func (h *FeedingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !validPausedSeconds(body) {
+		pagination.WriteError(w, http.StatusBadRequest, "paused_seconds must be a nonnegative integer")
+		return
+	}
 
 	allowed := map[string]string{
-		"start":  "start_time",
-		"end":    "end_time",
-		"type":   "type",
-		"method": "method",
-		"amount": "amount",
-		"notes":  "notes",
-		"photo":  "photo",
+		"start":          "start_time",
+		"end":            "end_time",
+		"type":           "type",
+		"method":         "method",
+		"amount":         "amount",
+		"notes":          "notes",
+		"photo":          "photo",
+		"paused_seconds": "paused_seconds",
 	}
 	updates := filterAllowed(body, allowed)
 

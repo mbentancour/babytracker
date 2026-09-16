@@ -3,6 +3,7 @@ import { api } from "../../api";
 import Modal, { FormField, FormInput, FormButton, FormDeleteButton } from "../Modal";
 import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
+import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
@@ -15,6 +16,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [nap, setNap] = useState(entry?.nap ?? false);
+  const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -39,6 +41,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
           start: localInputToUTC(start),
           end: localInputToUTC(end),
           nap,
+          paused_seconds: Math.max(0, Math.round(Number(pausedMinutes) || 0) * 60),
         };
         if (notes.trim()) data.notes = notes.trim();
         result = await api.updateSleep(entry.id, data);
@@ -95,6 +98,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
             </FormField>
           </>
         )}
+        <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
           {[
             { key: "nap", label: t("sleep.nap"), active: nap },

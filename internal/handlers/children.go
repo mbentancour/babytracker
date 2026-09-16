@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -125,6 +126,15 @@ func filterAllowed(body map[string]any, allowed map[string]string) map[string]an
 		}
 	}
 	return updates
+}
+
+func validPausedSeconds(body map[string]any) bool {
+	v, ok := body["paused_seconds"]
+	if !ok {
+		return true
+	}
+	seconds, ok := v.(float64)
+	return ok && seconds >= 0 && seconds == math.Trunc(seconds)
 }
 
 // resolveEntryTimes derives start/end for a duration-style entry (feeding,
