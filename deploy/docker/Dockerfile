@@ -11,7 +11,7 @@ RUN npm run build
 # Stage 2: Build Go binary
 # Also pinned to BUILDPLATFORM and cross-compiled via GOOS/GOARCH - with
 # CGO_ENABLED=0 Go cross-compiles natively, so this needs no emulation either.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS go-builder
 # VERSION is injected into the binary for the Settings → Server → Updates
 # display. Set it from CI, docker-compose build args, or HA add-on build.
 ARG VERSION=dev
