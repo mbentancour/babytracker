@@ -89,7 +89,7 @@ func New() *Config {
 		jwtSecret = loadOrCreateSecret(dataDir)
 	}
 
-	databaseURL := envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=prefer")
+	databaseURL := escapeUserinfoAt(envOrDefault("DATABASE_URL", "postgres://babytracker:babytracker@localhost:5432/babytracker?sslmode=prefer"))
 	warnIfInsecureDatabaseURL(databaseURL)
 
 	c := &Config{
@@ -115,6 +115,33 @@ func New() *Config {
 	}
 	c.setupMode.Store(fileExists(filepath.Join(dataDir, ".needs-setup")))
 	return c
+}
+
+// escapeUserinfoAt percent-encodes every "@" in a postgres:// URL's userinfo
+// except the one that ends it. Since 5.11, pgx parses URLs the way libpq
+// does, ending the userinfo at the first "@"; net/url, which pgx used before
+// and migrations and backups still use, ends it at the last. docker-compose
+// builds DATABASE_URL from POSTGRES_PASSWORD unencoded, so a password with an
+// "@" in it connected before 5.11 and afterwards sent the rest of the password
+// to DNS as the host name. Encoded, every parser reads the same credentials.
+func escapeUserinfoAt(raw string) string {
+	scheme := "postgres://"
+	rest, ok := strings.CutPrefix(raw, scheme)
+	if !ok {
+		scheme = "postgresql://"
+		if rest, ok = strings.CutPrefix(raw, scheme); !ok {
+			return raw
+		}
+	}
+	authEnd := strings.IndexAny(rest, "/?")
+	if authEnd < 0 {
+		authEnd = len(rest)
+	}
+	last := strings.LastIndex(rest[:authEnd], "@")
+	if last < 0 || !strings.Contains(rest[:last], "@") {
+		return raw
+	}
+	return scheme + strings.ReplaceAll(rest[:last], "@", "%40") + rest[last:]
 }
 
 // warnIfInsecureDatabaseURL logs a warning when the DATABASE_URL points at a
