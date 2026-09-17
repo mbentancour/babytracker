@@ -1,0 +1,4 @@
+# Both Dockerfiles run `npm ci` and then `COPY frontend/ ./`. A local
+# node_modules in the build context would overwrite the image's Linux install
+# with host binaries (e.g. macOS rolldown bindings) and break `vite build`.
+**/node_modules
