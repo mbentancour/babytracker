@@ -3,6 +3,7 @@ import {
   formatElapsed,
   parseDuration,
   formatDuration,
+  formatSleepDuration,
   formatHoursMinutes,
   avgFeedingGap,
   avgBreastDuration,
@@ -56,6 +57,20 @@ describe("formatDuration", () => {
 
   it("renders an em dash for missing duration", () => {
     expect(formatDuration("")).toBe("—");
+  });
+});
+
+describe("formatSleepDuration", () => {
+  it("shows minutes below an hour and decimal hours at or above an hour", () => {
+    expect(formatSleepDuration(0.4)).toBe("24m");
+    expect(formatSleepDuration(0.083)).toBe("5m");
+    expect(formatSleepDuration(1)).toBe("1.0h");
+    expect(formatSleepDuration(2.3)).toBe("2.3h");
+  });
+
+  it("renders an em dash for invalid values", () => {
+    expect(formatSleepDuration(undefined)).toBe("—");
+    expect(formatSleepDuration(-1)).toBe("—");
   });
 });
 

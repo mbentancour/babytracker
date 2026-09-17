@@ -30,6 +30,7 @@ import {
   getEntriesForDay,
   overlapHours,
   parseDuration,
+  formatSleepDuration,
   getDisplayLocale,
   mostRecentAt,
   lastSeenLabel,
@@ -274,7 +275,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
-                      label={`${s.duration.toFixed(1)}h${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                      label={`${formatSleepDuration(s.duration)}${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
                       detail={t("general.timeRange", { from: s.start, to: s.end })}
                       color={colors.sleep}
                       isLast={i === arr.length - 1}

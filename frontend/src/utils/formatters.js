@@ -173,6 +173,14 @@ export function formatDuration(durationStr) {
   return `${hours.toFixed(1)}h`;
 }
 
+// Sleep timeline labels use minutes for short sessions and decimal hours for
+// sessions lasting at least an hour, keeping short naps readable at a glance.
+export function formatSleepDuration(hours) {
+  if (!Number.isFinite(hours) || hours < 0) return "—";
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  return `${hours.toFixed(1)}h`;
+}
+
 // Renders a duration given in hours as "4h 39m" / "39m" / "2h". Distinct from
 // formatDuration(), which takes the server's interval string and rounds to one
 // decimal — too coarse for a feeding gap, where the minutes are the point.
