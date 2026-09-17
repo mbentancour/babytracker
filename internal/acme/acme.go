@@ -616,13 +616,33 @@ func (m *Manager) loadOrCreateAccount(cfg Config) (*legoUser, error) {
 	// Try loading registration
 	regData, err := os.ReadFile(m.accountDataPath())
 	if err == nil {
-		var reg acme.ExtendedAccount
-		if json.Unmarshal(regData, &reg) == nil {
-			user.reg = &reg
-		}
+		user.reg = parseAccount(regData)
 	}
 
 	return user, nil
+}
+
+// parseAccount decodes account.json in either format it has been written
+// in: lego v4's {"body": {...}, "uri": "<account URL>"} or v5's top-level
+// account fields with the URL under "accountURL". Both decode without error
+// into the other's struct, just empty, so the account URL is what tells
+// them apart. Without one the client signs with an embedded JWK instead of
+// a key ID, which the CA rejects for everything but account creation, so
+// it returns nil and newClient registers again (the CA hands back the
+// existing account for this key).
+func parseAccount(data []byte) *acme.ExtendedAccount {
+	var reg acme.ExtendedAccount
+	if json.Unmarshal(data, &reg) == nil && reg.Location != "" {
+		return &reg
+	}
+	var legacy struct {
+		Body acme.Account `json:"body"`
+		URI  string       `json:"uri"`
+	}
+	if json.Unmarshal(data, &legacy) == nil && legacy.URI != "" {
+		return &acme.ExtendedAccount{Account: legacy.Body, Location: legacy.URI}
+	}
+	return nil
 }
 
 func (m *Manager) saveAccount(user *legoUser) {
