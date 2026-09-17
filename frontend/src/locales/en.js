@@ -674,7 +674,7 @@ export default {
   "timer.resume": "Resume",
   "general.addBaby": "Add baby",
   "general.notes": "Notes",
-  "general.duration": "Total duration",
+  "general.duration": "Duration excluding pauses",
   "general.paused": "Paused",
   "general.pausedMinutes": "Paused (minutes)",
   "general.time": "Time",

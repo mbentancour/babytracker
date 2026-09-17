@@ -480,7 +480,7 @@ export default {
   "timer.resume": "Reanudar",
   "general.addBaby": "Agregar bebé",
   "general.notes": "Notas",
-  "general.duration": "Duración total",
+  "general.duration": "Duración sin pausas",
   "general.paused": "En pausa",
   "general.pausedMinutes": "En pausa (minutos)",
   "general.time": "Hora",

@@ -643,7 +643,7 @@ export default {
   "timer.resume": "Genoptag",
   "general.addBaby": "Tilføj baby",
   "general.notes": "Noter",
-  "general.duration": "Samlet varighed",
+  "general.duration": "Varighed uden pauser",
   "general.paused": "Sat på pause",
   "general.pausedMinutes": "Sat på pause (minutter)",
   "general.time": "Tid",

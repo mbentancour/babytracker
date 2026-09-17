@@ -672,7 +672,7 @@ export default {
   "timer.resume": "Riprendi",
   "general.addBaby": "Aggiungi bambino",
   "general.notes": "Note",
-  "general.duration": "Durata totale",
+  "general.duration": "Durata senza pause",
   "general.paused": "In pausa",
   "general.pausedMinutes": "In pausa (minuti)",
   "general.time": "Ora",
