@@ -93,6 +93,13 @@ export default function Modal({ title, children, onClose, headerAction }) {
           borderRadius: 16,
           width: "100%",
           maxWidth: 400,
+          // Cap the dialog at the overlay's height and scroll the content
+          // below a fixed header. Without it a form taller than the window
+          // is centered past both edges of the fixed overlay, where nothing
+          // can scroll it into view.
+          maxHeight: "100%",
+          display: "flex",
+          flexDirection: "column",
           overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
@@ -104,6 +111,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
             justifyContent: "space-between",
             padding: "16px 20px",
             borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
@@ -126,7 +134,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
             <Icons.X />
           </button>
         </div>
-        <div ref={contentRef} style={{ padding: "20px" }}>{children}</div>
+        <div ref={contentRef} style={{ padding: "20px", overflowY: "auto", overscrollBehavior: "contain" }}>{children}</div>
       </div>
     </div>
   );
