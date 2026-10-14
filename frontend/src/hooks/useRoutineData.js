@@ -52,7 +52,7 @@ export function useRoutineData(childId, canRead = () => true, days = ROUTINE_DAY
 
     try {
       const [feedings, sleepEntries, changes, tummyTimes, pumping] = await Promise.all([
-        q("feeding", () => api.getFeedings({ child: childId, start_min: min, ordering: "start", ...page })),
+        q("feeding", () => api.getFeedings({ child: childId, start_min: spanMin, ordering: "start", ...page })),
         q("sleep", () => api.getSleep({ child: childId, start_min: spanMin, ordering: "start", ...page })),
         q("diaper", () => api.getChanges({ child: childId, date_min: min, ordering: "time", ...page })),
         q("tummy", () => api.getTummyTimes({ child: childId, start_min: spanMin, ordering: "start", ...page })),

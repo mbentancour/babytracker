@@ -23,10 +23,11 @@ import { toLocalDateKey } from "../hooks/useDayData";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const ACTIVITIES = [
-  { id: "feeding", color: colors.feeding, labelKey: "action.feeding", icon: <Icons.Bottle />, timed: false },
-  { id: "sleep", color: colors.sleep, labelKey: "action.sleep", icon: <Icons.Moon />, timed: true },
+  { id: "feeding", color: colors.feeding, labelKey: "action.feeding", icon: <Icons.Bottle />, timed: true },
+  // openEnded: a running session with no end yet is drawn up to now.
+  { id: "sleep", color: colors.sleep, labelKey: "action.sleep", icon: <Icons.Moon />, timed: true, openEnded: true },
   { id: "diaper", color: colors.diaper, labelKey: "action.diaper", icon: <Icons.Droplet />, timed: false },
-  { id: "tummy", color: colors.tummy, labelKey: "action.tummy", icon: <Icons.Sun />, timed: true },
+  { id: "tummy", color: colors.tummy, labelKey: "action.tummy", icon: <Icons.Sun />, timed: true, openEnded: true },
   { id: "pumping", color: colors.pumping, labelKey: "action.pumping", icon: <Icons.Bottle />, timed: false },
 ];
 
@@ -34,28 +35,28 @@ const ACTIVITIES = [
 // every six gives enough to place a mark by eye.
 const AXIS_HOURS = [0, 6, 12, 18];
 
-// The end of a timed entry: its own end_time when it has one, otherwise its
-// start plus the server-computed duration, otherwise "still running".
-function entryEnd(entry, startMs) {
+// The end of an entry as recorded: its end_time, or its start plus the
+// server-computed duration. Null when neither exists.
+function recordedEnd(entry, startMs) {
   if (entry.end) {
     const end = new Date(entry.end).getTime();
     if (Number.isFinite(end) && end > startMs) return end;
   }
   const hours = parseDuration(entry.duration);
   if (hours > 0) return startMs + hours * 3600000;
-  return Math.min(Date.now(), startMs + DAY_MS);
+  return null;
 }
 
 export default function RoutineTab({ childId, canRead = () => true }) {
   const { t } = useI18n();
-  const { prefs, setPref, isFeatureEnabled } = usePreferences();
+  const { prefs, setPref } = usePreferences();
   const days = prefs.routineDays || 14;
   const { entries, loading, error } = useRoutineData(childId, canRead, days);
 
   // Empty means "show everything" — the chips narrow the view rather than
   // building it up, so the plot is useful before you touch anything.
   const hidden = prefs.routineHidden || [];
-  const available = ACTIVITIES.filter((a) => isFeatureEnabled(a.id) && canRead(a.id));
+  const available = ACTIVITIES.filter((a) => canRead(a.id));
   const toggle = (id) =>
     setPref("routineHidden", hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id]);
 
@@ -87,7 +88,9 @@ export default function RoutineTab({ childId, canRead = () => true }) {
         const startMs = new Date(entry[timeKey]).getTime();
         if (!Number.isFinite(startMs)) return;
 
-        if (!activity.timed) {
+        // Without a recorded end, a feed is a single moment rather than a span.
+        const recorded = recordedEnd(entry, startMs);
+        if (!activity.timed || (recorded === null && !activity.openEnded)) {
           const col = indexByDay.get(toLocalDateKey(new Date(startMs)));
           if (col === undefined) return;
           cols[col].push({
@@ -103,7 +106,7 @@ export default function RoutineTab({ childId, canRead = () => true }) {
         // A session running past midnight is clipped into one piece per day it
         // touches, so it reads as a block reaching the bottom of one column and
         // continuing from the top of the next — which is what actually happened.
-        const endMs = entryEnd(entry, startMs);
+        const endMs = recorded ?? Math.min(Date.now(), startMs + DAY_MS);
         for (let col = 0; col < dayList.length; col++) {
           const dayStart = startOfDay[col];
           const dayEnd = dayStart + DAY_MS;
@@ -129,11 +132,12 @@ export default function RoutineTab({ childId, canRead = () => true }) {
     place(byId.tummy, entries.tummyTimes, "start");
     place(byId.pumping, entries.pumping, "start");
 
-    // Spans first, dots last, so a feed that happened during a nap paints over
-    // the sleep block instead of being buried under it. Without this the most
-    // interesting marks — the ones inside a long sleep — are the ones you
-    // can't see.
-    cols.forEach((col) => col.sort((a, b) => (a.height === null) - (b.height === null)));
+    // Longest spans first and dots last, so a feed inside a nap paints over the
+    // sleep block instead of being buried under it.
+    cols.forEach((col) => col.sort((a, b) => {
+      if (a.height === null || b.height === null) return (a.height === null) - (b.height === null);
+      return b.height - a.height;
+    }));
     return cols;
   }, [entries, dayList, hidden, available, t]);
 
