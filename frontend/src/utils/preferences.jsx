@@ -45,6 +45,9 @@ const DEFAULT_PREFERENCES = {
   // the chips narrow the view rather than building it up.
   routineHidden: [],
 
+  // Activity types hidden on the Day timeline. Same semantics as routineHidden.
+  dayHidden: [],
+
   // Auto-calculate BMI from weight/height when no manual entry exists for a date
   autoCalculateBMI: true,
 
@@ -110,6 +113,7 @@ function loadPreferences() {
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
         routineDays: parsed.routineDays ?? DEFAULT_PREFERENCES.routineDays,
         routineHidden: parsed.routineHidden ?? DEFAULT_PREFERENCES.routineHidden,
+        dayHidden: parsed.dayHidden ?? DEFAULT_PREFERENCES.dayHidden,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         photoQuality: parsed.photoQuality ?? DEFAULT_PREFERENCES.photoQuality,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,

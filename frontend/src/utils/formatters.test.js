@@ -16,6 +16,7 @@ import {
   mostRecentAt,
   lastSeenLabel,
   dailyFeedingCountsByType,
+  aggregateDiapersByDay,
 } from "./formatters";
 
 describe("formatElapsed", () => {
@@ -267,6 +268,24 @@ describe("dailyFeedingCountsByType", () => {
 
     const d1 = result.find((d) => d.date === relativeDateLabel(1));
     expect(d1.other).toBe(1);
+  });
+});
+
+describe("aggregateDiapersByDay", () => {
+  it("returns seven days, counting changes per local day", () => {
+    const now = new Date();
+    const todayChange = { id: 1, time: now.toISOString() };
+    const twoDaysAgo = new Date(now);
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const oldChange = { id: 2, time: twoDaysAgo.toISOString() };
+    const outside = { id: 3, time: new Date(now.getTime() - 30 * 86400000).toISOString() };
+
+    const result = aggregateDiapersByDay([todayChange, oldChange, outside]);
+
+    expect(result).toHaveLength(7);
+    expect(result[6].count).toBe(1);
+    expect(result[4].count).toBe(1);
+    expect(result.reduce((sum, d) => sum + d.count, 0)).toBe(2);
   });
 });
 

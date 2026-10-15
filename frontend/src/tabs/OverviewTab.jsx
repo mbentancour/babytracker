@@ -28,6 +28,7 @@ import {
   aggregateByDayOfWeek,
   aggregateSleepByDay,
   aggregateTummyByDay,
+  aggregateDiapersByDay,
   getEntriesForDay,
   overlapHours,
   parseDuration,
@@ -51,11 +52,13 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const [selectedBar, setSelectedBar] = useState(null);
   const [sleepType, setSleepType] = useState("total");
   const [sleepPeriod, setSleepPeriod] = useState("today");
+  const [diaperType, setDiaperType] = useState("total");
   const touchSelectionUntil = useRef(0);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
-  const diaperTimeline = toDiaperTimeline(changes, t);
+  const diaperMatches = (c) => diaperType === "total" || (diaperType === "wet" ? c.wet : c.solid);
+  const diaperTimeline = toDiaperTimeline(changes.filter(diaperMatches), t);
   const sleepBlocks = toSleepBlocks(sleepEntries);
   const filteredSleepBlocks = sleepType === "total"
     ? sleepBlocks
@@ -66,6 +69,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
     : weeklySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
   const sleepByDay = aggregateSleepByDay(filteredWeeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
+  const filteredWeeklyChanges = weeklyChanges.filter(diaperMatches);
+  const diapersByDay = aggregateDiapersByDay(filteredWeeklyChanges);
   const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume, t);
   const pumpingByDay = aggregateByDayOfWeek(weeklyPumping, "amount");
 
@@ -165,6 +170,8 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       dayData = getEntriesForDay(weeklyTummyTimes, day, "start");
     } else if (type === "pumping") {
       dayData = getEntriesForDay(weeklyPumping, day, "start");
+    } else if (type === "diaper") {
+      dayData = getEntriesForDay(filteredWeeklyChanges, day, "time");
     }
     setSelectedBar(null);
     setDayModal({ day, type, data: dayData });
@@ -377,7 +384,16 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
 
         {/* Diapers */}
         {isFeatureEnabled("diaper") && <div className="fade-in fade-in-5">
-          <SectionCard title={t("overview.diaperChanges")} icon={<Icons.Droplet />} color={colors.diaper}>
+          <SectionCard
+            title={t("overview.diaperChanges")}
+            icon={<Icons.Droplet />}
+            color={colors.diaper}
+            action={<DiaperTypeToggle value={diaperType} onChange={(type) => {
+              setDiaperType(type);
+              setSelectedBar(null);
+              setDayModal(null);
+            }} />}
+          >
             {diaperTimeline.length > 0 ? (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -442,6 +458,31 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 20 }}>
                 {t("overview.noDiapers")}
               </div>
+            )}
+            {diapersByDay.some((d) => d.count > 0) && (
+              <>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "diaper", diapersByDay, "count")} onClick={blockSyntheticChartClick}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={diapersByDay} barSize={18} onClick={(data) => handleChartClick(data, "diaper", diapersByDay, "count")}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="count" fill={colors.diaper} radius={[6, 6, 0, 0]} opacity={0.85} cursor="pointer" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {selectedBar?.type === "diaper" && (
+                  <ChartDetailBar
+                    label={selectedBar.label}
+                    value={selectedBar.value}
+                    unit={t("overview.diaperChanges")}
+                    color={colors.diaper}
+                    onViewEntries={() => openDayModal(selectedBar.label, "diaper")}
+                    onDismiss={() => setSelectedBar(null)}
+                  />
+                )}
+              </>
             )}
           </SectionCard>
         </div>}
@@ -641,6 +682,41 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         />
       )}
     </>
+  );
+}
+
+function DiaperTypeToggle({ value, onChange }) {
+  const { t } = useI18n();
+  const options = [
+    ["total", t("overview.total")],
+    ["wet", t("overview.wet")],
+    ["solid", t("overview.solid")],
+  ];
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("overview.diaperFilterLabel")}>
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: value === key ? colors.diaper : "var(--card-bg)",
+            color: value === key ? "white" : "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
