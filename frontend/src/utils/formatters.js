@@ -406,6 +406,17 @@ export function aggregateTummyByDay(entries) {
   return days.map((d) => ({ day: d.label, minutes: Math.round(sums[d.dateStr]) }));
 }
 
+export function aggregateDiapersByDay(entries) {
+  const days = getLast7Days();
+  const counts = {};
+  days.forEach((d) => (counts[d.dateStr] = 0));
+  entries.forEach((e) => {
+    const key = entryDateStr(e.time);
+    if (key in counts) counts[key] += 1;
+  });
+  return days.map((d) => ({ day: d.label, count: counts[d.dateStr] }));
+}
+
 function getLastNDays(n) {
   const result = [];
   const now = new Date();

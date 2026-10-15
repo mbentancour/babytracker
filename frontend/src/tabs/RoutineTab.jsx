@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import SectionCard from "../components/SectionCard";
+import ActivityFilterChips from "../components/ActivityFilterChips";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
@@ -153,23 +154,12 @@ export default function RoutineTab({ childId, canRead = () => true }) {
   return (
     <div className="fade-in">
       <div className="routine-controls">
-        <div className="routine-filters" role="group" aria-label={t("routine.filters")}>
-          {available.map((a) => {
-            const on = !hidden.includes(a.id);
-            return (
-              <button
-                key={a.id}
-                className={`routine-filter${on ? " routine-filter-on" : ""}`}
-                style={on ? { "--routine-accent": a.color } : undefined}
-                onClick={() => toggle(a.id)}
-                aria-pressed={on}
-              >
-                {a.icon}
-                {t(a.labelKey)}
-              </button>
-            );
-          })}
-        </div>
+        <ActivityFilterChips
+          activities={available}
+          hidden={hidden}
+          onToggle={toggle}
+          label={t("routine.filters")}
+        />
 
         <div className="routine-periods" role="group" aria-label={t("routine.period")}>
           {ROUTINE_PERIODS.map((n) => (

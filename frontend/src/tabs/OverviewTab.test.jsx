@@ -85,4 +85,17 @@ describe("OverviewTab sleep controls", () => {
     expect(screen.queryByText("1.0h · Night sleep")).toBeNull();
     expect(within(typeToggle).getByRole("button", { name: "Nap" }).getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("switches the diaper card between total, wet and solid", () => {
+    renderOverview();
+
+    const diaperToggle = screen.getByRole("group", { name: "Diaper filter" });
+    const totalButton = within(diaperToggle).getByRole("button", { name: "Total" });
+    const solidButton = within(diaperToggle).getByRole("button", { name: "Solid" });
+    expect(totalButton.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(solidButton);
+    expect(solidButton.getAttribute("aria-pressed")).toBe("true");
+    expect(totalButton.getAttribute("aria-pressed")).toBe("false");
+  });
 });
