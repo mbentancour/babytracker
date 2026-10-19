@@ -1,8 +1,18 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import Modal from "./Modal";
 import { I18nProvider } from "../utils/i18n";
 
+// jsdom has no layout, so offsetParent is always null, and the Tab trap
+// (which skips controls that aren't rendered by that) would see none.
+const offsetParent = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetParent");
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, "offsetParent", {
+    configurable: true,
+    get() { return this.parentNode; },
+  });
+});
+afterAll(() => Object.defineProperty(HTMLElement.prototype, "offsetParent", offsetParent));
 afterEach(cleanup);
 
 function renderModal(props = {}) {
@@ -60,6 +70,17 @@ describe("Modal accessibility", () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+
+  it("keeps Tab inside the dialog", () => {
+    renderModal();
+    const close = screen.getByRole("button", { name: "Close" });
+    const save = screen.getByRole("button", { name: "Save" });
+    save.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(save);
   });
 
   it("closes on backdrop click but not on content click", () => {

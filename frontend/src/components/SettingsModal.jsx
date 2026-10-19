@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
-import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
+import { FormField, FormInput, FormSelect, FormButton, trapTab } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
 import NaraImport from "./NaraImport";
@@ -628,12 +628,11 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
       </div>
       {showNaraImport && (
         <NaraImportDialog label={t("onboarding.importNara")} opener={naraOpener}>
+          {/* No unit choice here: stored amounts carry no unit, and the
+              other babies' amounts are labelled with this device's setting,
+              so a new baby is saved in those units too. */}
           <NaraImport
             unitSystem={units}
-            onUnitsChange={(system) => {
-              setUnits(system);
-              if (onUnitSystemChange) onUnitSystemChange(system);
-            }}
             doneLabel={t("nara.done")}
             onBack={() => setShowNaraImport(false)}
             onDone={async () => {
@@ -648,24 +647,34 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
 }
 
 // NaraImportDialog shows the Nara import over Settings as a modal dialog:
-// focus moves into it on open (the page behind is inert) and back to the
-// button that opened it on close. It closes through the import's own Back
-// and Done buttons, not Escape, so an import can't be dismissed mid-way.
-function NaraImportDialog({ label, opener, children }) {
+// focus moves into it on open and back to the button that opened it on
+// close, and Tab can't leave it for the Settings page (also inert) or the
+// dashboard behind both. It closes through the import's own Back and Done
+// buttons, not Escape, so an import can't be dismissed mid-way.
+export function NaraImportDialog({ label, opener, children }) {
   const ref = useRef(null);
   useEffect(() => {
+    const el = ref.current;
     const returnTo = opener.current;
-    ref.current?.querySelector("input, select, button")?.focus();
-    return () => returnTo?.focus();
+    el?.querySelector("input, select, button")?.focus();
+    const onKey = (e) => {
+      if (e.key === "Tab" && el) trapTab(e, el);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      returnTo?.focus();
+    };
   }, [opener]);
   return (
     <div
       ref={ref}
       className="settings-overlay"
-      style={{ zIndex: 1100 }}
+      style={{ zIndex: 1100, outline: "none" }}
       role="dialog"
       aria-modal="true"
       aria-label={label}
+      tabIndex={-1}
     >
       {children}
     </div>

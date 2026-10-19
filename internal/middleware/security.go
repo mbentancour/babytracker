@@ -33,6 +33,10 @@ func (w *noServerHeader) Flush() {
 	}
 }
 
+// Unwrap lets http.ResponseController reach the connection, e.g. for a
+// handler that extends its own deadlines.
+func (w *noServerHeader) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 // Detect HA add-on mode at startup (not per-request) so CSP can be set correctly.
 // HA sets SUPERVISOR_TOKEN or runs with bashio, and our run.sh always sets DATA_DIR=/data/babytracker.
 var isHAMode = os.Getenv("SUPERVISOR_TOKEN") != "" || os.Getenv("HASSIO_TOKEN") != ""

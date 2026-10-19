@@ -27,14 +27,17 @@ const STAT_LABELS = [
 
 // NaraImport walks an admin through importing a Nara Baby CSV export: pick
 // the file, see what's in it (the baby's details are prefilled from the
-// export's profile row), choose the units to save amounts in, then import
-// into a new child and review what came across.
+// export's profile row), then import into a new child and review what came
+// across.
 //
-// unitSystem seeds the unit choice (the device's setting); on import the
-// choice is passed to onUnitsChange so this device then shows the units the
-// amounts were saved in. onBusy(true) is called while the new child exists
-// but the summary hasn't been dismissed, so a background refresh doesn't swap
-// the screen out from under it. doneLabel names the summary's button.
+// unitSystem is the device's unit setting. Stored amounts carry no unit and
+// each device labels them with its own setting, so amounts are saved in
+// unitSystem. Only on first run, with no other babies yet, can the user pick
+// other units: pass onUnitsChange, which gets the choice after the import so
+// this device then shows the units the amounts were saved in. onBusy(true) is
+// called while the new child exists but the summary hasn't been dismissed, so
+// a background refresh doesn't swap the screen out from under it. doneLabel
+// names the summary's button.
 export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, onBusy, doneLabel }) {
   const { t } = useI18n();
   const ids = useId();
@@ -46,11 +49,13 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [sex, setSex] = useState("");
-  const [includeDuplicates, setIncludeDuplicates] = useState(false);
+  // The duplicate-pumping box as the user set it; null until they touch it.
+  const [includeChoice, setIncludeChoice] = useState(null);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const previewSeq = useRef(0);
+  const resultHeading = useRef(null);
   // What the last export's profile filled in, so a newly picked export can
   // replace it without overwriting anything the user typed.
   const prefilled = useRef({ name: "", birth_date: "", sex: "" });
@@ -59,8 +64,20 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
   // disabled while importing).
   useEffect(() => () => onBusy?.(false), [onBusy]);
 
+  // The form, and the button that had focus, are gone once the import is
+  // done: move focus to the result's heading, which also announces it.
+  useEffect(() => {
+    if (result) resultHeading.current?.focus();
+  }, [result]);
+
   const errorText = (err) => {
-    if (err?.status === 413) return t("nara.error.too_large", { detail: err.detail || "50" });
+    // The server's own 413 names its limit. One from a proxy in front of it
+    // (an HTML page, no code) has some lower limit we can't know.
+    if (err?.status === 413) {
+      return err.code === "too_large" && err.detail
+        ? t("nara.error.too_large", { detail: err.detail })
+        : t("nara.error.too_large_proxy");
+    }
     if (err?.status === 401) return t("nara.error.session_expired");
     if (err?.code) {
       const key = `nara.error.${err.code}`;
@@ -68,7 +85,8 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
       if (text !== key) return text;
     }
     // A failed fetch (offline, dropped connection) or a timeout; anything
-    // else without a code (proxy pages, rate limits) gets the generic text.
+    // else without a code (a proxy's error page, a rate limit) gets the
+    // generic text.
     if (err instanceof TypeError || /timed out/i.test(err?.message || "")) return t("nara.error.network");
     return t("nara.error.generic");
   };
@@ -106,7 +124,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
     e.target.value = ""; // let the same file be picked again after a fix
     if (!picked) return;
     setFile(picked);
-    setIncludeDuplicates(false);
+    setIncludeChoice(null);
     runPreview(picked, units);
   };
 
@@ -146,9 +164,9 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
       <Card>
         <div className="login-header" style={{ marginBottom: 20 }}>
           <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Activity /></div>
-          <h1 className="login-title">{t("onboarding.importComplete")}</h1>
+          <h1 className="login-title" ref={resultHeading} tabIndex={-1} style={{ outline: "none" }}>{t("onboarding.importComplete")}</h1>
         </div>
-        <Summary data={result} />
+        <Summary data={result} done />
         <button onClick={finish} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
           {doneLabel || t("onboarding.continueToDashboard")}
         </button>
@@ -157,6 +175,13 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
   }
 
   const duplicates = preview?.duplicate_pumping?.count || 0;
+  // Family pumping already saved for a baby with the name being imported is
+  // most likely this same baby imported again (say after a trial import
+  // that will be deleted), so the box starts ticked; otherwise unticked.
+  const sameBaby = (preview?.duplicate_pumping?.children || []).some(
+    (name) => sameName(name, firstName) || sameName(name, preview?.profile?.name),
+  );
+  const includeDuplicates = duplicates > 0 && (includeChoice ?? sameBaby);
   const importable = total(preview?.stats) + (includeDuplicates ? duplicates : 0);
   const nothingToImport = preview && importable === 0 && duplicates === 0;
 
@@ -188,13 +213,15 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
           />
         </label>
 
-        <div className="login-field">
-          <label className="login-label" htmlFor={`${ids}-units`}>{t("nara.saveUnits")}</label>
-          <select id={`${ids}-units`} className="login-input" value={units} onChange={handleUnits} disabled={importing}>
-            <option value="metric">{t("settings.metric")}</option>
-            <option value="imperial">{t("settings.imperial")}</option>
-          </select>
-        </div>
+        {onUnitsChange && (
+          <div className="login-field">
+            <label className="login-label" htmlFor={`${ids}-units`}>{t("nara.saveUnits")}</label>
+            <select id={`${ids}-units`} className="login-input" value={units} onChange={handleUnits} disabled={importing}>
+              <option value="metric">{t("settings.metric")}</option>
+              <option value="imperial">{t("settings.imperial")}</option>
+            </select>
+          </div>
+        )}
 
         <div role="status" aria-live="polite">
           {checking && <p className="login-label" style={{ margin: 0 }}>{t("nara.checking")}</p>}
@@ -204,14 +231,14 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
               {nothingToImport && (
                 <div className="login-error" style={{ textAlign: "left", marginBottom: 8 }}>{t("nara.error.nothing_to_import")}</div>
               )}
-              <Summary data={preview} />
+              <Summary data={preview} includeDuplicates={includeDuplicates} />
             </div>
           )}
         </div>
 
         {duplicates > 0 && (
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "var(--text-muted)" }}>
-            <input type="checkbox" checked={includeDuplicates} onChange={(e) => setIncludeDuplicates(e.target.checked)} style={{ marginTop: 3 }} />
+            <input type="checkbox" checked={includeDuplicates} onChange={(e) => setIncludeChoice(e.target.checked)} style={{ marginTop: 3 }} />
             <span>{t("nara.importDuplicates", { count: duplicates })}</span>
           </label>
         )}
@@ -266,16 +293,35 @@ function total(stats) {
   return Object.values(stats || {}).reduce((sum, n) => sum + (n || 0), 0);
 }
 
-// Summary lists what an export holds (preview) or what was imported (result):
-// counts per entry type, the units amounts were saved in, what was saved as
-// notes or not imported, and rows imported with an assumption or not read.
-function Summary({ data }) {
-  const { t } = useI18n();
+function sameName(a, b) {
+  return !!a && !!b && a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
+}
+
+// joinNames lists names the way the language does ("Ana, Bo and Cy").
+function joinNames(names, locale) {
+  try {
+    return new Intl.ListFormat(locale, { type: "conjunction" }).format(names);
+  } catch {
+    return names.join(", "); // browsers without Intl.ListFormat
+  }
+}
+
+// Summary lists what an export holds (preview) or what was imported (result,
+// done): counts per entry type, the units amounts were saved in, what was
+// saved as notes or not imported, and rows imported with an assumption or
+// not read. includeDuplicates is the preview's duplicate-pumping choice; a
+// result says itself whether those sessions were imported.
+function Summary({ data, done, includeDuplicates }) {
+  const { t, locale } = useI18n();
   const counts = STAT_LABELS.filter(([k]) => data.stats?.[k] > 0);
   const skipped = Object.entries(data.skipped || {});
   const asNotes = Object.entries(data.as_notes || {});
   const u = data.units || {};
   const list = (entries) => entries.map(([type, n]) => `${type} (${n})`).join(", ");
+  const dup = data.duplicate_pumping;
+  const dupKey = done
+    ? (dup?.included ? "nara.duplicatePumpingImported" : "nara.duplicatePumpingSkipped")
+    : (includeDuplicates ? "nara.duplicatePumpingWillImport" : "nara.duplicatePumpingWillSkip");
   return (
     <div style={{ marginBottom: 16 }}>
       {counts.length > 0 && (
@@ -293,9 +339,9 @@ function Summary({ data }) {
         {data.stats?.sleep > 0 && <p style={{ margin: 0 }}>{t("nara.sleepClassified")}</p>}
         {data.solid_feeds > 0 && <p style={{ margin: 0 }}>{t("nara.solidsParentFed")}</p>}
         {asNotes.length > 0 && <p style={{ margin: 0 }}>{t("nara.asNotes")} {list(asNotes)}</p>}
-        {data.duplicate_pumping?.count > 0 && (
+        {dup?.count > 0 && (
           <p style={{ margin: 0 }}>
-            {t("nara.duplicatePumping", { count: data.duplicate_pumping.count, children: (data.duplicate_pumping.children || []).join(", ") })}
+            {t(dupKey, { count: dup.count, children: joinNames(dup.children || [], locale) })}
           </p>
         )}
         {skipped.length > 0 && <p style={{ margin: 0 }}>{t("nara.skipped")} {list(skipped)}</p>}
@@ -310,6 +356,7 @@ function Issues({ title, items, total }) {
   const { t } = useI18n();
   if (!total) return null;
   const list = items || [];
+  const more = total - list.length;
   const reason = (it) => {
     const key = `nara.reason.${it.code}`;
     const text = t(key, { detail: it.detail || "", value: it.value || "" });
@@ -322,7 +369,7 @@ function Issues({ title, items, total }) {
         {list.map((it, i) => (
           <li key={`${it.line}-${i}`}>{t("nara.issue", { line: it.line, type: it.type, reason: reason(it) })}</li>
         ))}
-        {total > list.length && <li>{t("nara.more", { count: total - list.length })}</li>}
+        {more > 0 && <li>{t(more === 1 ? "nara.more_one" : "nara.more_other", { count: more })}</li>}
       </ul>
     </details>
   );

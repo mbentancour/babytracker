@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/middleware"
 )
@@ -139,7 +142,23 @@ func rejected(t *testing.T, r nrow) naraIssue {
 	if p.RejectedCount != 1 || p.total() != 0 {
 		t.Fatalf("want one rejected row and nothing imported, got rejected=%+v stats=%v", p.Rejected, p.stats())
 	}
-	return p.Rejected[0]
+	return at(t, p.Rejected, 0)
+}
+
+// String methods make failure messages show amounts rather than pointers.
+func (f naraFeeding) String() string {
+	return fmt.Sprintf("{%s %s %s +%v amount=%s notes=%q}", f.Type, f.Method, f.Start.Format(time.RFC3339), f.End.Sub(f.Start), amountText(f.Amount), f.Notes)
+}
+
+func (pm naraPumping) String() string {
+	return fmt.Sprintf("{%s +%v amount=%s note=%q family=%v duplicate=%v}", pm.Start.Format(time.RFC3339), pm.End.Sub(pm.Start), amountText(pm.Amount), pm.Note, pm.Family, pm.Duplicate)
+}
+
+func amountText(v *float64) string {
+	if v == nil {
+		return "none"
+	}
+	return formatAmount(*v)
 }
 
 // at returns s[i], failing the test instead of panicking when it's missing,
@@ -213,24 +232,33 @@ func TestNaraHeaderWithAndWithoutBOM(t *testing.T) {
 		p, err := parseNaraExport(strings.NewReader(csv), naraOpts("metric"))
 		if err != nil || len(p.Changes) != 1 {
 			t.Errorf("%s: err=%v plan=%+v", name, err, p)
+			continue
+		}
+		// A column the header lacks reads as empty, not as another column.
+		if c := p.Changes[0]; !c.Wet || c.Color != "" || c.Notes != "" {
+			t.Errorf("%s: change %+v", name, c)
 		}
 	}
 }
 
 func TestNaraRealisticSparseExport(t *testing.T) {
 	// A header with only the groups present and the short profile footer
-	// last, as real exports have.
+	// last, as real exports have. Rows with a blank Type, including a short
+	// line of bare commas, are ignored.
 	p := parseNara(t, naraExport(t, naraSparseHeader,
 		nrow{"Type": "Diaper", "Profile Name": "Theo", "Start Date/time (Epoch)": naraT0, "Time Zone": "America/Toronto",
 			"[Diaper] Type": "Dirty", "[Diaper] Dirty Color": "GREEN YELLOW", "_profileKey": "c-1", "_activityKey": "t-1"},
-		nrow{"Type": "", "Note": "a stray blank-typed row is ignored"},
+		nrow{"Type": "", "Start Date/time (Epoch)": naraT0, "Note": "a stray blank-typed row"},
 		nrow{"Type": "Sleep", "Profile Name": "Theo", "Start Date/time (Epoch)": naraT0, "Time Zone": "America/Toronto",
 			"[Sleep] Duration (Seconds)": "3600", "_profileKey": "c-1", "_activityKey": "t-2"},
 		nrow{"Type": "Profile", "Profile Name": "Theo", "[Profile] Birth Date": "2026-07-01", "[Profile] Sex": "MALE",
 			"[Profile] Type": "CHILD", "_profileKey": "c-1"},
-	), naraOpts("metric"))
+	)+",,\r\n", naraOpts("metric"))
 	if p.RejectedCount != 0 || len(p.Changes) != 1 || len(p.Sleep) != 1 {
 		t.Fatalf("rejected %+v changes %d sleep %d", p.Rejected, len(p.Changes), len(p.Sleep))
+	}
+	if len(p.Notes)+len(p.AsNotes)+len(p.Skipped) != 0 {
+		t.Errorf("blank-typed rows: notes %v as notes %v skipped %v", noteTexts(p), p.AsNotes, p.Skipped)
 	}
 	if want := (naraProfile{Name: "Theo", BirthDate: "2026-07-01", Sex: "male"}); p.Profile != want {
 		t.Errorf("profile = %+v, want %+v", p.Profile, want)
@@ -309,18 +337,6 @@ func TestNaraIssuesAreCappedInMemory(t *testing.T) {
 	}
 }
 
-func TestNaraRejectedRowKeepsNoWarnings(t *testing.T) {
-	// Rows rejected while being read leave no warnings behind.
-	r := rejected(t, row("Combo Feed", "[Combo Feed] Type", "Formula", "[Combo Feed] Formula Volume", "60", "[Combo Feed] Formula Volume Unit", "CUPS"))
-	if r.Code != "unknown_unit" {
-		t.Errorf("code %q", r.Code)
-	}
-	p := parseNara(t, naraExport(t, naraHeader, row("Bottle Feed", "[Bottle Feed] Volume", "60", "[Bottle Feed] Volume Unit", "LITRES")), naraOpts("metric"))
-	if p.WarningCount != 0 || len(p.Warnings) != 0 {
-		t.Errorf("warnings %v on a rejected row", warningCodes(p))
-	}
-}
-
 func TestNaraRepairsTextPostgresCantStore(t *testing.T) {
 	p := one(t, row("Diaper", "[Diaper] Type", "Wet", "Note", "caf\xe9 \x00ok"), "metric")
 	if got := at(t, p.Changes, 0).Notes; got != "caf\uFFFD ok" {
@@ -344,6 +360,15 @@ func TestNaraProfileRow(t *testing.T) {
 	if len(p.Skipped)+p.RejectedCount != 0 {
 		t.Errorf("profile rows should be neither skipped nor rejected: %v %v", p.Skipped, p.Rejected)
 	}
+
+	// A birth date that isn't a real date isn't prefilled; a time after it
+	// is dropped.
+	for bd, want := range map[string]string{"2026-02-30": "", "2026-08-09T00:00:00": "2026-08-09"} {
+		p = parseNara(t, naraExport(t, naraHeader, nrow{"Type": "Profile", "Profile Name": "Rosa", "[Profile] Birth Date": bd}), naraOpts("metric"))
+		if p.Profile.Name != "Rosa" || p.Profile.BirthDate != want {
+			t.Errorf("birth date %q: profile %+v", bd, p.Profile)
+		}
+	}
 }
 
 // --- Timestamps and limits ---
@@ -355,17 +380,21 @@ func TestNaraTimestamps(t *testing.T) {
 			t.Errorf("epoch %q = %v, want %v", v, p.Changes[0].Time, want)
 		}
 	}
+	// Up to two days past the request time is allowed, for clock skew.
+	after := func(d time.Duration) string { return strconv.FormatInt(naraNow.Add(d).UnixMilli(), 10) }
 	for v, code := range map[string]string{
-		"":                "bad_start_time",
-		"soon":            "bad_start_time",
-		"1.2.3":           "bad_start_time",
-		"17895.x":         "bad_start_time",
-		"NaN":             "bad_start_time",
-		"0":               "implausible_start_time",
-		"-5000":           "implausible_start_time",
-		"99999999999999":  "implausible_start_time",
-		"946684799999":    "implausible_start_time", // a millisecond before 2000
-		"1789750853000.0": "",                       // a whole-millisecond decimal is fine
+		"":                    "bad_start_time",
+		"soon":                "bad_start_time",
+		"1.2.3":               "bad_start_time",
+		"17895.x":             "bad_start_time",
+		"NaN":                 "bad_start_time",
+		"0":                   "implausible_start_time",
+		"-5000":               "implausible_start_time",
+		"99999999999999":      "implausible_start_time",
+		"946684799999":        "implausible_start_time", // a millisecond before 2000
+		after(72 * time.Hour): "implausible_start_time",
+		after(24 * time.Hour): "",
+		"1789750853000.0":     "", // a whole-millisecond decimal is fine
 	} {
 		r := nrow{"Type": "Diaper", "Start Date/time (Epoch)": v, "[Diaper] Type": "Wet"}
 		if code == "" {
@@ -392,6 +421,12 @@ func TestNaraFallsBackToLocalTimesWhenEpochsAreBlank(t *testing.T) {
 	if got := rejected(t, nrow{"Type": "Diaper", "Start Date/time": "9/20/2026 8:00", "[Diaper] Type": "Wet"}); got.Code != "bad_start_time" {
 		t.Errorf("spreadsheet-formatted local time: %+v", got)
 	}
+	// Local times get the same plausibility range as epochs.
+	for _, v := range []string{"1999-12-31 23:00:00", "2026-10-04 00:00:00"} {
+		if got := rejected(t, nrow{"Type": "Diaper", "Start Date/time": v, "[Diaper] Type": "Wet"}); got.Code != "implausible_start_time" {
+			t.Errorf("local time %s: %+v", v, got)
+		}
+	}
 }
 
 func TestNaraRejectsAbsurdValuesWithoutOverflow(t *testing.T) {
@@ -399,19 +434,25 @@ func TestNaraRejectsAbsurdValuesWithoutOverflow(t *testing.T) {
 		r    nrow
 		code string
 	}{
-		// 1e12 seconds overflows time.Duration if it's converted before the
-		// cap is checked.
-		"feed duration":   {row("Breastfeed", "[Breastfeed] Left Duration (Seconds)", "1e12"), "too_long"},
-		"split durations": {row("Breastfeed", "[Breastfeed] Left Duration (Seconds)", "50000", "[Breastfeed] Right Duration (Seconds)", "50000"), "too_long"},
-		"sleep duration":  {row("Sleep", "[Sleep] Duration (Seconds)", "100000"), "too_long"},
-		"pump end":        {row("Pump", "[Pump] End Date/time (Epoch)", "1789750853000"), "too_long"},
-		"bottle volume":   {row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Formula Volume", "1e308", "[Bottle Feed] Formula Volume Unit", "FLOZ"), "out_of_range"},
-		"pump total":      {row("Pump", "[Pump] Total Volume", "40", "[Pump] Total Volume Unit", "FLOZ"), "out_of_range"},
-		"weight":          {row("Growth", "[Growth] Weight", "400", "[Growth] Weight Unit", "KG"), "out_of_range"},
-		"zero height":     {row("Growth", "[Growth] Height", "0", "[Growth] Height Unit", "CM"), "out_of_range"},
-		"temperature":     {row("Medical", "[Medical] Temperature", "60", "[Medical] Temperature Unit", "C"), "out_of_range"},
-		"cold reading":    {row("Medical", "[Medical] Temperature", "80", "[Medical] Temperature Unit", "F"), "out_of_range"},
-		"negative number": {row("Pump", "[Pump] Left Volume", "-5", "[Pump] Left Volume Unit", "ML"), "bad_number"},
+		// 18446744074 seconds, converted to a time.Duration before the cap is
+		// checked, wraps around to about 290 ms, which no later check would
+		// catch. (1e12 seconds wraps too, but to over a century.)
+		"feed duration":      {row("Breastfeed", "[Breastfeed] Left Duration (Seconds)", "18446744074"), "too_long"},
+		"sleep duration":     {row("Sleep", "[Sleep] Duration (Seconds)", "18446744074"), "too_long"},
+		"pump duration":      {row("Pump", "[Pump] Duration (Seconds)", "18446744074"), "too_long"},
+		"huge feed duration": {row("Breastfeed", "[Breastfeed] Left Duration (Seconds)", "1e12"), "too_long"},
+		"long sleep":         {row("Sleep", "[Sleep] Duration (Seconds)", "100000"), "too_long"},
+		"split durations":    {row("Breastfeed", "[Breastfeed] Left Duration (Seconds)", "50000", "[Breastfeed] Right Duration (Seconds)", "50000"), "too_long"},
+		"pump end":           {row("Pump", "[Pump] End Date/time (Epoch)", "1789750853000"), "too_long"},
+		"bottle volume":      {row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Formula Volume", "1e308", "[Bottle Feed] Formula Volume Unit", "FLOZ"), "out_of_range"},
+		"bottle over 1 L":    {row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Formula Volume", "1500", "[Bottle Feed] Formula Volume Unit", "ML"), "out_of_range"},
+		"pump total":         {row("Pump", "[Pump] Total Volume", "40", "[Pump] Total Volume Unit", "FLOZ"), "out_of_range"},
+		"weight":             {row("Growth", "[Growth] Weight", "400", "[Growth] Weight Unit", "KG"), "out_of_range"},
+		"zero weight":        {row("Growth", "[Growth] Weight", "0", "[Growth] Weight Unit", "KG"), "out_of_range"},
+		"zero height":        {row("Growth", "[Growth] Height", "0", "[Growth] Height Unit", "CM"), "out_of_range"},
+		"temperature":        {row("Medical", "[Medical] Temperature", "60", "[Medical] Temperature Unit", "C"), "out_of_range"},
+		"cold reading":       {row("Medical", "[Medical] Temperature", "80", "[Medical] Temperature Unit", "F"), "out_of_range"},
+		"negative number":    {row("Pump", "[Pump] Left Volume", "-5", "[Pump] Left Volume Unit", "ML"), "bad_number"},
 	} {
 		if got := rejected(t, c.r); got.Code != c.code {
 			t.Errorf("%s: code %q, want %q", name, got.Code, c.code)
@@ -423,12 +464,12 @@ func TestNaraRejectsAbsurdValuesWithoutOverflow(t *testing.T) {
 
 func TestNaraBreastfeed(t *testing.T) {
 	cases := []struct {
-		name       string
-		r          nrow
-		method     string
-		minutes    float64
-		warn       bool
-		noteSuffix string
+		name    string
+		r       nrow
+		method  string
+		minutes float64
+		warn    bool
+		notes   string
 	}{
 		{"both timed", row("Breastfeed", "[Breastfeed] Begin Side", "LEFT", "[Breastfeed] End Side", "RIGHT",
 			"[Breastfeed] Left Duration (Seconds)", "600", "[Breastfeed] Right Duration (Seconds)", "300", "Note", "sleepy"),
@@ -455,8 +496,8 @@ func TestNaraBreastfeed(t *testing.T) {
 		if got := len(p.Warnings) == 1 && p.Warnings[0].Code == "side_unknown"; got != c.warn {
 			t.Errorf("%s: warnings %v", c.name, warningCodes(p))
 		}
-		if !strings.HasSuffix(f.Notes, c.noteSuffix) {
-			t.Errorf("%s: notes %q", c.name, f.Notes)
+		if f.Notes != c.notes {
+			t.Errorf("%s: notes %q, want %q", c.name, f.Notes, c.notes)
 		}
 	}
 }
@@ -495,20 +536,44 @@ func TestNaraBottle(t *testing.T) {
 				{"breast milk", "Mixed bottle: 60 mL breast milk + 58.3 mL formula; formula share worked out from the total", 60},
 				{"formula", "Mixed bottle: 60 mL breast milk + 58.3 mL formula; formula share worked out from the total", 58.3},
 			}, []string{"mixed_derived"}},
-		{"mixed with only one share", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
+		{"mixed with the formula share and a larger total", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
+			"[Bottle Feed] Formula Volume", "60", "[Bottle Feed] Formula Volume Unit", "ML", "[Bottle Feed] Formula Name", "Kendamil",
+			"[Bottle Feed] Volume", "4", "[Bottle Feed] Volume Unit", "FLOZ"), "metric",
+			[]want{
+				{"breast milk", "Mixed bottle: 58.3 mL breast milk + 60 mL formula; breast milk share worked out from the total", 58.3},
+				{"formula", "Mixed bottle: 58.3 mL breast milk + 60 mL formula; breast milk share worked out from the total; Formula: Kendamil", 60},
+			}, []string{"mixed_derived"}},
+		{"a small share in fl oz is still a share", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
+			"[Bottle Feed] Breast Milk Volume", "2", "[Bottle Feed] Breast Milk Volume Unit", "FLOZ", "[Bottle Feed] Volume", "2.5", "[Bottle Feed] Volume Unit", "FLOZ"), "imperial",
+			[]want{
+				{"breast milk", "Mixed bottle: 2 oz breast milk + 0.5 oz formula; formula share worked out from the total", 2},
+				{"formula", "Mixed bottle: 2 oz breast milk + 0.5 oz formula; formula share worked out from the total", 0.5},
+			}, []string{"mixed_derived"}},
+		{"mixed with only the formula share", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
 			"[Bottle Feed] Formula Volume", "3", "[Bottle Feed] Formula Volume Unit", "FLOZ", "[Bottle Feed] Formula Name", "Enfamil"), "imperial",
 			[]want{{"formula", "Mixed bottle; only the formula share recorded in Nara; Formula: Enfamil", 3}}, []string{"mixed_partial"}},
+		{"mixed with only the breast milk share keeps the brand", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
+			"[Bottle Feed] Breast Milk Volume", "60", "[Bottle Feed] Breast Milk Volume Unit", "ML", "[Bottle Feed] Formula Name", "Enfamil"), "metric",
+			[]want{{"breast milk", "Mixed bottle; only the breast milk share recorded in Nara; Formula: Enfamil", 60}}, []string{"mixed_partial"}},
+		// 4 fl oz is 118.3 mL: the 0.3 mL gap is unit rounding, not formula.
+		{"a total that differs only by unit rounding", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula",
+			"[Bottle Feed] Breast Milk Volume", "118", "[Bottle Feed] Breast Milk Volume Unit", "ML", "[Bottle Feed] Volume", "4", "[Bottle Feed] Volume Unit", "FLOZ"), "metric",
+			[]want{{"breast milk", "Mixed bottle; only the breast milk share recorded in Nara", 118}}, []string{"mixed_partial"}},
 		{"generic volume typed by the Type column", row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Volume", "4", "[Bottle Feed] Volume Unit", "OZ"), "imperial",
 			[]want{{"formula", "", 4}}, nil},
 		{"zero formula volume falls back to the total", row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Formula Volume", "0",
 			"[Bottle Feed] Formula Volume Unit", "ML", "[Bottle Feed] Volume", "90", "[Bottle Feed] Volume Unit", "ML"), "metric",
 			[]want{{"formula", "", 90}}, nil},
+		{"zero formula volume and no total keeps the zero", row("Bottle Feed", "[Bottle Feed] Type", "Formula", "[Bottle Feed] Formula Volume", "0",
+			"[Bottle Feed] Formula Volume Unit", "ML"), "metric",
+			[]want{{"formula", "", 0}}, nil},
 		{"a formula name means formula", row("Bottle Feed", "[Bottle Feed] Formula Name", "Similac", "[Bottle Feed] Volume", "90", "[Bottle Feed] Volume Unit", "ML"), "metric",
 			[]want{{"formula", "Formula: Similac", 90}}, nil},
 		{"no milk type is flagged", row("Bottle Feed", "[Bottle Feed] Volume", "120", "[Bottle Feed] Volume Unit", "ML"), "metric",
 			[]want{{"breast milk", "Milk type not recorded in Nara", 120}}, []string{"milk_type_unknown"}},
-		{"mixed without a split is flagged", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula", "[Bottle Feed] Volume", "100", "[Bottle Feed] Volume Unit", "ML"), "metric",
-			[]want{{"breast milk", "Mixed bottle (breast milk + formula), split not recorded in Nara", 100}}, []string{"mixed_no_split"}},
+		{"mixed without a split is flagged", row("Bottle Feed", "[Bottle Feed] Type", "Breast Milk Formula", "[Bottle Feed] Formula Name", "Enfamil",
+			"[Bottle Feed] Volume", "100", "[Bottle Feed] Volume Unit", "ML"), "metric",
+			[]want{{"breast milk", "Mixed bottle (breast milk + formula), split not recorded in Nara; Formula: Enfamil", 100}}, []string{"mixed_no_split"}},
 	}
 	for _, c := range cases {
 		p := one(t, c.r, c.units)
@@ -575,6 +640,13 @@ func TestNaraComboFeed(t *testing.T) {
 			t.Errorf("code %q", got.Code)
 		}
 	})
+	t.Run("bad bottle unit", func(t *testing.T) {
+		got := rejected(t, row("Combo Feed", "[Combo Feed] Left Duration (Seconds)", "240",
+			"[Combo Feed] Type", "Formula", "[Combo Feed] Formula Volume", "60", "[Combo Feed] Formula Volume Unit", "CUPS"))
+		if got.Code != "unknown_unit" || got.Detail != "[Combo Feed] Formula Volume" {
+			t.Errorf("got %+v", got)
+		}
+	})
 }
 
 func TestNaraSolidFeed(t *testing.T) {
@@ -636,6 +708,9 @@ func TestNaraPump(t *testing.T) {
 		{"Nara's total wins over the sides", row("Pump", "[Pump] Left Volume", "2", "[Pump] Left Volume Unit", "FLOZ", "[Pump] Right Volume", "2.1", "[Pump] Right Volume Unit", "FLOZ",
 			"[Pump] Total Volume", "4", "[Pump] Total Volume Unit", "FLOZ"), "imperial", 4, 0},
 		{"explicit zero total", row("Pump", "[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 0, 0},
+		{"explicit zero sides", row("Pump", "[Pump] Left Volume", "0", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "0", "[Pump] Right Volume Unit", "ML"), "metric", 0, 0},
+		{"zero total next to the sides", row("Pump", "[Pump] Left Volume", "50", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "40", "[Pump] Right Volume Unit", "ML",
+			"[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0},
 		{"duration but no amount", row("Pump", "[Pump] Duration (Seconds)", "900"), "metric", -1, 15},
 		{"imperial rounding", row("Pump", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"), "imperial", 3.38, 0},
 	}
@@ -654,15 +729,41 @@ func TestNaraPump(t *testing.T) {
 	if pm := at(t, p.Pumping, 0); pm.Note != "evening" || p.stats()["notes"] != 1 || !pm.Family {
 		t.Errorf("pumping %+v stats %v", p.Pumping, p.stats())
 	}
-	p = one(t, row("Pump", "Profile Name", "Rosa", "_profileKey", "c-1", "[Pump] Total Volume", "4", "[Pump] Total Volume Unit", "FLOZ"), "imperial")
-	if at(t, p.Pumping, 0).Family {
-		t.Error("a pump row with a profile is the child's, not the family's")
+	// A row is the child's only with both the profile name and key; with
+	// either missing it's taken as family pumping.
+	for _, c := range []struct {
+		kv     []string
+		family bool
+	}{
+		{[]string{"Profile Name", "Rosa", "_profileKey", "c-1"}, false},
+		{[]string{"Profile Name", "Rosa"}, true},
+		{[]string{"_profileKey", "c-1"}, true},
+	} {
+		r := row("Pump", append(c.kv, "[Pump] Total Volume", "4", "[Pump] Total Volume Unit", "FLOZ")...)
+		if pm := at(t, one(t, r, "imperial").Pumping, 0); pm.Family != c.family {
+			t.Errorf("%v: family %v, want %v", c.kv, pm.Family, c.family)
+		}
 	}
 	if got := rejected(t, row("Pump", "[Pump] End Date/time (Epoch)", "1789570000000")); got.Code != "end_before_start" {
 		t.Errorf("end before start: %+v", got)
 	}
+	// Each side is plausible, together they aren't; the message names both.
+	if got := rejected(t, row("Pump", "[Pump] Left Volume", "600", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "600", "[Pump] Right Volume Unit", "ML")); got.Code != "out_of_range" ||
+		got.Detail != "[Pump] Left Volume + [Pump] Right Volume" {
+		t.Errorf("sides over the limit: %+v", got)
+	}
 	if got := rejected(t, row("Pump")); got.Code != "empty_entry" {
 		t.Errorf("empty pump: %+v", got)
+	}
+	// With nothing measured, a note is still kept, as a note.
+	for _, r := range []nrow{
+		row("Pump", "Note", "pumped at work, forgot to measure"),
+		row("Pump", "Note", "pumped at work, forgot to measure", "[Pump] Duration (Seconds)", "0"),
+	} {
+		p := one(t, r, "metric")
+		if len(p.Pumping) != 0 || strings.Join(noteTexts(p), "|") != "Pumping: pumped at work, forgot to measure" || p.AsNotes["Pump"] != 1 {
+			t.Errorf("note-only pump: pumping %v notes %v as notes %v", p.Pumping, noteTexts(p), p.AsNotes)
+		}
 	}
 }
 
@@ -733,7 +834,8 @@ func TestNaraGrowthUnitsAndRounding(t *testing.T) {
 
 func TestNaraGrowthDateUsesTheRowsTimeZone(t *testing.T) {
 	// 2026-09-14T22:00Z is midnight on the 15th in Copenhagen, where Nara
-	// logged it, but still the 14th in New York.
+	// logged it, but still the 14th in New York. 2026-09-17T02:00Z is the
+	// 17th in UTC but still the 16th in New York.
 	ny, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Fatal(err)
@@ -742,16 +844,16 @@ func TestNaraGrowthDateUsesTheRowsTimeZone(t *testing.T) {
 	p := parseNara(t, naraExport(t, naraHeader,
 		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "Time Zone": "Europe/Copenhagen", "[Growth] Weight": "4", "[Growth] Weight Unit": "KG"},
 		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "Time Zone": "Europe/Copenhagen", "[Growth] Weight": "4.1", "[Growth] Weight Unit": "KG"},
-		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "Time Zone": "Not/AZone", "[Growth] Weight": "4.2", "[Growth] Weight Unit": "KG"},
-		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "[Growth] Weight": "4.3", "[Growth] Weight Unit": "KG"},
+		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789610400000", "Time Zone": "Not/AZone", "[Growth] Weight": "4.2", "[Growth] Weight Unit": "KG"},
+		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789610400000", "[Growth] Weight": "4.3", "[Growth] Weight Unit": "KG"},
 	), opts)
 	// Rows 1-2 use their own zone (the second from the cache); rows 3-4 fall
-	// back to the importer's zone.
+	// back to the importer's zone, not UTC.
 	var dates []string
 	for _, w := range p.Weight {
 		dates = append(dates, w.Date)
 	}
-	if got := strings.Join(dates, ","); got != "2026-09-15,2026-09-15,2026-09-14,2026-09-14" {
+	if got := strings.Join(dates, ","); got != "2026-09-15,2026-09-15,2026-09-16,2026-09-16" {
 		t.Errorf("dates = %s", got)
 	}
 }
@@ -821,7 +923,7 @@ func TestNaraMilestonesAndNotes(t *testing.T) {
 		row("Vaccine", "[Vaccine] Vaccine", "Hep B"),
 		row("Journal", "Note", "Big day"),
 		row("Journal"),
-		row("Postpartum Mood", "Note", "tired"), // a parent's row: not the baby's, not even as a note
+		row("Postpartum Mood", "Note", "tired"), // reportedly a parent's type: skipped, note and all
 	), naraOpts("metric"))
 	if p.RejectedCount != 0 || len(p.Milestones) != 3 {
 		t.Fatalf("rejected %+v milestones %+v", p.Rejected, p.Milestones)
@@ -860,7 +962,9 @@ func TestNaraInsertPlan(t *testing.T) {
 		row("Growth", "[Growth] Weight", "4", "[Growth] Weight Unit", "KG", "[Growth] Height", "55", "[Growth] Height Unit", "CM",
 			"[Growth] Head Size", "38", "[Growth] Head Size Unit", "CM", "Note", "checkup"),
 		row("Sleep", "[Sleep] End Date/time (Epoch)", "1789585253000", "Note", "car"),
+		row("Sleep", "[Sleep] Duration (Seconds)", "36000", "Note", "night"),
 		row("Medical", "[Medical] Medication", "Tylenol, 2.5 (ML)", "[Medical] Temperature", "37.2", "[Medical] Temperature Unit", "C", "Note", "fever"),
+		row("Medical", "[Medical] Temperature", "37.5", "[Medical] Temperature Unit", "C", "Note", "after bath"),
 		row("Milestone", "[Milestone] Milestone", "Rolls over", "Note", "both ways"),
 		row("Routine", "[Routine] Routine", "Bath"),
 	), naraOpts("metric"))
@@ -870,22 +974,28 @@ func TestNaraInsertPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Times are compared as UTC text; naraT0 is 2026-09-16 17:00:53 UTC.
+	// Every row of each table, so an extra or missing row shows too. Times
+	// are compared as UTC text; naraT0 is 2026-09-16 17:00:53 UTC.
+	all := func(table, expr string) string {
+		return `SELECT coalesce(string_agg(` + expr + `, ',' ORDER BY id), '') FROM ` + table + ` WHERE child_id=$1`
+	}
+	const utc = `'YYYY-MM-DD HH24:MI:SS'`
 	const t0 = "2026-09-16 17:00:53"
 	for _, c := range []struct{ query, want string }{
 		{`SELECT first_name||'/'||last_name||'/'||birth_date::text||'/'||sex FROM children WHERE id=$1`, "Rosa/Diaz/2026-08-09/female"},
-		{`SELECT string_agg(to_char(start_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||type||'/'||method||'/'||coalesce(amount::text,'-')||'/'||EXTRACT(EPOCH FROM duration)::int||'/'||notes, ',' ORDER BY id) FROM feedings WHERE child_id=$1`,
+		{all("feedings", `to_char(start_time AT TIME ZONE 'UTC',`+utc+`)||'/'||type||'/'||method||'/'||coalesce(amount::text,'-')||'/'||EXTRACT(EPOCH FROM duration)::int||'/'||notes`),
 			t0 + "/breast milk/left breast/-/600/latch," + t0 + "/formula/bottle/45/0/"},
-		{`SELECT to_char(time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||wet||'/'||solid||'/'||color||'/'||notes FROM changes WHERE child_id=$1`, t0 + "/false/true/green/after nap"},
-		{`SELECT to_char(start_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||amount||'/'||EXTRACT(EPOCH FROM duration)::int FROM pumping WHERE child_id=$1`, t0 + "/50/600"},
-		{`SELECT date::text||'/'||weight||'/'||notes FROM weight WHERE child_id=$1`, "2026-09-16/4/checkup"},
-		{`SELECT date::text||'/'||height||'/'||notes FROM height WHERE child_id=$1`, "2026-09-16/55/checkup"},
-		{`SELECT date::text||'/'||head_circumference||'/'||notes FROM head_circumference WHERE child_id=$1`, "2026-09-16/38/checkup"},
-		{`SELECT to_char(start_time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||nap||'/'||EXTRACT(EPOCH FROM duration)::int||'/'||notes FROM sleep WHERE child_id=$1`, t0 + "/true/7200/car"},
-		{`SELECT to_char(time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||name||'/'||dosage||'/'||dosage_unit||'/'||notes FROM medications WHERE child_id=$1`, t0 + "/Tylenol/2.5/ml/fever"},
-		{`SELECT to_char(time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||temperature||'/'||notes FROM temperature WHERE child_id=$1`, t0 + "/37.2/"},
-		{`SELECT date::text||'/'||title||'/'||category||'/'||description FROM milestones WHERE child_id=$1`, "2026-09-16/Rolls over/other/both ways"},
-		{`SELECT string_agg(to_char(time AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')||'/'||note, ',' ORDER BY note) FROM notes WHERE child_id=$1`,
+		{all("changes", `to_char(time AT TIME ZONE 'UTC',`+utc+`)||'/'||wet||'/'||solid||'/'||color||'/'||notes`), t0 + "/false/true/green/after nap"},
+		{all("pumping", `to_char(start_time AT TIME ZONE 'UTC',`+utc+`)||'/'||amount||'/'||EXTRACT(EPOCH FROM duration)::int`), t0 + "/50/600"},
+		{all("weight", `date::text||'/'||weight||'/'||notes`), "2026-09-16/4/checkup"},
+		{all("height", `date::text||'/'||height||'/'||notes`), "2026-09-16/55/checkup"},
+		{all("head_circumference", `date::text||'/'||head_circumference||'/'||notes`), "2026-09-16/38/checkup"},
+		{all("sleep", `to_char(start_time AT TIME ZONE 'UTC',`+utc+`)||'/'||nap||'/'||EXTRACT(EPOCH FROM duration)::int||'/'||notes`),
+			t0 + "/true/7200/car," + t0 + "/false/36000/night"},
+		{all("medications", `to_char(time AT TIME ZONE 'UTC',`+utc+`)||'/'||name||'/'||dosage||'/'||dosage_unit||'/'||notes`), t0 + "/Tylenol/2.5/ml/fever"},
+		{all("temperature", `to_char(time AT TIME ZONE 'UTC',`+utc+`)||'/'||temperature||'/'||notes`), t0 + "/37.2/," + t0 + "/37.5/after bath"},
+		{all("milestones", `date::text||'/'||title||'/'||category||'/'||description`), "2026-09-16/Rolls over/other/both ways"},
+		{`SELECT string_agg(to_char(time AT TIME ZONE 'UTC',` + utc + `)||'/'||note, ',' ORDER BY note) FROM notes WHERE child_id=$1`,
 			t0 + "/Pumping: evening," + t0 + "/Routine: Bath"},
 	} {
 		var got string
@@ -952,8 +1062,59 @@ func TestNaraSiblingExportsDontDuplicateFamilyPumping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := naraCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, third); n != 2 || p.Duplicates.Count != 1 {
+	if n := naraCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, third); n != 2 || p.Duplicates.Count != 1 || !p.Duplicates.Included {
 		t.Errorf("with duplicates included: %d sessions, duplicates %+v", n, p.Duplicates)
+	}
+
+	// Every child that now holds the family session is named.
+	p = parseNara(t, export, naraOpts("metric"))
+	if err := markDuplicatePumps(db, p); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(p.Duplicates.Children, ","); got != "Ana,Cy" {
+		t.Errorf("holders %q, want Ana,Cy", got)
+	}
+}
+
+func TestNaraFamilyPumpingMatchesEachSession(t *testing.T) {
+	db := setupDB(t)
+	when := func(minutes int) string {
+		return strconv.FormatInt(time.Date(2026, 9, 16, 17, 0, 0, 0, time.UTC).Add(time.Duration(minutes)*time.Minute).UnixMilli(), 10)
+	}
+	family := func(minutes, secs int) nrow {
+		return row("Pump", "Start Date/time (Epoch)", when(minutes), "[Pump] Duration (Seconds)", strconv.Itoa(secs),
+			"[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML")
+	}
+	own := func(name string, minutes, secs int) nrow {
+		r := family(minutes, secs)
+		r["Profile Name"], r["_profileKey"] = name, "c-"+name
+		return r
+	}
+	// Ana's export: family sessions at 17:00, 19:00 and 21:00, out of order,
+	// and her own session at 18:00.
+	ana := naraExport(t, naraHeader, family(120, 600), family(0, 600), own("Ana", 60, 300), family(240, 600))
+	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, ana, naraOpts("metric")), false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bo's export repeats the three family sessions, the first listed being
+	// neither the earliest nor the latest. Three more only look alike: one
+	// starts with the 17:00 session but ends later, one ends with the 19:00
+	// session but starts later, and Bo's own session is at the time of Ana's.
+	p := parseNara(t, naraExport(t, naraHeader,
+		family(120, 600), family(0, 900), family(125, 300), family(0, 600), own("Bo", 60, 300), family(240, 600),
+	), naraOpts("metric"))
+	if err := markDuplicatePumps(db, p); err != nil {
+		t.Fatal(err)
+	}
+	var flagged []string
+	for _, pm := range p.Pumping {
+		if pm.Duplicate {
+			flagged = append(flagged, pm.Start.Format("15:04")+"+"+pm.End.Sub(pm.Start).String())
+		}
+	}
+	if got := strings.Join(flagged, ","); got != "19:00+10m0s,17:00+10m0s,21:00+10m0s" || p.Duplicates.Count != 3 || strings.Join(p.Duplicates.Children, ",") != "Ana" {
+		t.Errorf("flagged %s, duplicates %+v", got, p.Duplicates)
 	}
 }
 
@@ -976,8 +1137,9 @@ func TestNaraInsertPlanRollsBackOnError(t *testing.T) {
 		{Start: naraNow, End: naraNow, Type: "breast milk", Method: "bottle"},
 		{Start: naraNow, End: naraNow, Type: "not a type", Method: "bottle"}, // violates the CHECK constraint
 	}}
-	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Rosa", BirthDate: "2026-08-09"}, p, false); err == nil {
-		t.Fatal("expected an error")
+	// The error must come from the second feeding, after rows were written.
+	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Rosa", BirthDate: "2026-08-09"}, p, false); err == nil || !strings.Contains(err.Error(), "insert feeding") {
+		t.Fatalf("got %v, want the feeding insert to fail", err)
 	}
 	if c, f := naraCount(t, db, `SELECT count(*) FROM children`), naraCount(t, db, `SELECT count(*) FROM feedings`); c != 0 || f != 0 {
 		t.Errorf("left behind %d children, %d feedings", c, f)
@@ -1017,12 +1179,9 @@ func naraJSON[T any](t *testing.T, v any, path string) T {
 		case map[string]any:
 			cur = node[part]
 		case []any:
-			i := 0
-			for _, c := range part {
-				i = i*10 + int(c-'0')
-			}
-			if i >= len(node) {
-				t.Fatalf("%s: index %d out of range (%d)", path, i, len(node))
+			i, err := strconv.Atoi(part)
+			if err != nil || i < 0 || i >= len(node) {
+				t.Fatalf("%s: no index %q in a list of %d", path, part, len(node))
 			}
 			cur = node[i]
 		default:
@@ -1040,7 +1199,9 @@ func TestNaraHandler(t *testing.T) {
 	db := setupDB(t)
 	h := NewNaraImportHandler(db, &config.Config{UnitSystem: "metric"})
 	h.now = func() time.Time { return naraNow }
-	serve := func(path, csv string, fields map[string]string) (int, map[string]any) {
+	// The helpers take each subtest's own t, so a failure in one subtest
+	// doesn't stop the ones after it.
+	serve := func(t *testing.T, path, csv string, fields map[string]string) (int, map[string]any) {
 		t.Helper()
 		req := naraMultipart(t, path, csv, fields)
 		req = req.WithContext(context.WithValue(req.Context(), middleware.IsAdminKey, true))
@@ -1056,7 +1217,7 @@ func TestNaraHandler(t *testing.T) {
 		}
 		return rec.Code, out
 	}
-	countChildren := func() int { return naraCount(t, db, `SELECT count(*) FROM children`) }
+	countChildren := func(t *testing.T) int { return naraCount(t, db, `SELECT count(*) FROM children`) }
 	// 2026-09-17T02:00Z: still the 16th in Vancouver, the 17th in UTC.
 	lateGrowth := nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789610400000", "[Growth] Weight": "4", "[Growth] Weight Unit": "KG"}
 	export := naraExport(t, naraHeader,
@@ -1064,9 +1225,25 @@ func TestNaraHandler(t *testing.T) {
 		row("Diaper", "[Diaper] Type", "Sparkly"),
 		row("Bottle Feed", "[Bottle Feed] Volume", "60", "[Bottle Feed] Volume Unit", "ML"),
 		row("Milestone", "[Milestone] Milestone", "Rolls over"),
+		row("Solid Feed", "[Solid Feed] Food", "Applesauce"),
+		row("Routine", "[Routine] Routine", "Bath"),
+		row("Postpartum Mood", "Note", "tired"),
 		lateGrowth,
 		nrow{"Type": "Profile", "Profile Name": "Rosa", "[Profile] Type": "CHILD", "[Profile] Birth Date": "2026-08-09", "[Profile] Sex": "FEMALE"},
 	)
+	// The summary fields that render the export's rows that aren't entries.
+	checkSummary := func(t *testing.T, out map[string]any) {
+		t.Helper()
+		if naraJSON[float64](t, out, "warning_count") != 1 || naraJSON[string](t, out, "warnings.0.code") != "milk_type_unknown" ||
+			naraJSON[float64](t, out, "solid_feeds") != 1 || naraJSON[float64](t, out, "as_notes.Routine") != 1 ||
+			naraJSON[float64](t, out, "skipped.Postpartum Mood") != 1 {
+			t.Errorf("summary %v", out)
+		}
+		if naraJSON[float64](t, out, "duplicate_pumping.count") != 0 || len(naraJSON[[]any](t, out, "duplicate_pumping.children")) != 0 ||
+			naraJSON[bool](t, out, "duplicate_pumping.included") {
+			t.Errorf("duplicate_pumping %v", out["duplicate_pumping"])
+		}
+	}
 
 	t.Run("non-admin", func(t *testing.T) {
 		for _, path := range []string{"/api/import/nara", "/api/import/nara/preview"} {
@@ -1078,25 +1255,26 @@ func TestNaraHandler(t *testing.T) {
 			} else {
 				h.Import(rec, req)
 			}
-			if rec.Code != http.StatusForbidden || countChildren() != 0 {
+			if rec.Code != http.StatusForbidden || countChildren(t) != 0 {
 				t.Errorf("%s: status %d", path, rec.Code)
 			}
 		}
 	})
 
 	t.Run("preview saves nothing", func(t *testing.T) {
-		code, out := serve("/api/import/nara/preview", export, map[string]string{"unit_system": "imperial"})
-		if code != http.StatusOK || out["status"] != "preview" || countChildren() != 0 {
-			t.Fatalf("status %d body %v children %d", code, out, countChildren())
+		code, out := serve(t, "/api/import/nara/preview", export, map[string]string{"unit_system": "imperial"})
+		if code != http.StatusOK || out["status"] != "preview" || countChildren(t) != 0 {
+			t.Fatalf("status %d body %v children %d", code, out, countChildren(t))
 		}
 		if naraJSON[string](t, out, "profile.name") != "Rosa" || naraJSON[string](t, out, "profile.birth_date") != "2026-08-09" ||
-			naraJSON[string](t, out, "profile.sex") != "female" || naraJSON[string](t, out, "units.volume") != "oz" {
-			t.Errorf("body %v", out)
+			naraJSON[string](t, out, "profile.sex") != "female" {
+			t.Errorf("profile %v", out["profile"])
 		}
-		if naraJSON[float64](t, out, "warning_count") != 1 || naraJSON[string](t, out, "warnings.0.code") != "milk_type_unknown" ||
-			naraJSON[float64](t, out, "duplicate_pumping.count") != 0 || naraJSON[float64](t, out, "solid_feeds") != 0 {
-			t.Errorf("body %v", out)
+		if naraJSON[string](t, out, "units.volume") != "oz" || naraJSON[string](t, out, "units.weight") != "lb" ||
+			naraJSON[string](t, out, "units.length") != "in" || naraJSON[string](t, out, "units.temperature") != "°F" {
+			t.Errorf("units %v", out["units"])
 		}
+		checkSummary(t, out)
 	})
 
 	t.Run("upload and form errors", func(t *testing.T) {
@@ -1111,7 +1289,7 @@ func TestNaraHandler(t *testing.T) {
 			"bad date":        {"/api/import/nara", export, map[string]string{"first_name": "Rosa", "birth_date": "9/8/2026"}, "invalid_birth_date"},
 			"bad sex":         {"/api/import/nara", export, map[string]string{"first_name": "Rosa", "birth_date": "2026-08-09", "sex": "x"}, "invalid_sex"},
 		} {
-			code, out := serve(c.path, c.csv, c.fields)
+			code, out := serve(t, c.path, c.csv, c.fields)
 			if code != http.StatusBadRequest || out["code"] != c.code {
 				t.Errorf("%s: status %d body %v", name, code, out)
 			}
@@ -1125,22 +1303,23 @@ func TestNaraHandler(t *testing.T) {
 		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"invalid_upload"`) {
 			t.Errorf("not multipart: %d %s", rec.Code, rec.Body.String())
 		}
-		if countChildren() != 0 {
+		if countChildren(t) != 0 {
 			t.Errorf("a failed request created a child")
 		}
 	})
 
 	t.Run("nothing importable creates no child", func(t *testing.T) {
 		csv := naraExport(t, naraHeader, row("Diaper", "[Diaper] Type", "Sparkly"), row("Diaper", "[Diaper] Type", "Sparkly"))
-		code, out := serve("/api/import/nara", csv, map[string]string{"first_name": "Rosa", "birth_date": "2026-08-09"})
-		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" || naraJSON[float64](t, out, "rejected_count") != 2 || countChildren() != 0 {
-			t.Errorf("status %d body %v children %d", code, out, countChildren())
+		code, out := serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Rosa", "birth_date": "2026-08-09"})
+		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" || naraJSON[float64](t, out, "rejected_count") != 2 || countChildren(t) != 0 {
+			t.Errorf("status %d body %v children %d", code, out, countChildren(t))
 		}
 	})
 
 	t.Run("import", func(t *testing.T) {
-		code, out := serve("/api/import/nara", export, map[string]string{
-			"first_name": "Rosa", "birth_date": "2026-08-09", "sex": "female", "unit_system": "imperial", "timezone": "America/Vancouver",
+		code, out := serve(t, "/api/import/nara", export, map[string]string{
+			"first_name": "  Rosa ", "last_name": " Diaz ", "birth_date": "2026-08-09", "sex": "female",
+			"unit_system": "imperial", "timezone": "America/Vancouver",
 		})
 		if code != http.StatusOK || out["status"] != "completed" {
 			t.Fatalf("status %d body %v", code, out)
@@ -1148,15 +1327,22 @@ func TestNaraHandler(t *testing.T) {
 		for _, k := range []string{"feedings", "sleep", "changes", "pumping", "weight", "height", "head_circumference", "temperature", "medications", "milestones", "notes"} {
 			naraJSON[float64](t, out, "stats."+k)
 		}
-		if naraJSON[float64](t, out, "stats.feedings") != 2 || naraJSON[float64](t, out, "stats.milestones") != 1 ||
-			naraJSON[float64](t, out, "rejected_count") != 1 || naraJSON[float64](t, out, "warning_count") != 1 {
+		if naraJSON[float64](t, out, "stats.feedings") != 3 || naraJSON[float64](t, out, "stats.milestones") != 1 ||
+			naraJSON[float64](t, out, "stats.notes") != 1 || naraJSON[float64](t, out, "rejected_count") != 1 {
 			t.Errorf("body %v", out)
 		}
+		checkSummary(t, out)
 		if naraJSON[string](t, out, "rejected.0.code") != "unknown_diaper_type" || naraJSON[string](t, out, "rejected.0.value") != "Sparkly" ||
 			naraJSON[float64](t, out, "rejected.0.line") != 3 {
 			t.Errorf("rejection %v", out["rejected"])
 		}
 		childID := naraJSON[float64](t, out, "child_id")
+		// The baby's details are the form's, trimmed.
+		var child string
+		if err := db.Get(&child, `SELECT first_name||'/'||last_name||'/'||birth_date::text||'/'||coalesce(sex, '') FROM children WHERE id=$1`, childID); err != nil ||
+			child != "Rosa/Diaz/2026-08-09/female" {
+			t.Errorf("child %q (%v)", child, err)
+		}
 		var stored float64
 		if err := db.Get(&stored, `SELECT amount FROM feedings WHERE child_id=$1 AND type='formula'`, childID); err != nil || stored != 4 {
 			t.Errorf("imperial import stored %v (%v), want 4 oz", stored, err)
@@ -1170,7 +1356,7 @@ func TestNaraHandler(t *testing.T) {
 
 	t.Run("unknown browser zone falls back to UTC", func(t *testing.T) {
 		csv := naraExport(t, naraHeader, lateGrowth)
-		code, out := serve("/api/import/nara", csv, map[string]string{"first_name": "Ola", "birth_date": "2026-08-09", "timezone": "Not/AZone"})
+		code, out := serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Ola", "birth_date": "2026-08-09", "timezone": "Not/AZone"})
 		if code != http.StatusOK {
 			t.Fatalf("status %d body %v", code, out)
 		}
@@ -1182,34 +1368,86 @@ func TestNaraHandler(t *testing.T) {
 
 	t.Run("duplicate family pumping is reported and can be imported", func(t *testing.T) {
 		csv := naraExport(t, naraHeader, row("Pump", "[Pump] Duration (Seconds)", "600", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"))
-		if code, out := serve("/api/import/nara", csv, map[string]string{"first_name": "Ana", "birth_date": "2026-08-09"}); code != http.StatusOK {
+		if code, out := serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Ana", "birth_date": "2026-08-09"}); code != http.StatusOK {
 			t.Fatalf("first import: %d %v", code, out)
 		}
-		code, out := serve("/api/import/nara/preview", csv, nil)
+		// By default the session is reported and left out.
+		code, out := serve(t, "/api/import/nara/preview", csv, nil)
 		if code != http.StatusOK || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
-			naraJSON[string](t, out, "duplicate_pumping.children.0") != "Ana" || naraJSON[float64](t, out, "stats.pumping") != 0 {
+			naraJSON[string](t, out, "duplicate_pumping.children.0") != "Ana" || naraJSON[bool](t, out, "duplicate_pumping.included") ||
+			naraJSON[float64](t, out, "stats.pumping") != 0 {
 			t.Errorf("preview %d %v", code, out)
 		}
-		if code, out := serve("/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09"}); code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" {
+		// Empty issue lists are [], not null.
+		if len(naraJSON[[]any](t, out, "rejected")) != 0 || len(naraJSON[[]any](t, out, "warnings")) != 0 {
+			t.Errorf("issues %v %v", out["rejected"], out["warnings"])
+		}
+		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09"})
+		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" ||
+			naraJSON[float64](t, out, "duplicate_pumping.count") != 1 || !strings.Contains(naraJSON[string](t, out, "error"), "already saved for Ana (") {
 			t.Errorf("skipping the duplicate: %d %v", code, out)
 		}
-		code, out = serve("/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09", "duplicate_pumping": "import"})
-		if code != http.StatusOK || naraJSON[float64](t, out, "stats.pumping") != 1 {
+		// Asked to, the preview counts it and the import takes it.
+		code, out = serve(t, "/api/import/nara/preview", csv, map[string]string{"duplicate_pumping": "import"})
+		if code != http.StatusOK || !naraJSON[bool](t, out, "duplicate_pumping.included") || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
+			naraJSON[float64](t, out, "stats.pumping") != 1 {
+			t.Errorf("preview with the duplicate: %d %v", code, out)
+		}
+		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09", "duplicate_pumping": "import"})
+		if code != http.StatusOK || !naraJSON[bool](t, out, "duplicate_pumping.included") || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
+			naraJSON[float64](t, out, "stats.pumping") != 1 {
 			t.Errorf("importing the duplicate: %d %v", code, out)
+		}
+		// Both children hold it now, and both are named.
+		code, out = serve(t, "/api/import/nara/preview", csv, nil)
+		if children := naraJSON[[]any](t, out, "duplicate_pumping.children"); code != http.StatusOK || len(children) != 2 || children[0] != "Ana" || children[1] != "Bo" {
+			t.Errorf("holders: %d %v", code, out["duplicate_pumping"])
+		}
+		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Cy", "birth_date": "2026-08-09"})
+		if code != http.StatusUnprocessableEntity || !strings.Contains(naraJSON[string](t, out, "error"), "already saved for Ana and Bo (") {
+			t.Errorf("third baby: %d %v", code, out)
 		}
 	})
 
 	t.Run("issue lists are capped, counts are not", func(t *testing.T) {
 		rows := []nrow{row("Diaper", "[Diaper] Type", "Wet")}
 		for i := 0; i < 60; i++ {
-			rows = append(rows, row("Diaper", "[Diaper] Type", "Sparkly"))
+			rows = append(rows, row("Diaper", "[Diaper] Type", "Sparkly"), row("Bottle Feed", "[Bottle Feed] Volume", "60", "[Bottle Feed] Volume Unit", "ML"))
 		}
-		code, out := serve("/api/import/nara/preview", naraExport(t, naraHeader, rows...), nil)
-		if code != http.StatusOK || len(naraJSON[[]any](t, out, "rejected")) != naraIssueCap || naraJSON[float64](t, out, "rejected_count") != 60 ||
-			len(naraJSON[[]any](t, out, "warnings")) != 0 {
-			t.Errorf("status %d body %v", code, out)
+		code, out := serve(t, "/api/import/nara/preview", naraExport(t, naraHeader, rows...), nil)
+		rejected, warnings := naraJSON[[]any](t, out, "rejected"), naraJSON[[]any](t, out, "warnings")
+		if code != http.StatusOK || len(rejected) != naraIssueCap || naraJSON[float64](t, out, "rejected_count") != 60 ||
+			len(warnings) != naraIssueCap || naraJSON[float64](t, out, "warning_count") != 60 {
+			t.Errorf("status %d: rejected %d of %v, warnings %d of %v", code, len(rejected), out["rejected_count"], len(warnings), out["warning_count"])
 		}
 	})
+}
+
+func TestNaraHandlerDatabaseErrors(t *testing.T) {
+	db, err := sqlx.Open("pgx", "postgres://localhost/unused")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close() // every query fails
+	h := NewNaraImportHandler(db, &config.Config{UnitSystem: "metric"})
+	// A family pump row, so the preview looks for it in the database.
+	csv := naraExport(t, naraHeader, row("Pump", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"))
+	for _, c := range []struct{ path, code string }{
+		{"/api/import/nara/preview", "generic"},
+		{"/api/import/nara", "import_failed"},
+	} {
+		req := naraMultipart(t, c.path, csv, map[string]string{"first_name": "Rosa", "birth_date": "2026-08-09"})
+		req = req.WithContext(context.WithValue(req.Context(), middleware.IsAdminKey, true))
+		rec := httptest.NewRecorder()
+		if strings.HasSuffix(c.path, "/preview") {
+			h.Preview(rec, req)
+		} else {
+			h.Import(rec, req)
+		}
+		if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"code":"`+c.code+`"`) {
+			t.Errorf("%s: status %d body %s", c.path, rec.Code, rec.Body.String())
+		}
+	}
 }
 
 func TestNaraHandlerRejectsOversizedUploads(t *testing.T) {

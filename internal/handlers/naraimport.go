@@ -24,10 +24,11 @@ import (
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
-// Nara Baby publishes no export spec. The columns and values below follow
-// the schema in jarnskeggi/BabyWise (NaraSchema.kt, MIT) and the sample
-// exports published with other open-source importers: one CSV per child, a
-// `Type` column per row, epoch-millisecond timestamps with an IANA
+// Nara Baby publishes no export spec. Column names follow the header in
+// jarnskeggi/BabyWise (NaraSchema.kt, MIT), copied from a real export. Values
+// follow what other open-source importers report from real exports, or their
+// synthetic samples where that's all there is. An export is one CSV per
+// child: a `Type` column per row, epoch-millisecond timestamps with an IANA
 // `Time Zone` per row, and type-specific fields in columns prefixed with the
 // type name, e.g. `[Bottle Feed] Formula Volume` + `... Unit`.
 //
@@ -49,6 +50,15 @@ func NewNaraImportHandler(db *sqlx.DB, cfg *config.Config) *NaraImportHandler {
 const (
 	naraMaxUpload = 50 << 20
 	naraIssueCap  = 50 // issues returned per list; the full counts are returned too
+
+	// naraResponseTimeout replaces the server's 5-minute read and write
+	// timeouts on these routes: uploading and importing a large export can
+	// take longer, and the web app waits 10 minutes for the response.
+	naraResponseTimeout = 10 * time.Minute
+	// naraImportTimeout ends an import that's still running a minute before
+	// that, rolling it back, so it never commits once its response can no
+	// longer be sent.
+	naraImportTimeout = naraResponseTimeout - time.Minute
 
 	naraMaxDuration = 24 * time.Hour
 	naraMaxVolumeML = 1000.0
@@ -130,8 +140,10 @@ func writeNaraError(w http.ResponseWriter, status int, code, detail, message str
 
 // Preview parses an export without saving anything and reports what an
 // import would bring over, plus the baby's details from the profile row.
-// POST /api/import/nara/preview (multipart: file, unit_system, timezone)
+// POST /api/import/nara/preview (multipart: file, unit_system, timezone,
+// duplicate_pumping)
 func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
+	extendNaraDeadlines(w)
 	plan, opts, ok := h.readUpload(w, r)
 	if !ok {
 		return
@@ -142,7 +154,10 @@ func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		writeNaraError(w, http.StatusInternalServerError, "generic", "", "couldn't read the database")
 		return
 	}
-	plan.dropDuplicatePumps()
+	plan.Duplicates.Included = r.FormValue("duplicate_pumping") == "import"
+	if !plan.Duplicates.Included {
+		plan.dropDuplicatePumps()
+	}
 	body := naraSummary(plan, opts)
 	body["status"] = "preview"
 	body["profile"] = plan.Profile
@@ -154,6 +169,9 @@ func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
 // POST /api/import/nara (multipart: file, first_name, last_name, birth_date,
 // sex, unit_system, timezone, duplicate_pumping)
 func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
+	extendNaraDeadlines(w)
+	ctx, cancel := context.WithTimeout(r.Context(), naraImportTimeout)
+	defer cancel()
 	plan, opts, ok := h.readUpload(w, r)
 	if !ok {
 		return
@@ -176,17 +194,22 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 		writeNaraError(w, http.StatusBadRequest, "invalid_sex", "", "sex must be male, female, or empty")
 		return
 	}
-	// Family pumping that's already in BabyTracker (from a sibling's export)
-	// is skipped unless the user chose to import it for this baby too.
+	// Family pumping that's already in BabyTracker (from a sibling's export,
+	// or an earlier import of this baby) is skipped unless the user chose to
+	// import it for this baby too.
 	includeDuplicates := r.FormValue("duplicate_pumping") == "import"
 
 	child := naraChild{FirstName: firstName, LastName: lastName, BirthDate: birthDate, Sex: sex}
-	childID, err := insertNaraPlan(r.Context(), h.db, child, plan, includeDuplicates)
+	childID, err := insertNaraPlan(ctx, h.db, child, plan, includeDuplicates)
 	if errors.Is(err, errNaraNothingToImport) {
 		// No empty child: on first run that would end onboarding with
 		// nothing imported and nowhere to retry.
 		body := naraSummary(plan, opts)
 		body["error"] = "nothing in this file could be imported"
+		if plan.Duplicates.Count > 0 && !includeDuplicates {
+			body["error"] = "nothing new to import: what's left is family pumping already saved for " +
+				naraNames(plan.Duplicates.Children) + " (send duplicate_pumping=import to import it for this baby too)"
+		}
 		body["code"] = "nothing_to_import"
 		pagination.WriteJSON(w, http.StatusUnprocessableEntity, body)
 		return
@@ -203,6 +226,16 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	slog.Info("nara import completed", "child_id", childID, "stats", body["stats"],
 		"skipped", plan.Skipped, "rejected", plan.RejectedCount, "warnings", plan.WarningCount)
 	pagination.WriteJSON(w, http.StatusOK, body)
+}
+
+// extendNaraDeadlines gives the request naraResponseTimeout from now to read
+// the upload and write the response. A ResponseWriter that can't change its
+// deadlines (a test recorder) keeps the server's.
+func extendNaraDeadlines(w http.ResponseWriter) {
+	deadline := time.Now().Add(naraResponseTimeout)
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(deadline)
+	_ = rc.SetWriteDeadline(deadline)
 }
 
 // readUpload checks access, reads the multipart upload and parses the export.
@@ -235,9 +268,10 @@ func (h *NaraImportHandler) readUpload(w http.ResponseWriter, r *http.Request) (
 	defer file.Close()
 
 	opts := naraOptions{UnitSystem: h.cfg.UnitSystem, Location: time.UTC, Now: h.now()}
-	// The frontend sends the unit system the importing device displays, since
-	// stored values carry no unit and each device labels them with its own
-	// setting.
+	// Stored values carry no unit and each device labels them with its own
+	// setting, so the web app sends its device's units. On first run, with
+	// no data yet, the user picks them on the import form and the device
+	// switches to them.
 	if us := r.FormValue("unit_system"); us == "metric" || us == "imperial" {
 		opts.UnitSystem = us
 	}
@@ -278,7 +312,7 @@ func naraSummary(p *naraPlan, opts naraOptions) map[string]any {
 		"stats":             p.stats(),
 		"skipped":           p.Skipped,
 		"as_notes":          p.AsNotes,
-		"duplicate_pumping": map[string]any{"count": p.Duplicates.Count, "children": children},
+		"duplicate_pumping": map[string]any{"count": p.Duplicates.Count, "children": children, "included": p.Duplicates.Included},
 		"solid_feeds":       p.SolidFeeds,
 		"rejected":          orEmpty(p.Rejected),
 		"rejected_count":    p.RejectedCount,
@@ -286,6 +320,14 @@ func naraSummary(p *naraPlan, opts naraOptions) map[string]any {
 		"warning_count":     p.WarningCount,
 		"units":             naraUnitLabels(opts.UnitSystem),
 	}
+}
+
+// naraNames lists names in English: "Ana", "Ana and Bo", "Ana, Bo and Cy".
+func naraNames(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 func naraUnitLabels(system string) map[string]string {
@@ -383,13 +425,15 @@ type naraPlan struct {
 	Milestones  []naraMilestone
 	Notes       []naraNote
 	Skipped     map[string]int // Nara row types not imported
-	AsNotes     map[string]int // rows with no BabyTracker equivalent, kept as notes
+	AsNotes     map[string]int // rows kept as notes: no BabyTracker equivalent, or only a note
 	SolidFeeds  int            // feedings from Solid Feed rows (saved as parent fed)
-	// Family pumping sessions already in the database, from a sibling's
-	// export, and the children that hold them.
+	// Family pumping sessions already in the database (from a sibling's
+	// export, or an earlier import of this baby), the children that hold
+	// them, and whether they're imported anyway.
 	Duplicates struct {
 		Count    int
 		Children []string
+		Included bool
 	}
 	// The first naraIssueCap issues of each kind, and the full counts.
 	Rejected      []naraIssue
@@ -454,25 +498,30 @@ func markDuplicatePumps(q sqlx.Queryer, p *naraPlan) error {
 	}
 	if err := sqlx.Select(q, &existing,
 		`SELECT p.start_time, p.end_time, c.first_name FROM pumping p JOIN children c ON c.id = p.child_id
-		 WHERE p.start_time BETWEEN $1 AND $2`, lo, hi); err != nil {
+		 WHERE p.start_time BETWEEN $1 AND $2 ORDER BY c.id`, lo, hi); err != nil {
 		return err
 	}
+	// A session can be held by several children, e.g. after a sibling's
+	// import included it; all of them are named.
 	type key struct{ start, end int64 }
-	owner := make(map[key]string, len(existing))
+	holders := make(map[key][]string, len(existing))
 	for _, e := range existing {
-		owner[key{e.Start.UnixMicro(), e.End.UnixMicro()}] = e.Child
+		k := key{e.Start.UnixMicro(), e.End.UnixMicro()}
+		holders[k] = append(holders[k], e.Child)
 	}
 	seen := map[string]bool{}
 	for i, pm := range p.Pumping {
-		child, ok := owner[key{pm.Start.UnixMicro(), pm.End.UnixMicro()}]
+		children, ok := holders[key{pm.Start.UnixMicro(), pm.End.UnixMicro()}]
 		if !pm.Family || !ok {
 			continue
 		}
 		p.Pumping[i].Duplicate = true
 		p.Duplicates.Count++
-		if !seen[child] {
-			seen[child] = true
-			p.Duplicates.Children = append(p.Duplicates.Children, child)
+		for _, child := range children {
+			if !seen[child] {
+				seen[child] = true
+				p.Duplicates.Children = append(p.Duplicates.Children, child)
+			}
 		}
 	}
 	return nil
@@ -498,7 +547,8 @@ func (p *naraPlan) total() int {
 }
 
 // warn and reject record an issue. Only the first naraIssueCap of each are
-// kept, so a broken file can't fill memory; the counts are exact.
+// kept, so a broken file can't fill memory; the counts are exact. A row warns
+// only once it can no longer be rejected, so a rejected row has no warnings.
 func (p *naraPlan) warn(row *naraRow, code, detail, reason string) {
 	p.WarningCount++
 	if len(p.Warnings) < naraIssueCap {
@@ -536,9 +586,10 @@ func (p *naraPlan) zone(row *naraRow, opts naraOptions) *time.Location {
 }
 
 // insertNaraPlan creates the child and inserts the plan in one transaction,
-// which is rolled back if the request is cancelled. Family pumping already in
-// the database is left out unless includeDuplicates is set. It returns
-// errNaraNothingToImport, without creating the child, when nothing is left.
+// which is rolled back if ctx ends first (the client went away, or the import
+// ran past its deadline). Family pumping already in the database is left out
+// unless includeDuplicates is set. It returns errNaraNothingToImport, without
+// creating the child, when nothing is left.
 func insertNaraPlan(ctx context.Context, db *sqlx.DB, c naraChild, p *naraPlan, includeDuplicates bool) (int, error) {
 	tx, err := db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -549,6 +600,7 @@ func insertNaraPlan(ctx context.Context, db *sqlx.DB, c naraChild, p *naraPlan, 
 	if err := markDuplicatePumps(tx, p); err != nil {
 		return 0, fmt.Errorf("check pumping: %w", err)
 	}
+	p.Duplicates.Included = includeDuplicates
 	if !includeDuplicates {
 		p.dropDuplicatePumps()
 	}
@@ -744,7 +796,6 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 			continue
 		}
 
-		warnings, warningCount := len(p.Warnings), p.WarningCount
 		if err := p.addRow(row, opts); err != nil {
 			if errors.Is(err, errNaraSpreadsheet) {
 				return nil, errNaraSpreadsheet
@@ -753,8 +804,6 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 			if !errors.As(err, &re) {
 				re = &naraRowError{Code: "invalid", Reason: err.Error()}
 			}
-			// A rejected row has no warnings.
-			p.Warnings, p.WarningCount = p.Warnings[:warnings], warningCount
 			p.reject(naraIssue{Line: line, Type: row.typ, Code: re.Code, Detail: re.Detail, Value: re.Value, Reason: re.Reason})
 			continue
 		}
@@ -766,7 +815,9 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 }
 
 func (p *naraPlan) addProfile(row *naraRow) {
-	// Only a child profile (a parent's export may have another Type, or none).
+	// Skip profiles typed as something other than CHILD. A blank Type is
+	// still taken: one importer says a parent's export leaves it blank, but
+	// that's unverified, and the details it fills in can be edited anyway.
 	if t := row.get("[Profile] Type"); t != "" && !strings.EqualFold(t, "CHILD") {
 		return
 	}
@@ -792,8 +843,9 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 	case "Breastfeed", "Bottle Feed", "Combo Feed", "Solid Feed", "Diaper", "Pump", "Sleep",
 		"Growth", "Medical", "Milestone", "Baby First", "Routine", "Vaccine":
 	default:
-		// Nara's parent export uses "Postpartum ..." types; they aren't the
-		// baby's, so not even their notes are kept.
+		// "Postpartum ..." types are reportedly from a parent's export (one
+		// importer says so; unverified). They aren't the baby's, so not even
+		// their notes are kept.
 		if strings.HasPrefix(row.typ, "Postpartum ") {
 			p.Skipped[row.typ]++
 			return nil
@@ -897,6 +949,16 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 		if err != nil {
 			return err
 		}
+		if pm.Amount == nil && pm.End.Equal(pm.Start) {
+			// No amount and no length: nothing was measured (or the timer
+			// was still running when the export was made). A note is kept.
+			if note == "" {
+				return rowErr("empty_entry", "", "nothing recorded in this entry")
+			}
+			p.note(start, "Pumping: "+note)
+			p.AsNotes["Pump"]++
+			return nil
+		}
 		pm.Note = note
 		p.Pumping = append(p.Pumping, pm)
 
@@ -994,9 +1056,9 @@ func naraBreastfeed(row *naraRow, prefix string, start time.Time) (naraFeeding, 
 	return naraFeeding{Start: start, End: start.Add(l + r), Type: "breast milk", Method: method}, has, nil
 }
 
-// naraSide normalizes "LEFT", "Right.nonTimer" style values to left, right or
-// both ("" if unrecognized). The .nonTimer suffix marks a manually entered
-// side.
+// naraSide normalizes side values such as "LEFT" and "RIGHT.nonTimer", in any
+// case, to left, right or both ("" if unrecognized). The .nonTimer suffix
+// marks a manually entered side.
 func naraSide(v string) string {
 	v = strings.ToLower(v)
 	v = strings.TrimSuffix(v, ".nontimer")
@@ -1060,13 +1122,19 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 	case positive(bm) && positive(formula):
 		return mixed(bm, formula, ""), nil
 	case (positive(bm) || positive(formula)) && hasBM && hasFormula:
-		// A mixed bottle with one share recorded. If the generic Volume is
-		// larger, it's the total, so the other share is the difference.
+		// A mixed bottle with one share recorded. A larger generic Volume is
+		// taken as the total (likely, but unverified), so the other share is
+		// the difference. A gap under 1 mL is rounding between two columns'
+		// units, not a share.
 		have := bm
 		if positive(formula) {
 			have = formula
 		}
-		if positive(total) && *total > *have {
+		minShare := 1.0 // mL
+		if opts.UnitSystem == "imperial" {
+			minShare /= mlPerFlOz
+		}
+		if positive(total) && *total-*have >= minShare {
 			other := roundVolume(*total-*have, opts.UnitSystem)
 			p.warn(row, "mixed_derived", "", "mixed bottle with one share recorded; the other share is the total minus that share")
 			if have == bm {
@@ -1076,7 +1144,7 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 		}
 		p.warn(row, "mixed_partial", "", "mixed bottle with only one share recorded")
 		if have == bm {
-			return []naraFeeding{feeding("breast milk", bm, "Mixed bottle; only the breast milk share recorded in Nara")}, nil
+			return []naraFeeding{feeding("breast milk", bm, joinNotes("Mixed bottle; only the breast milk share recorded in Nara", formulaNote))}, nil
 		}
 		return []naraFeeding{feeding("formula", formula, joinNotes("Mixed bottle; only the formula share recorded in Nara", formulaNote))}, nil
 	case positive(bm):
@@ -1114,7 +1182,8 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 // "Cereal: amountKey=ALL; preparationKeyz=PUREE".
 var naraFoodTag = regexp.MustCompile(`^([^:]+):\s*(\w+=.*)$`)
 
-// naraFoodTagNames labels the tag keys seen in exports.
+// naraFoodTagNames labels the tag keys seen in a real export (amountKey,
+// preparationKeyz) or only in a sample (foodCategoryKey).
 var naraFoodTagNames = map[string]string{"amountKey": "amount", "preparationKeyz": "preparation", "foodCategoryKey": "category"}
 
 // naraFood turns "Cereal: amountKey=ALL; preparationKeyz=PUREE" into
@@ -1236,11 +1305,6 @@ func (p *naraPlan) naraPump(row *naraRow, start time.Time, opts naraOptions) (na
 	if err != nil {
 		return naraPumping{}, err
 	}
-	if left == nil && right == nil && total == nil && end.Equal(start) {
-		// No amount and no length: nothing was recorded (or the timer was
-		// still running when the export was made).
-		return naraPumping{}, rowErr("empty_entry", "", "nothing recorded in this entry")
-	}
 
 	// Pumping is logged for the family, so a pump row can have no profile.
 	family := row.get("_profileKey") == "" || row.get("Profile Name") == ""
@@ -1258,15 +1322,16 @@ func (p *naraPlan) naraPump(row *naraRow, start time.Time, opts naraOptions) (na
 		// total only, or alongside the sides).
 		pm.Amount = total
 	case sides > 0:
+		// Each side passed naraVolume's limit on its own; their sum must too.
 		v := roundVolume(sides, opts.UnitSystem)
+		if v > naraVolumeLimit(opts.UnitSystem) {
+			return naraPumping{}, rowErr("out_of_range", "[Pump] Left Volume + [Pump] Right Volume", "the left and right volumes add up to an implausible amount")
+		}
 		pm.Amount = &v
 	case total != nil:
 		pm.Amount = total
 	case left != nil || right != nil:
 		pm.Amount = &sides // explicit zeros
-	}
-	if pm.Amount != nil && *pm.Amount > naraVolumeLimit(opts.UnitSystem) {
-		return naraPumping{}, rowErr("out_of_range", "[Pump] Total Volume", "the pumped volume is implausibly large")
 	}
 	return pm, nil
 }
@@ -1389,8 +1454,8 @@ func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraO
 	return nil
 }
 
-// naraMedication matches Nara's medication text, e.g.
-// "Children's Tylenol, 3.75 (ML)".
+// naraMedicationDose splits Nara's medication text, e.g.
+// "Children's Tylenol, 3.75 (ML)", into name, dose and unit.
 var naraMedicationDose = regexp.MustCompile(`^(.+?),\s*([0-9]+(?:[.,][0-9]+)?)\s*\(([^)]+)\)$`)
 
 func (p *naraPlan) addMedical(row *naraRow, at time.Time, note string, opts naraOptions) error {

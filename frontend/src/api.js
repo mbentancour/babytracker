@@ -306,10 +306,12 @@ function naraForm(file, { firstName, lastName, birthDate, sex, unitSystem, inclu
   if (lastName !== undefined) formData.append("last_name", lastName);
   if (birthDate !== undefined) formData.append("birth_date", birthDate);
   if (sex) formData.append("sex", sex);
-  // Amounts are stored as plain numbers and labelled with the viewer's unit
-  // setting, so convert into the units this device shows.
+  // Amounts are stored as plain numbers and labelled with each device's unit
+  // setting, so convert into this device's units (on first run, the units
+  // picked on the form, which the device then switches to).
   if (unitSystem) formData.append("unit_system", unitSystem);
-  // Family pumping already imported with a sibling is skipped unless asked.
+  // Family pumping already in BabyTracker (with a sibling, or an earlier
+  // import of this baby) is skipped unless asked.
   if (includeDuplicates) formData.append("duplicate_pumping", "import");
   // Fallback for rows without Nara's per-row Time Zone column.
   formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
