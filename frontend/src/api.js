@@ -529,6 +529,19 @@ export const api = {
   importFromBabyBuddy: (url, token) =>
     request("import/babybuddy", { method: "POST", body: JSON.stringify({ url, token }) }),
 
+  // Nara Baby CSV import (admin) — creates the child and imports into it
+  importFromNara: (file, { firstName, lastName, birthDate }) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("first_name", firstName);
+    formData.append("last_name", lastName);
+    formData.append("birth_date", birthDate);
+    // Growth entries are dated, and Nara stores instants; use the browser's
+    // zone so a late-evening weigh-in lands on the right day.
+    formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+    return uploadRequest(`${API_BASE}/import/nara`, formData);
+  },
+
   // Backups (admin)
   getBackups: () => request("backups/"),
   createBackup: (destinationIds, passphrases) =>

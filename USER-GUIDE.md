@@ -6,11 +6,12 @@ A practical guide for parents using BabyTracker to track their baby's daily acti
 
 ## Getting Started
 
-On first launch you'll see three options:
+On first launch you'll see four options:
 
 - **Start fresh** — create a new admin account, then add your baby.
 - **Restore from a backup** — upload a `.tar.gz` (or `.tar.gz.enc` if encrypted) backup file. After the restore completes, sign in with the **credentials from the original server**; you will not be asked to create a new account.
 - **Import from Baby Buddy** — create an admin account, then enter your Baby Buddy URL and API token to migrate existing data.
+- **Import from Nara Baby** — create an admin account, then upload the CSV file from Nara Baby (tap your baby's avatar on the Activity screen, then **Export Data**) and enter your baby's name and birth date. Feeds, diapers, pumping, growth, and sleep are imported; the summary lists anything that couldn't be brought over.
 
 For a fresh install, after creating the account:
 

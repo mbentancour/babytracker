@@ -959,6 +959,37 @@ Fetches all children, feedings, sleep, changes, tummy times, temperature, weight
 
 ---
 
+## Nara Baby Import (admin only)
+
+Create a child and import a Nara Baby CSV export (Nara exports one child per file):
+
+```
+POST /api/import/nara
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+
+file=<export.csv>
+first_name=Emma
+last_name=          (optional)
+birth_date=2026-08-09
+timezone=Europe/Madrid   (optional, IANA name; dates growth entries, defaults to UTC)
+```
+
+Imports breastfeeds, bottle and combo feeds, diapers, pumping, growth (weight, height, head size), and sleep. Volumes and measurements are converted to the instance's unit system. Everything is inserted in one transaction. The response lists what was imported, the Nara row types with no BabyTracker equivalent (`skipped`), and rows that couldn't be read, with the CSV line and reason (`rejected`, first 50; `rejected_count` has the total):
+
+```json
+{
+  "status": "completed",
+  "child_id": 3,
+  "stats": { "feedings": 466, "changes": 271, "pumping": 70, "weight": 12, "sleep": 0 },
+  "skipped": { "Milestone": 4 },
+  "rejected": [{ "line": 812, "type": "Diaper", "reason": "unrecognized diaper type \"Sparkly\"" }],
+  "rejected_count": 1
+}
+```
+
+---
+
 ## Password Management
 
 Change your own password:

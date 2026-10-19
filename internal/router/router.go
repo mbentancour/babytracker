@@ -59,6 +59,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	usersH := handlers.NewUsersHandler(db)
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
+	naraImportH := handlers.NewNaraImportHandler(db, cfg)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 
@@ -291,6 +292,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 			// Baby Buddy import
 			r.Post("/api/import/babybuddy", bbImportH.Import)
+			r.Post("/api/import/nara", naraImportH.Import)
 
 			// User management (me/password routes are NOT admin-only — handled below)
 			r.Get("/api/users/", usersH.List)
