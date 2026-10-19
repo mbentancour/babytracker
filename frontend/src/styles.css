@@ -597,6 +597,40 @@ body {
   border-color: #6C5CE7;
 }
 
+/* Visually hidden but still focusable and announced (e.g. a file input
+   wrapped in a styled label). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px dashed var(--border);
+  background: var(--bg);
+  font-size: 14px;
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+
+.file-picker:focus-within {
+  outline: 2px solid #6C5CE7;
+  outline-offset: 2px;
+}
+
 /* Login Screen */
 .login-screen {
   min-height: 100vh;

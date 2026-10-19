@@ -11,7 +11,7 @@ On first launch you'll see four options:
 - **Start fresh** — create a new admin account, then add your baby.
 - **Restore from a backup** — upload a `.tar.gz` (or `.tar.gz.enc` if encrypted) backup file. After the restore completes, sign in with the **credentials from the original server**; you will not be asked to create a new account.
 - **Import from Baby Buddy** — create an admin account, then enter your Baby Buddy URL and API token to migrate existing data.
-- **Import from Nara Baby** — create an admin account, then upload the CSV file from Nara Baby (tap your baby's avatar on the Activity screen, then **Export Data**) and enter your baby's name and birth date. Feeds, diapers, pumping, growth, and sleep are imported; the summary lists anything that couldn't be brought over.
+- **Import from Nara Baby** — create an admin account, then upload the CSV file from Nara Baby (tap your baby's avatar on the Activity screen, then **Export Data**). BabyTracker shows what's in the file and fills in your baby's name, birth date and sex from it; check them, choose whether to save amounts in metric or imperial units, and start the import. Feeds, sleep, diapers, pumping, growth, medications, temperatures and milestones are imported. The summary lists anything saved as a note instead, rows imported with an assumption (for example a bottle with no milk type), and rows that couldn't be read, with their line in the file. Nara exports one baby per file: import a second baby from **Settings → Data**. Don't open the export in a spreadsheet app first; re-saving it rounds the times.
 
 For a fresh install, after creating the account:
 
@@ -268,7 +268,9 @@ what it did before.
 - **Export as CSV:** Download all your data as a spreadsheet-friendly CSV file.
 - **Backup destinations:** Add one or more places where backups should be stored. Each destination is independent — you can mix a local folder with a remote WebDAV server, give them different schedules, retention counts, and encryption settings.
 - **Backups:** Create a manual backup, download/restore/delete existing ones, choose which destinations a manual backup should be sent to.
-- **Import from Baby Buddy:** If you are migrating from Baby Buddy, you can import your existing data.
+- **Import from Nara Baby (admins):** Add a baby from a Nara Baby export, one file per baby. This works the same as the first-run import described above. Nara can include the family's pumping in every child's export; pumping sessions already imported with another baby are skipped, unless you tick the box to import them for this baby too.
+
+Importing from Baby Buddy is only offered on first run, before any baby has been added.
 
 #### Backup destinations in detail
 

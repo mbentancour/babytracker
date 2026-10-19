@@ -292,7 +292,6 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 			// Baby Buddy import
 			r.Post("/api/import/babybuddy", bbImportH.Import)
-			r.Post("/api/import/nara", naraImportH.Import)
 
 			// User management (me/password routes are NOT admin-only — handled below)
 			r.Get("/api/users/", usersH.List)
@@ -348,6 +347,11 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireFreshAdmin(db))
 			r.Post("/api/backups/restore", backupH.Restore)
+
+			// Nara Baby import: an export upload, so it lives here rather
+			// than behind the 1 MB JSON body limit.
+			r.Post("/api/import/nara/preview", naraImportH.Preview)
+			r.Post("/api/import/nara", naraImportH.Import)
 		})
 	})
 

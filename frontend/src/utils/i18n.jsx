@@ -50,7 +50,9 @@ export function I18nProvider({ children }) {
       const dict = translations[locale] || translations.en;
       let text = dict[key] || translations.en[key] || key;
       for (const [k, v] of Object.entries(params)) {
-        text = text.replace(`{{${k}}}`, v);
+        // split/join rather than replace(): every occurrence, and no "$&"
+        // patterns in values (some come from imported files).
+        text = text.split(`{{${k}}}`).join(String(v));
       }
       return text;
     },

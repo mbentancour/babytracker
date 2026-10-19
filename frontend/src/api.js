@@ -143,15 +143,30 @@ async function withTimeout(timeoutMs, url, work) {
 // Shared shape for the multipart upload endpoints: same auth, same cookie
 // handling, same tolerant response parsing, same generous transfer budget.
 function uploadRequest(url, formData, { auth = true } = {}) {
-  return withTimeout(TRANSFER_TIMEOUT_MS, url, (signal) =>
-    fetch(url, {
-      method: "POST",
-      headers: auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-      body: formData,
-      signal,
-    }).then(handleUploadResponse),
-  );
+  return withTimeout(TRANSFER_TIMEOUT_MS, url, async (signal) => {
+    const send = () =>
+      fetch(url, {
+        method: "POST",
+        headers: auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        credentials: "include",
+        body: formData,
+        signal,
+      });
+    let response = await send();
+    // Same as request(): an expired access token is refreshed and the upload
+    // retried once (a FormData body can be sent again).
+    if (auth && response.status === 401) {
+      const result = await refreshAccessToken();
+      if (result === "ok") {
+        response = await send();
+      } else {
+        setAccessToken(null);
+        setRefreshToken(null);
+        if (onAuthRequired) onAuthRequired();
+      }
+    }
+    return handleUploadResponse(response);
+  });
 }
 
 // jsonRequest is the unauthenticated counterpart to request() — used by the
@@ -271,6 +286,7 @@ async function handleUploadResponse(r) {
   let payload;
   try { payload = JSON.parse(text); }
   catch { payload = { error: text || `HTTP ${r.status}` }; }
+  if (payload && typeof payload === "object") payload.status = r.status;
   throw payload;
 }
 
@@ -281,6 +297,23 @@ function qs(params) {
   );
   const s = new URLSearchParams(filtered).toString();
   return s ? `?${s}` : "";
+}
+
+function naraForm(file, { firstName, lastName, birthDate, sex, unitSystem, includeDuplicates } = {}) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (firstName !== undefined) formData.append("first_name", firstName);
+  if (lastName !== undefined) formData.append("last_name", lastName);
+  if (birthDate !== undefined) formData.append("birth_date", birthDate);
+  if (sex) formData.append("sex", sex);
+  // Amounts are stored as plain numbers and labelled with the viewer's unit
+  // setting, so convert into the units this device shows.
+  if (unitSystem) formData.append("unit_system", unitSystem);
+  // Family pumping already imported with a sibling is skipped unless asked.
+  if (includeDuplicates) formData.append("duplicate_pumping", "import");
+  // Fallback for rows without Nara's per-row Time Zone column.
+  formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
+  return formData;
 }
 
 export const api = {
@@ -529,18 +562,10 @@ export const api = {
   importFromBabyBuddy: (url, token) =>
     request("import/babybuddy", { method: "POST", body: JSON.stringify({ url, token }) }),
 
-  // Nara Baby CSV import (admin) — creates the child and imports into it
-  importFromNara: (file, { firstName, lastName, birthDate }) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("first_name", firstName);
-    formData.append("last_name", lastName);
-    formData.append("birth_date", birthDate);
-    // Growth entries are dated, and Nara stores instants; use the browser's
-    // zone so a late-evening weigh-in lands on the right day.
-    formData.append("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "");
-    return uploadRequest(`${API_BASE}/import/nara`, formData);
-  },
+  // Nara Baby CSV import (admin). preview parses the export without saving
+  // anything; import creates the child and imports into it.
+  previewNaraImport: (file, unitSystem) => uploadRequest(`${API_BASE}/import/nara/preview`, naraForm(file, { unitSystem })),
+  importFromNara: (file, fields) => uploadRequest(`${API_BASE}/import/nara`, naraForm(file, fields)),
 
   // Backups (admin)
   getBackups: () => request("backups/"),

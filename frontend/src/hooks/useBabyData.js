@@ -77,6 +77,10 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
   const [unitSystem, setUnitSystem] = useState(
     () => localStorage.getItem("babytracker_units") || "metric"
   );
+  const changeUnitSystem = useCallback((system) => {
+    try { localStorage.setItem("babytracker_units", system); } catch { /* private mode */ }
+    setUnitSystem(system);
+  }, []);
   const intervalRef = useRef(null);
   const childIdRef = useRef(null);
   const fetchSeqRef = useRef(0);
@@ -411,6 +415,8 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
     error,
     lastSync,
     unitSystem,
+    // Saves this device's unit preference and relabels values right away.
+    setUnitSystem: changeUnitSystem,
     // In demo mode refetch must not hit the API — otherwise the
     // post-permissions refetch effect in App.jsx fires /api/children,
     // 404s against the demo router, and surfaces a "Connection error"

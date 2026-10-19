@@ -3,8 +3,12 @@ import { api } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
+import NaraImport from "./NaraImport";
 
-export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed }) {
+// onBusy(true) tells the parent an import has created the child but its
+// summary is still on screen; the parent keeps rendering onboarding until
+// onBusy(false), instead of switching to the dashboard on its next refresh.
+export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed, unitSystem, onUnitSystemChange, onBusy }) {
   const { t } = useI18n();
   // Map setup-choice intents ("fresh"/"import"/"nara") to the internal mode names.
   const seededMode = { fresh: "new", import: "import", nara: "nara" }[initialMode] || null;
@@ -57,8 +61,18 @@ export default function OnboardingScreen({ onChildAdded, initialMode, onInitialM
   }
 
   if (mode === "new") return <NewBabyForm onDone={onChildAdded} onBack={() => setMode(null)} />;
-  if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} />;
-  if (mode === "nara") return <NaraImport onDone={onChildAdded} onBack={() => setMode(null)} />;
+  if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} onBusy={onBusy} />;
+  if (mode === "nara") {
+    return (
+      <NaraImport
+        unitSystem={unitSystem}
+        onUnitsChange={onUnitSystemChange}
+        onDone={onChildAdded}
+        onBack={() => setMode(null)}
+        onBusy={onBusy}
+      />
+    );
+  }
 }
 
 function OnboardingOption({ icon, title, description, color, onClick }) {
@@ -145,7 +159,7 @@ function NewBabyForm({ onDone, onBack }) {
   );
 }
 
-function BabyBuddyImport({ onDone, onBack }) {
+function BabyBuddyImport({ onDone, onBack, onBusy }) {
   const { t } = useI18n();
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
@@ -153,16 +167,29 @@ function BabyBuddyImport({ onDone, onBack }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
+  // Release the onboarding hold if this goes away mid-import.
+  useEffect(() => () => onBusy?.(false), [onBusy]);
+
   const handleImport = async (e) => {
     e.preventDefault();
     setError("");
     setImporting(true);
+    onBusy?.(true);
     try {
       const res = await api.importFromBabyBuddy(url, token);
       setResult(res.stats);
     } catch (err) {
+      onBusy?.(false);
       setError(err.error || err.message || "Import failed");
       setImporting(false);
+    }
+  };
+
+  const finish = async () => {
+    try {
+      await onDone?.();
+    } finally {
+      onBusy?.(false);
     }
   };
 
@@ -182,7 +209,7 @@ function BabyBuddyImport({ onDone, onBack }) {
               </div>
             ))}
           </div>
-          <button onClick={onDone} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
+          <button onClick={finish} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
             {t("onboarding.continueToDashboard")}
           </button>
         </div>
@@ -211,130 +238,7 @@ function BabyBuddyImport({ onDone, onBack }) {
           <button type="submit" className="login-button" style={{ background: "#6C5CE7" }} disabled={importing}>
             {importing ? t("onboarding.importing") : t("onboarding.startImport")}
           </button>
-          <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
-            {t("form.back")}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-
-function NaraImport({ onDone, onBack }) {
-  const { t } = useI18n();
-  const [file, setFile] = useState(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
-
-  const handleImport = async (e) => {
-    e.preventDefault();
-    if (!file) return;
-    setError("");
-    setImporting(true);
-    try {
-      setResult(await api.importFromNara(file, { firstName, lastName, birthDate }));
-    } catch (err) {
-      setError(err.error || err.message || "Import failed");
-      setImporting(false);
-    }
-  };
-
-  if (result) {
-    const imported = Object.entries(result.stats || {}).filter(([, n]) => n > 0);
-    const skipped = Object.entries(result.skipped || {});
-    const rejected = result.rejected || [];
-    return (
-      <div className="login-screen">
-        <div className="login-card">
-          <div className="login-header">
-            <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Activity /></div>
-            <h1 className="login-title">{t("onboarding.importComplete")}</h1>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-            {imported.map(([key, count]) => (
-              <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, background: "var(--bg)", border: "1px solid var(--border)", fontSize: 13 }}>
-                <span style={{ color: "var(--text-muted)", textTransform: "capitalize" }}>{key.replace(/-/g, " ")}</span>
-                <span style={{ fontWeight: 600, color: "var(--text)" }}>{count}</span>
-              </div>
-            ))}
-          </div>
-          {skipped.length > 0 && (
-            <p style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12 }}>
-              {t("onboarding.naraSkipped")}{" "}
-              {skipped.map(([type, n]) => `${type} (${n})`).join(", ")}
-            </p>
-          )}
-          {result.rejected_count > 0 && (
-            <details style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>
-              <summary style={{ cursor: "pointer" }}>
-                {t("onboarding.naraRejected", { count: result.rejected_count })}
-              </summary>
-              <ul style={{ margin: "8px 0 0", paddingLeft: 18, maxHeight: 160, overflowY: "auto" }}>
-                {rejected.map((r) => (
-                  <li key={r.line}>{t("onboarding.naraRejectedLine", { line: r.line, type: r.type })}: {r.reason}</li>
-                ))}
-              </ul>
-            </details>
-          )}
-          <button onClick={onDone} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
-            {t("onboarding.continueToDashboard")}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="login-screen">
-      <div className="login-card">
-        <div className="login-header">
-          <div className="login-icon" style={{ background: "#e1705518", color: "#e17055" }}><Icons.Download /></div>
-          <h1 className="login-title">{t("onboarding.importNara")}</h1>
-          <p className="login-subtitle">{t("onboarding.naraHint")}</p>
-        </div>
-        <form onSubmit={handleImport} className="login-form">
-          {error && <div className="login-error">{error}</div>}
-          <label
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              padding: "20px", borderRadius: 12,
-              border: "2px dashed var(--border)", background: "var(--bg)",
-              color: importing ? "var(--text-dim)" : "var(--text-muted)",
-              fontSize: 14, cursor: importing ? "not-allowed" : "pointer",
-              fontFamily: "inherit", overflowWrap: "anywhere",
-            }}
-          >
-            <Icons.Download />
-            {file ? file.name : t("onboarding.naraChooseFile")}
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              style={{ display: "none" }}
-              onChange={(e) => { setError(""); setFile(e.target.files?.[0] || null); }}
-              disabled={importing}
-            />
-          </label>
-          <div className="login-field">
-            <label className="login-label">{t("onboarding.firstName")}</label>
-            <input type="text" className="login-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required placeholder="Emma" />
-          </div>
-          <div className="login-field">
-            <label className="login-label">{t("onboarding.lastName")} ({t("form.optional")})</label>
-            <input type="text" className="login-input" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-          </div>
-          <div className="login-field">
-            <label className="login-label">{t("onboarding.birthDate")}</label>
-            <input type="date" className="login-input" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required />
-          </div>
-          <button type="submit" className="login-button" style={{ background: "#e17055" }} disabled={!file || importing}>
-            {importing ? t("onboarding.importing") : t("onboarding.startImport")}
-          </button>
-          <button type="button" onClick={onBack} disabled={importing} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
+          <button type="button" onClick={onBack} disabled={importing} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: importing ? "not-allowed" : "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
             {t("form.back")}
           </button>
         </form>

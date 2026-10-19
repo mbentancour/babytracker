@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
+import NaraImport from "./NaraImport";
 import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
 import {
   usePreferences,
@@ -37,11 +38,13 @@ function formatBackupDate(raw) {
   return d.toLocaleString();
 }
 
-export default function SettingsModal({ childId, unitSystem, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
+export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
+  const [showNaraImport, setShowNaraImport] = useState(false);
+  const naraOpener = useRef(null);
   const { prefs, setFeatureEnabled, setViewEnabled, setFormDefault, setPref } = usePreferences();
   const [deviceName, setDeviceName] = useState(
     () => localStorage.getItem("babytracker_device_name") || ""
@@ -59,7 +62,7 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
 
   return (
     <div className="settings-overlay">
-      <div className="settings-page">
+      <div className="settings-page" inert={showNaraImport || undefined}>
         {/* Header */}
         <div className="settings-header">
           <h2 className="settings-title">{t("settings.title")}</h2>
@@ -113,7 +116,8 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                       value={units}
                       onChange={(e) => {
                         setUnits(e.target.value);
-                        localStorage.setItem("babytracker_units", e.target.value);
+                        if (onUnitSystemChange) onUnitSystemChange(e.target.value);
+                        else localStorage.setItem("babytracker_units", e.target.value);
                         if (onRefetch) onRefetch();
                       }}
                     />
@@ -563,6 +567,19 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
                   </div>
                 </div>
 
+                {/* Import (admin only) — Nara exports one baby per file, so
+                    a second baby can't come in through first-run onboarding */}
+                {isAdmin && (
+                  <div className="settings-card" style={{ marginBottom: 16 }}>
+                    <h4 className="settings-card-title">{t("settings.import")}</h4>
+                    <p className="settings-hint" style={{ marginBottom: 12 }}>{t("settings.importNaraDesc")}</p>
+                    <button ref={naraOpener} className="settings-export-main" onClick={() => setShowNaraImport(true)}>
+                      <Icons.Download />
+                      {t("onboarding.importNara")}
+                    </button>
+                  </div>
+                )}
+
                 {/* Tags — available to all authenticated users */}
                 <TagsSection />
 
@@ -609,6 +626,48 @@ export default function SettingsModal({ childId, unitSystem, children, isAdmin, 
           </div>
         </div>
       </div>
+      {showNaraImport && (
+        <NaraImportDialog label={t("onboarding.importNara")} opener={naraOpener}>
+          <NaraImport
+            unitSystem={units}
+            onUnitsChange={(system) => {
+              setUnits(system);
+              if (onUnitSystemChange) onUnitSystemChange(system);
+            }}
+            doneLabel={t("nara.done")}
+            onBack={() => setShowNaraImport(false)}
+            onDone={async () => {
+              setShowNaraImport(false);
+              await onRefetch?.();
+            }}
+          />
+        </NaraImportDialog>
+      )}
+    </div>
+  );
+}
+
+// NaraImportDialog shows the Nara import over Settings as a modal dialog:
+// focus moves into it on open (the page behind is inert) and back to the
+// button that opened it on close. It closes through the import's own Back
+// and Done buttons, not Escape, so an import can't be dismissed mid-way.
+function NaraImportDialog({ label, opener, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const returnTo = opener.current;
+    ref.current?.querySelector("input, select, button")?.focus();
+    return () => returnTo?.focus();
+  }, [opener]);
+  return (
+    <div
+      ref={ref}
+      className="settings-overlay"
+      style={{ zIndex: 1100 }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      {children}
     </div>
   );
 }
