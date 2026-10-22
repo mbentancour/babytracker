@@ -9,7 +9,7 @@ image:
   name: babytracker
   compression: xz
   boot_part_size: 200%
-  root_part_size: 300%
+  root_part_size: 150%
 
 layer:
   base: trixie-minbase

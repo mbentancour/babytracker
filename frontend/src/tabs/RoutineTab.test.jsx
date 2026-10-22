@@ -95,6 +95,35 @@ describe("RoutineTab", () => {
     expect(mark.style.height).toBe("");
   });
 
+  it("draws a feed with a recorded end as a block", async () => {
+    const start = new Date();
+    start.setHours(8, 0, 0, 0);
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    apiMock.getFeedings.mockResolvedValue({
+      results: [{ id: 1, start: start.toISOString(), end: end.toISOString() }],
+    });
+
+    const { container } = renderRoutineTab();
+    await waitFor(() => expect(marks(container).length).toBe(1));
+
+    const [mark] = marks(container);
+    expect(mark.className).not.toContain("routine-mark-point");
+    expect(pct(mark.style.top)).toBeCloseTo(33.33, 1); // 08:00
+    expect(pct(mark.style.height)).toBeCloseTo(2.08, 1); // 30 min of 24h
+  });
+
+  it("keeps a feed without an end as a point", async () => {
+    const at = new Date();
+    at.setHours(8, 0, 0, 0);
+    apiMock.getFeedings.mockResolvedValue({
+      results: [{ id: 1, start: at.toISOString(), end: at.toISOString() }],
+    });
+
+    const { container } = renderRoutineTab();
+    await waitFor(() => expect(marks(container).length).toBe(1));
+    expect(marks(container)[0].className).toContain("routine-mark-point");
+  });
+
   // The whole reason for moving off per-hour cells: a nine-hour night used to
   // render as nine stitched segments, and the seams read as separate naps.
   it("draws a multi-hour sleep as one continuous block", async () => {
@@ -164,6 +193,18 @@ describe("RoutineTab", () => {
     await waitFor(() => expect(marks(container).length).toBe(0));
 
     expect(JSON.parse(localStorage.getItem("babytracker_preferences")).routineHidden).toEqual(["pumping"]);
+  });
+
+  it("shows an activity even when its feature is switched off in settings", async () => {
+    const at = new Date();
+    at.setHours(9, 0, 0, 0);
+    apiMock.getChanges.mockResolvedValue({
+      results: [{ id: 1, time: at.toISOString(), wet: true, solid: false }],
+    });
+
+    const { container } = renderRoutineTab({}, { features: { diaper: false } });
+    await waitFor(() => expect(marks(container).length).toBe(1));
+    expect(screen.getByRole("button", { name: /diaper|windel/i })).toBeTruthy();
   });
 
   it("skips endpoints the user can't read", async () => {

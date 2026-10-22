@@ -6,16 +6,18 @@ import PhotoPicker from "../PhotoPicker";
 import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, isNapTime } from "../../utils/datetime";
 
 export default function SleepForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
   const isEdit = !!entry;
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo));
+  const currentLocalDatetime = toLocalDatetime(now);
+  const initialStart = entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo);
+  const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
-  const [nap, setNap] = useState(entry?.nap ?? false);
+  const [nap, setNap] = useState(entry?.nap ?? isNapTime(currentLocalDatetime));
   const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);

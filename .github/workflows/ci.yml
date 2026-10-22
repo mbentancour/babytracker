@@ -13,7 +13,7 @@ permissions:
 jobs:
   backend:
     name: Go tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     services:
       postgres:
@@ -48,7 +48,7 @@ jobs:
 
   frontend:
     name: Frontend tests + build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

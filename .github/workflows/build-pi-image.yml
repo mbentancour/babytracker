@@ -18,11 +18,21 @@ jobs:
   build:
     # Native arm64 runner — no QEMU emulation needed.
     # Free for public repos.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
+
+      # Image generation needs several GB of temporary disk space. These
+      # preinstalled SDKs are not used by this workflow and can exhaust the
+      # hosted runner while genimage writes the sparse disk image.
+      - name: Free disk space for image generation
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift
+          sudo apt-get clean
+          echo "=== Available disk space ==="
+          df -h /tmp "$GITHUB_WORKSPACE"
 
       - uses: actions/setup-go@v7
         with:
@@ -80,10 +90,20 @@ jobs:
         env:
           BABYTRACKER_DEBUG: ${{ inputs.debug && '1' || '0' }}
         run: |
+          echo "=== Disk space before image generation ==="
+          df -h /tmp "$GITHUB_WORKSPACE"
+          df -i /tmp "$GITHUB_WORKSPACE"
+          export SOURCE_DATE_EPOCH="$(git -C "$GITHUB_WORKSPACE" show -s --format=%ct "$GITHUB_SHA")"
           cd /tmp/rpi-image-gen
           ./rpi-image-gen build \
             -S "$GITHUB_WORKSPACE/deploy/rpi-image-gen" \
             -c "$GITHUB_WORKSPACE/deploy/rpi-image-gen/config/babytracker.yaml"
+
+      - name: Disk usage after failed build
+        if: failure()
+        run: |
+          df -h
+          sudo du -xh --max-depth=1 /tmp/rpi-image-gen/work 2>/dev/null | sort -h | tail -15
 
       - name: Inspect output
         run: |
@@ -229,16 +249,16 @@ jobs:
             check "setup-ap.service exists" test -f /mnt/pi-rootfs/etc/systemd/system/babytracker-setup-ap.service
             check "avahi service exists" test -f /mnt/pi-rootfs/etc/avahi/services/babytracker.service
             check "hostapd.conf exists" test -f /mnt/pi-rootfs/etc/hostapd/hostapd.conf
-            check ".needs-setup flag exists" test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
+            check ".needs-setup flag exists" sudo test -f /mnt/pi-rootfs/var/lib/babytracker/.needs-setup
             check "common scripts installed" test -f /mnt/pi-rootfs/usr/lib/babytracker/common/setup-postgres.sh
 
             echo "--- Binary checks ---"
-            check "binary is ARM aarch64 ELF" file /mnt/pi-rootfs/usr/local/bin/babytracker '|' grep -q 'ELF 64-bit.*ARM aarch64'
+            check "binary is ARM aarch64 ELF" sh -c "file /mnt/pi-rootfs/usr/local/bin/babytracker | grep -q 'ELF 64-bit.*ARM aarch64'"
             check "binary is executable" test -x /mnt/pi-rootfs/usr/local/bin/babytracker
 
             echo "--- System user ---"
             check "babytracker user exists" grep -q '^babytracker:' /mnt/pi-rootfs/etc/passwd
-            check "pi user locked" grep -q '^pi:!' /mnt/pi-rootfs/etc/shadow || grep -q '^pi:\*' /mnt/pi-rootfs/etc/shadow
+            check "pi user locked" sudo grep -Eq '^pi:[!*]' /mnt/pi-rootfs/etc/shadow
 
             echo "--- Installed packages ---"
             check "postgresql installed" test -f /mnt/pi-rootfs/usr/bin/psql
@@ -248,8 +268,11 @@ jobs:
             check "nmcli installed" test -f /mnt/pi-rootfs/usr/bin/nmcli
 
             echo "--- Permissions ---"
-            check "data dir owned by babytracker" stat -c '%U:%G' /mnt/pi-rootfs/var/lib/babytracker '|' grep -q 'babytracker:babytracker'
-            check "sudoers is 0440" stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker '|' grep -q '440'
+            # Host has no babytracker user; compare numeric IDs from the image's own passwd/group.
+            BT_UID=$(awk -F: '$1=="babytracker"{print $3}' /mnt/pi-rootfs/etc/passwd)
+            BT_GID=$(awk -F: '$1=="babytracker"{print $3}' /mnt/pi-rootfs/etc/group)
+            check "data dir owned by babytracker" test "$(sudo stat -c '%u:%g' /mnt/pi-rootfs/var/lib/babytracker)" = "${BT_UID}:${BT_GID}"
+            check "sudoers is 0440" sh -c "sudo stat -c '%a' /mnt/pi-rootfs/etc/sudoers.d/babytracker | grep -qx 440"
           fi
 
           echo ""
