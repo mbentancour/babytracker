@@ -338,10 +338,9 @@ func namecheapEnsureA(domain, ip string, creds map[string]string) error {
 // --- Simply.com ---
 
 func simplyEnsureA(domain, ip string, creds map[string]string) error {
-	account := credOrEnv(creds, "SIMPLY_ACCOUNT_NAME")
 	apiKey := credOrEnv(creds, "SIMPLY_API_KEY")
-	if account == "" || apiKey == "" {
-		return fmt.Errorf("SIMPLY_ACCOUNT_NAME and SIMPLY_API_KEY required")
+	if apiKey == "" {
+		return fmt.Errorf("SIMPLY_API_KEY required")
 	}
 
 	// Extract zone and hostname
@@ -356,8 +355,8 @@ func simplyEnsureA(domain, ip string, creds map[string]string) error {
 	baseURL := "https://api.simply.com/2"
 
 	// List existing records to find if A record exists
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/my/products/%s/dns/records", baseURL, zoneName), nil)
-	req.SetBasicAuth(account, apiKey)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/my/products/%s/dns/records/", baseURL, zoneName), nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -397,12 +396,12 @@ func simplyEnsureA(domain, ip string, creds map[string]string) error {
 
 	if existingID > 0 {
 		// Update
-		req, _ = http.NewRequest("PUT", fmt.Sprintf("%s/my/products/%s/dns/records/%d", baseURL, zoneName, existingID), bytes.NewReader(body))
+		req, _ = http.NewRequest("PUT", fmt.Sprintf("%s/my/products/%s/dns/records/%d/", baseURL, zoneName, existingID), bytes.NewReader(body))
 	} else {
 		// Create
-		req, _ = http.NewRequest("POST", fmt.Sprintf("%s/my/products/%s/dns/records", baseURL, zoneName), bytes.NewReader(body))
+		req, _ = http.NewRequest("POST", fmt.Sprintf("%s/my/products/%s/dns/records/", baseURL, zoneName), bytes.NewReader(body))
 	}
-	req.SetBasicAuth(account, apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = client.Do(req)
 	if err != nil {
