@@ -33,6 +33,16 @@ function detectBrowserLocale() {
   return "en";
 }
 
+// interpolate fills {{name}} placeholders from params in a single pass, so a
+// value is inserted as is: a "{{reason}}" inside an earlier value (some come
+// from imported files) isn't expanded, and "$&" isn't a replacement pattern.
+// A placeholder without a param is left alone.
+export function interpolate(text, params = {}) {
+  return text.replace(/\{\{(\w+)\}\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
+  );
+}
+
 const I18nContext = createContext({ t: (key) => key, locale: "en", setLocale: () => {} });
 
 export function I18nProvider({ children }) {
@@ -48,11 +58,7 @@ export function I18nProvider({ children }) {
   const t = useCallback(
     (key, params = {}) => {
       const dict = translations[locale] || translations.en;
-      let text = dict[key] || translations.en[key] || key;
-      for (const [k, v] of Object.entries(params)) {
-        text = text.replace(`{{${k}}}`, v);
-      }
-      return text;
+      return interpolate(dict[key] || translations.en[key] || key, params);
     },
     [locale]
   );

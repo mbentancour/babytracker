@@ -1,5 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { translations, AVAILABLE_LANGUAGES } from "./i18n";
+import { translations, AVAILABLE_LANGUAGES, interpolate } from "./i18n";
+
+describe("interpolate", () => {
+  it("fills every occurrence of a placeholder", () => {
+    expect(interpolate("{{n}} of {{n}}", { n: 2 })).toBe("2 of 2");
+  });
+
+  // Values can come from an imported file, so they're inserted as is.
+  it("doesn't expand placeholders or replacement patterns inside values", () => {
+    const params = { line: 7, type: "{{reason}}", reason: "costs $& and $1" };
+    expect(interpolate("Line {{line}} ({{type}}): {{reason}}", params)).toBe("Line 7 ({{reason}}): costs $& and $1");
+  });
+
+  it("leaves a placeholder without a param alone", () => {
+    expect(interpolate("{{count}} {{toString}}", {})).toBe("{{count}} {{toString}}");
+  });
+});
 
 // English is the source language and the runtime fallback (t() falls back to
 // translations.en[key]). Any key present in en but missing from es/da renders

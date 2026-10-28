@@ -59,6 +59,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	usersH := handlers.NewUsersHandler(db)
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
+	naraImportH := handlers.NewNaraImportHandler(db, cfg)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 
@@ -346,6 +347,11 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireFreshAdmin(db))
 			r.Post("/api/backups/restore", backupH.Restore)
+
+			// Nara Baby import: an export upload, so it lives here rather
+			// than behind the 1 MB JSON body limit.
+			r.Post("/api/import/nara/preview", naraImportH.Preview)
+			r.Post("/api/import/nara", naraImportH.Import)
 		})
 	})
 

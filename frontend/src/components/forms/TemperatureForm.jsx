@@ -57,7 +57,7 @@ export default function TemperatureForm({ childId, entry, onDone, onClose, onDel
     <Modal title={isEdit ? t("temp.edit") : t("temp.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={`Temperature (${units.temp})`}>
-          <FormInput type="number" value={temp} onChange={(e) => setTemp(e.target.value)} placeholder="36.6" min="30" max="45" step="0.1" autoFocus />
+          <FormInput type="number" value={temp} onChange={(e) => setTemp(e.target.value)} placeholder={units.temp === "°F" ? "98.6" : "36.6"} min={units.temp === "°F" ? 86 : 30} max={units.temp === "°F" ? 113 : 45} step="0.1" autoFocus />
         </FormField>
         <FormField label={t("general.time")}>
           <FormInput type="datetime-local" value={time} onChange={(e) => setTime(e.target.value)} required />

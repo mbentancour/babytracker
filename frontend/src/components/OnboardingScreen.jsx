@@ -3,12 +3,16 @@ import { api } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
+import NaraImport from "./NaraImport";
 
-export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed }) {
+// onBusy(true) tells the parent an import has created the child but its
+// summary is still on screen; the parent keeps rendering onboarding until
+// onBusy(false), instead of switching to the dashboard on its next refresh.
+export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed, unitSystem, onUnitSystemChange, onBusy }) {
   const { t } = useI18n();
-  // Map setup-choice intents ("fresh"/"import") to the internal mode names.
-  const seededMode = initialMode === "fresh" ? "new" : initialMode === "import" ? "import" : null;
-  const [mode, setMode] = useState(seededMode); // null = choose, "new", "import"
+  // Map setup-choice intents ("fresh"/"import"/"nara") to the internal mode names.
+  const seededMode = { fresh: "new", import: "import", nara: "nara" }[initialMode] || null;
+  const [mode, setMode] = useState(seededMode); // null = choose, "new", "import", "nara"
 
   // Clear the parent's setupIntent once we've adopted it so back-navigation
   // to the choose screen doesn't re-seed the same mode on remount.
@@ -43,6 +47,13 @@ export default function OnboardingScreen({ onChildAdded, initialMode, onInitialM
               color="#6C5CE7"
               onClick={() => setMode("import")}
             />
+            <OnboardingOption
+              icon={<Icons.Download />}
+              title={t("onboarding.importNara")}
+              description={t("onboarding.importNaraDesc")}
+              color="#e17055"
+              onClick={() => setMode("nara")}
+            />
           </div>
         </div>
       </div>
@@ -50,7 +61,18 @@ export default function OnboardingScreen({ onChildAdded, initialMode, onInitialM
   }
 
   if (mode === "new") return <NewBabyForm onDone={onChildAdded} onBack={() => setMode(null)} />;
-  if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} />;
+  if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} onBusy={onBusy} />;
+  if (mode === "nara") {
+    return (
+      <NaraImport
+        unitSystem={unitSystem}
+        onUnitsChange={onUnitSystemChange}
+        onDone={onChildAdded}
+        onBack={() => setMode(null)}
+        onBusy={onBusy}
+      />
+    );
+  }
 }
 
 function OnboardingOption({ icon, title, description, color, onClick }) {
@@ -137,7 +159,7 @@ function NewBabyForm({ onDone, onBack }) {
   );
 }
 
-function BabyBuddyImport({ onDone, onBack }) {
+function BabyBuddyImport({ onDone, onBack, onBusy }) {
   const { t } = useI18n();
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
@@ -145,16 +167,29 @@ function BabyBuddyImport({ onDone, onBack }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
+  // Release the onboarding hold if this goes away mid-import.
+  useEffect(() => () => onBusy?.(false), [onBusy]);
+
   const handleImport = async (e) => {
     e.preventDefault();
     setError("");
     setImporting(true);
+    onBusy?.(true);
     try {
       const res = await api.importFromBabyBuddy(url, token);
       setResult(res.stats);
     } catch (err) {
+      onBusy?.(false);
       setError(err.error || err.message || "Import failed");
       setImporting(false);
+    }
+  };
+
+  const finish = async () => {
+    try {
+      await onDone?.();
+    } finally {
+      onBusy?.(false);
     }
   };
 
@@ -174,7 +209,7 @@ function BabyBuddyImport({ onDone, onBack }) {
               </div>
             ))}
           </div>
-          <button onClick={onDone} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
+          <button onClick={finish} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
             {t("onboarding.continueToDashboard")}
           </button>
         </div>
@@ -203,7 +238,7 @@ function BabyBuddyImport({ onDone, onBack }) {
           <button type="submit" className="login-button" style={{ background: "#6C5CE7" }} disabled={importing}>
             {importing ? t("onboarding.importing") : t("onboarding.startImport")}
           </button>
-          <button type="button" onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
+          <button type="button" onClick={onBack} disabled={importing} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: importing ? "not-allowed" : "pointer", fontFamily: "inherit", marginTop: 4, padding: 8 }}>
             {t("form.back")}
           </button>
         </form>
@@ -211,4 +246,3 @@ function BabyBuddyImport({ onDone, onBack }) {
     </div>
   );
 }
-

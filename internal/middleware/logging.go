@@ -23,6 +23,10 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
+// Unwrap lets http.ResponseController reach the connection, e.g. for a
+// handler that extends its own deadlines.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
