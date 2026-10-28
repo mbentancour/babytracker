@@ -139,7 +139,7 @@ export default function App() {
   // setupIntent carries the user's first-boot choice past the register step so
   // OnboardingScreen can skip its own "what next?" picker. null after login or
   // on a pre-existing install.
-  const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import"
+  const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import" | "nara"
   const [demoMode, setDemoMode] = useState(false);
   const [applianceMode, setApplianceMode] = useState(false);
 
@@ -215,7 +215,7 @@ export default function App() {
     return (
       <SetupChoiceScreen
         onCreateAccount={() => { setSetupIntent("fresh"); setAuthState("setup"); }}
-        onImport={() => { setSetupIntent("import"); setAuthState("setup"); }}
+        onImport={(intent) => { setSetupIntent(intent); setAuthState("setup"); }}
         onRestored={() => { setSetupIntent(null); setAuthState("login"); }}
       />
     );
@@ -286,6 +286,10 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
   // Data fetching — canRead is now defined before this call
   const data = useBabyData(canRead, { milkStockEnabled: isViewEnabled("milkStock") });
   const timer = useTimers(data.timers, data.child?.id);
+  // True while an onboarding import's summary is on screen: the import has
+  // already created the child, and the next background refresh would
+  // otherwise switch to the dashboard before the summary is read.
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
 
   // Keep selectedChildId in sync with the active child
   useEffect(() => {
@@ -514,9 +518,18 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
     );
   }
 
-  if (!demoMode && data.children.length === 0) {
+  if (!demoMode && (data.children.length === 0 || onboardingBusy)) {
     if (isAdmin) {
-      return <OnboardingScreen onChildAdded={data.refetch} initialMode={setupIntent} onInitialModeConsumed={onSetupIntentConsumed} />;
+      return (
+        <OnboardingScreen
+          onChildAdded={data.refetch}
+          initialMode={setupIntent}
+          onInitialModeConsumed={onSetupIntentConsumed}
+          unitSystem={data.unitSystem}
+          onUnitSystemChange={data.setUnitSystem}
+          onBusy={setOnboardingBusy}
+        />
+      );
     }
     return (
       <div className="app-loading">
@@ -1116,6 +1129,7 @@ function Dashboard({ demoMode, applianceMode, onLogout, setupIntent, onSetupInte
         <SettingsModal
           childId={data.child?.id}
           unitSystem={data.unitSystem}
+          onUnitSystemChange={data.setUnitSystem}
           children={data.children}
           isAdmin={isAdmin}
           applianceMode={applianceMode}

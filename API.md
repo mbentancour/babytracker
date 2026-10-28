@@ -959,6 +959,115 @@ Fetches all children, feedings, sleep, changes, tummy times, temperature, weight
 
 ---
 
+## Nara Baby Import (admin only)
+
+Import a Nara Baby CSV export ("Export Data" in Nara) into a new child. Nara exports one child per file, so import one file per child. Both endpoints take a multipart upload of up to 50 MB. They allow 10 minutes for the upload and the response, rather than the server's usual 5; an import still running after 9 minutes is rolled back and fails with `import_failed`.
+
+**Preview** parses the export and reports what an import would bring over, without saving anything. It also returns the baby's details from the export's profile row, so a form can be prefilled:
+
+```
+POST /api/import/nara/preview
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+
+file=<export.csv>
+unit_system=metric        (optional: metric or imperial; anything else means the server's UNIT_SYSTEM)
+timezone=Europe/Madrid    (optional IANA name; omitted or unknown means UTC)
+duplicate_pumping=import  (optional; see below)
+```
+
+**Import** creates the child and imports the export in one transaction:
+
+```
+POST /api/import/nara
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+
+file=<export.csv>
+first_name=Emma
+last_name=                (optional)
+birth_date=2026-08-09
+sex=female                (optional: female, male, or empty)
+unit_system=metric        (optional, as above)
+timezone=Europe/Madrid    (optional, as above)
+duplicate_pumping=import  (optional; see below)
+```
+
+- **Units.** Stored amounts carry no unit, and each device labels them with its own unit setting, so amounts are converted to `unit_system`, which should be the system the devices show. The web app sends its device's setting. Only on first run, with no data yet, does the user pick the units on the import form; the device then switches to them.
+- **Time zone.** Each Nara row carries its own time zone. It is used for dates (growth, milestones), to tell naps from night sleep, and to read a row's local `Start Date/time` and `End Date/time` text when its epoch column is blank. `timezone` is the fallback for rows with no time zone or one that isn't recognised.
+- **Family pumping.** Nara can include the family's pumping (rows with no profile) in each child's export. Family sessions whose start and end match a session already in BabyTracker (from a sibling's import, or an earlier import of this baby) are left out and reported in `duplicate_pumping`. Send `duplicate_pumping=import` to import them for this child too; a preview sent with it counts them as imported.
+
+What is imported:
+
+| Nara row type | Imported as |
+|---|---|
+| Breastfeed | Feeding (left, right, or both breasts) lasting the recorded left + right seconds; untimed feeds take the side from Begin/End Side |
+| Bottle Feed | Bottle feeding. A mixed bottle with both shares becomes two feedings (breast milk and formula); with one share and a total at least 1 mL larger, the other share is the difference |
+| Combo Feed | A breastfeed plus a bottle feeding (one or two, as above); a half with nothing recorded is left out |
+| Solid Feed | Solid food feeding, saved as "parent fed" (Nara doesn't record who fed), with the foods, their tags and the meal in the notes |
+| Diaper | Diaper change (wet/solid, color; texture, other colors, blowout and rash in the notes). A dry check becomes a note, since diapers here are wet and/or solid |
+| Pump | Pumping session (Nara's total, else left + right). Its note becomes a separate note, since pumping has none; a Pump row with nothing recorded but a note becomes just a note |
+| Sleep | Sleep. Nara doesn't mark naps, so sleeps starting 07:00–19:00 local time and shorter than 4 hours are saved as naps |
+| Growth | Weight, height and head circumference, dated in the row's time zone, rounded to 0.01 (weight) and 0.1 (lengths) |
+| Medical | Medications (`Name, 2.5 (ML)` is split into name, dosage and unit; each line of the cell becomes one medication) and temperature (30–45 °C); a Medical row with only a note becomes a note |
+| Milestone, Baby First | Milestones |
+| Routine, Vaccine | Notes |
+
+Other row types are not imported, but a note written on one is kept as a note. Rows typed "Postpartum …" (reportedly from a parent's export) are skipped, notes and all.
+
+Response (the same shape for preview, with `"status": "preview"`, a `profile` object and no `child_id`):
+
+```json
+{
+  "status": "completed",
+  "child_id": 3,
+  "stats": {
+    "feedings": 466, "sleep": 410, "changes": 271, "pumping": 70, "weight": 12, "height": 9,
+    "head_circumference": 9, "temperature": 2, "medications": 3, "milestones": 4, "notes": 151
+  },
+  "units": { "volume": "mL", "weight": "kg", "length": "cm", "temperature": "°C" },
+  "skipped": { "Journal": 1 },
+  "as_notes": { "Routine": 139, "Vaccine": 2, "Dry diaper": 5 },
+  "duplicate_pumping": { "count": 0, "children": [], "included": false },
+  "solid_feeds": 55,
+  "rejected": [
+    { "line": 812, "type": "Diaper", "code": "unknown_diaper_type", "detail": "[Diaper] Type", "value": "Sparkly", "reason": "unrecognized diaper type \"Sparkly\"" }
+  ],
+  "rejected_count": 1,
+  "warnings": [
+    { "line": 95, "type": "Bottle Feed", "code": "milk_type_unknown", "reason": "milk type not recorded; imported as breast milk" }
+  ],
+  "warning_count": 1
+}
+```
+
+The preview's `profile` is `{"name": "Emma", "birth_date": "2026-08-09", "sex": "female"}`, with empty strings for anything the export doesn't have.
+
+- `stats` counts the entries imported (in a preview: that would be), by BabyTracker type. `notes` includes the notes made from pump notes and from rows kept as notes.
+- `units` names the units amounts were converted to: `mL`, `kg`, `cm` and `°C`, or `oz`, `lb`, `in` and `°F` for imperial.
+- `skipped` counts rows that weren't imported, by Nara `Type`. `as_notes` counts rows saved as notes instead (types BabyTracker has no entry for, and rows with nothing recorded but a note), by Nara `Type`, plus `Dry diaper` for dry diaper checks.
+- `solid_feeds` counts the feedings made from Solid Feed rows, which are saved as "parent fed".
+- `duplicate_pumping`: `count` is how many family pumping sessions in the file are already in BabyTracker, and `children` the first names of all the children that hold them. `included` is true when the request sent `duplicate_pumping=import`: those sessions were imported (in a preview: would be) and are counted in `stats.pumping`. Otherwise they're left out.
+- `rejected` lists rows that couldn't be read; `warnings` lists rows imported with an assumption. Each holds at most 50 entries; `rejected_count` and `warning_count` are the totals. `line` is the physical line in the CSV file, `code` identifies the reason, `detail` is usually the Nara column and `value` the value read, and `reason` is English text.
+- Row codes: `bad_start_time`, `bad_end_time`, `implausible_start_time`, `implausible_end_time`, `bad_number`, `missing_unit`, `unknown_unit`, `out_of_range`, `missing_diaper_type`, `unknown_diaper_type`, `end_before_start`, `no_end_time`, `zero_length`, `too_long` (over 24 hours), `no_measurements`, `field_count`, `empty_entry`, `invalid` (any other problem). Warning codes: `milk_type_unknown`, `mixed_no_split`, `mixed_partial`, `mixed_derived`, `side_unknown`, `text_repaired`.
+- Errors return `{"error": "...", "code": "...", "detail": "..."}`:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `not_nara_export` | No `Type` or `Start Date/time (Epoch)` column, or no readable header line (an empty file) |
+| 400 | `bad_csv` | Not valid CSV; `detail` is the line the bad record starts on |
+| 400 | `spreadsheet_rounded` | A spreadsheet app re-saved the file, rounding the timestamps |
+| 400 | `invalid_upload` | Not a multipart upload, or no `file` |
+| 400 | `missing_name`, `invalid_birth_date`, `invalid_sex` | Import form fields |
+| 413 | `too_large` | Over the upload limit; `detail` is the limit in MB |
+| 422 | `nothing_to_import` | Nothing in the file can be imported, or all that's left is family pumping already in BabyTracker (send `duplicate_pumping=import` to import it). The body also has the summary fields above; no child is created |
+| 500 | `import_failed` | The import failed and nothing was saved |
+| 500 | `generic` | The preview couldn't read the database |
+
+  401 and 403 come from the auth middleware, as `{"error": "..."}` without a code.
+
+---
+
 ## Password Management
 
 Change your own password:

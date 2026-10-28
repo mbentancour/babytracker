@@ -60,7 +60,7 @@ export default function MilkWasteForm({ childId, entry, onDone, onClose, onDelet
             value={amount}
             onChange={(e) => { setAmount(e.target.value); setError(""); }}
             min="0"
-            step="5"
+            step="any"
             required
           />
         </FormField>

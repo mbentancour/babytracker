@@ -5,9 +5,10 @@ import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
 
 // SetupChoiceScreen is the first thing a visitor sees on a fresh install.
-// Three branches:
+// Four branches:
 //   - "fresh"   → create admin, then add a first baby
 //   - "import"  → create admin, then run the Baby Buddy import wizard
+//   - "nara"    → create admin, then upload a Nara Baby CSV export
 //   - "restore" → upload backup (no account creation — credentials come from
 //                 the archive's users table)
 // The parent stores the non-restore intent and forwards it to the post-auth
@@ -52,7 +53,14 @@ export default function SetupChoiceScreen({ onCreateAccount, onImport, onRestore
             title={t("onboarding.importBB")}
             description={t("onboarding.importBBDesc")}
             color="#6C5CE7"
-            onClick={onImport}
+            onClick={() => onImport("import")}
+          />
+          <SetupOption
+            icon={<Icons.Download />}
+            title={t("onboarding.importNara")}
+            description={t("onboarding.importNaraDesc")}
+            color="#e17055"
+            onClick={() => onImport("nara")}
           />
         </div>
       </div>

@@ -3,7 +3,30 @@ import { Icons } from "./Icons";
 import { useI18n } from "../utils/i18n";
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+// trapTab keeps Tab and Shift+Tab inside a modal dialog (el, which needs
+// tabIndex={-1}): past the last control focus wraps to the first and back,
+// focus that is outside the dialog (on <body> after the focused control was
+// disabled or removed) comes back in, and with every control disabled the
+// dialog itself holds focus.
+export function trapTab(e, el) {
+  const nodes = Array.from(el.querySelectorAll(FOCUSABLE)).filter((n) => n.offsetParent !== null);
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  const active = document.activeElement;
+  let target = null;
+  if (!first) target = el;
+  else if (!el.contains(active)) target = e.shiftKey ? last : first;
+  // At or before the first control (e.g. a focused heading), or at or after
+  // the last one, the browser would move focus out of the dialog.
+  else if (e.shiftKey && (active === first || active.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING)) target = last;
+  else if (!e.shiftKey && (active === last || active.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING)) target = first;
+  if (target) {
+    e.preventDefault();
+    target.focus();
+  }
+}
 
 export default function Modal({ title, children, onClose, headerAction }) {
   const { t } = useI18n();
@@ -38,22 +61,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
         onCloseRef.current?.();
         return;
       }
-      if (e.key === "Tab" && el) {
-        // Keep focus within the dialog (basic focus trap).
-        const nodes = Array.from(el.querySelectorAll(FOCUSABLE)).filter(
-          (n) => n.offsetParent !== null,
-        );
-        if (nodes.length === 0) return;
-        const first = nodes[0];
-        const last = nodes[nodes.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
+      if (e.key === "Tab" && el) trapTab(e, el);
     };
     document.addEventListener("keydown", onKey);
     return () => {

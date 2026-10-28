@@ -72,7 +72,7 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
           <FormInput type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
         </FormField>
         <FormField label={`${t("feeding.amount")} (${units.volume})`}>
-          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="5" />
+          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>
         <FormField label={t("tags.title")}>
           <TagPicker value={tagIds} onChange={setTagIds} />

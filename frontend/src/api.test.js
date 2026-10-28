@@ -244,6 +244,44 @@ describe("session persistence and refresh", () => {
     expect(localStorage.getItem("babytracker_refresh_token")).toBeNull();
   });
 
+  // Multipart uploads (photos, backup restores, the Nara import) take their
+  // own path, which has to refresh an expired token just the same.
+  it("refreshes an expired token and retries an upload once", async () => {
+    mod.setAccessToken("access-1");
+    const reply = (status, body) => ({
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    let uploads = 0;
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes("/auth/refresh")) return reply(200, session(2));
+      uploads += 1;
+      return uploads === 1 ? reply(401, { error: "token expired" }) : reply(200, { stats: { feedings: 1 } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(mod.api.previewNaraImport(new File(["x"], "a.csv"), "metric")).resolves.toEqual({ stats: { feedings: 1 } });
+
+    const sent = fetchMock.mock.calls.filter(([url]) => String(url).includes("/import/nara/preview"));
+    expect(sent).toHaveLength(2);
+    expect(sent[0][1].headers.Authorization).toBe("Bearer access-1");
+    expect(sent[1][1].headers.Authorization).toBe("Bearer access-2");
+    expect(sent[1][1].body).toBe(sent[0][1].body);
+  });
+
+  it("signs the user out when the refresh behind an upload is rejected", async () => {
+    mod.setAccessToken("access-1");
+    let authRequired = false;
+    mod.setOnAuthRequired(() => { authRequired = true; });
+    vi.stubGlobal("fetch", statusFetch(401, { error: "unauthorized" }));
+
+    await expect(mod.api.previewNaraImport(new File(["x"], "a.csv"), "metric")).rejects.toMatchObject({ status: 401 });
+    expect(authRequired).toBe(true);
+    expect(mod.getAccessToken()).toBeNull();
+  });
+
   it("hands the refresh token to logout so the server can revoke it", async () => {
     localStorage.setItem("babytracker_refresh_token", "stored-refresh");
     mod.enableTokenPersistence();
@@ -257,5 +295,49 @@ describe("session persistence and refresh", () => {
     expect(String(url)).toContain("/auth/logout");
     expect(JSON.parse(options.body)).toEqual({ refresh_token: "stored-refresh" });
     expect(localStorage.getItem("babytracker_refresh_token")).toBeNull();
+  });
+});
+
+describe("Nara import uploads", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const fields = (form) => Object.fromEntries([...form.entries()].filter(([k]) => k !== "file"));
+
+  // The server reads these names: a renamed birth_date fails every import,
+  // and a dropped sex or last name is lost without an error.
+  it("sends the import form under the field names the server reads", async () => {
+    const fetchMock = jsonFetch({ stats: {} });
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["x"], "export.csv");
+
+    await api.importFromNara(file, {
+      firstName: "Rosa", lastName: "Díaz", birthDate: "2026-08-09", sex: "female",
+      unitSystem: "imperial", includeDuplicates: true,
+    });
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/import\/nara$/);
+    expect(options.body.get("file")).toBe(file);
+    expect(fields(options.body)).toEqual({
+      first_name: "Rosa", last_name: "Díaz", birth_date: "2026-08-09", sex: "female",
+      unit_system: "imperial", duplicate_pumping: "import",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+  });
+
+  it("sends the preview's units and only the fields a preview reads", async () => {
+    const fetchMock = jsonFetch({ stats: {} });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.previewNaraImport(new File(["x"], "export.csv"), "imperial");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/import\/nara\/preview$/);
+    expect(fields(options.body)).toEqual({
+      unit_system: "imperial",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   });
 });

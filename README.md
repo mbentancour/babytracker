@@ -35,7 +35,7 @@ Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow
 - **Home Assistant integration** with sensors, events, and services (see [`babytracker-homeassistant`](https://github.com/mbentancour/babytracker-homeassistant))
 - **Automatic backups** with per-destination cron schedules, retention policies, and optional AES-256-GCM encryption. Push to local paths, WebDAV (Nextcloud, ownCloud, Synology, etc.), or any S3-compatible service (AWS S3, Cloudflare R2, Backblaze B2, MinIO, Wasabi).
 - **Restore from backup at first boot** — bring an instance back up on a new machine without re-creating accounts
-- **Baby Buddy data import**
+- **Baby Buddy and Nara Baby data import**
 - **API tokens and webhooks** for external integrations
 - **Multi-language**: English, Danish, German, Spanish, French, Italian
 - **Light / dark / system theme**

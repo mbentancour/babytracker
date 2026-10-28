@@ -100,7 +100,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
           <FormSelect options={METHODS} value={method} onChange={(e) => setMethod(e.target.value)} />
         </FormField>
         <FormField label={`${t("feeding.amount")} (${units.volume})`}>
-          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="5" />
+          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>
         {(isEdit || !timerId) && (
           <>
