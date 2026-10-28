@@ -52,6 +52,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
         if (notes.trim()) data.notes = notes.trim();
         if (timerId) {
           data.timer = timerId;
+          data.end = localInputToUTC(end);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);
@@ -76,30 +77,25 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   return (
     <Modal title={isEdit ? t("sleep.edit") : t("sleep.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {!isEdit && timerId ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-            The timer's start and end times will be used for this sleep entry.
-          </p>
-        ) : (
-          <>
-            <FormField label={t("general.start")}>
-              <FormInput
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                required
-              />
-            </FormField>
-            <FormField label={t("general.end")}>
-              <FormInput
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                required
-              />
-            </FormField>
-          </>
+        {(isEdit || !timerId) && (
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
         )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? currentLocalDatetime : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
           {[
