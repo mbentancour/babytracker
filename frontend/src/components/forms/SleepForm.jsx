@@ -6,16 +6,18 @@ import PhotoPicker from "../PhotoPicker";
 import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, isNapTime } from "../../utils/datetime";
 
 export default function SleepForm({ childId, timerId, entry, onDone, onClose, onDelete }) {
   const { t } = useI18n();
   const isEdit = !!entry;
   const now = new Date();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo));
+  const currentLocalDatetime = toLocalDatetime(now);
+  const initialStart = entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(oneHourAgo);
+  const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
-  const [nap, setNap] = useState(entry?.nap ?? false);
+  const [nap, setNap] = useState(entry?.nap ?? isNapTime(currentLocalDatetime));
   const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
   const [notes, setNotes] = useState(entry?.notes || "");
   const [photoFile, setPhotoFile] = useState(null);
@@ -50,6 +52,7 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
         if (notes.trim()) data.notes = notes.trim();
         if (timerId) {
           data.timer = timerId;
+          data.end = localInputToUTC(end);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);
@@ -74,30 +77,25 @@ export default function SleepForm({ childId, timerId, entry, onDone, onClose, on
   return (
     <Modal title={isEdit ? t("sleep.edit") : t("sleep.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {!isEdit && timerId ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-            The timer's start and end times will be used for this sleep entry.
-          </p>
-        ) : (
-          <>
-            <FormField label={t("general.start")}>
-              <FormInput
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                required
-              />
-            </FormField>
-            <FormField label={t("general.end")}>
-              <FormInput
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                required
-              />
-            </FormField>
-          </>
+        {(isEdit || !timerId) && (
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
         )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? currentLocalDatetime : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
           {[

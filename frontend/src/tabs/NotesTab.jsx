@@ -7,7 +7,6 @@ import TagChips from "../components/TagChips";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { toNoteTimeline } from "../utils/formatters";
-import { usePreferences } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 
 const COLLAPSED_COUNT = 5;
@@ -25,7 +24,6 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
   const [expandedMilestones, setExpandedMilestones] = useState(false);
   const [expandedMeds, setExpandedMeds] = useState(false);
   const { t } = useI18n();
-  const { isFeatureEnabled } = usePreferences();
   // Tag filter: show only entries tagged with this ID. "" = no filter.
   // The tag list comes from /api/tags/ directly rather than being derived
   // from tagMaps, so users can always see all tags even on empty tabs.
@@ -105,7 +103,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
       )}
 
       {/* Milestones */}
-      {isFeatureEnabled("milestone") && <div className="fade-in fade-in-1" style={{ marginBottom: 16 }}>
+      <div className="fade-in fade-in-1" style={{ marginBottom: 16 }}>
         <SectionCard
           title={t("journal.milestones")}
           icon={<Icons.TrendUp />}
@@ -188,10 +186,10 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
             </div>
           )}
         </SectionCard>
-      </div>}
+      </div>
 
       {/* Medications */}
-      {isFeatureEnabled("medication") && <div className="fade-in fade-in-2" style={{ marginBottom: 16 }}>
+      <div className="fade-in fade-in-2" style={{ marginBottom: 16 }}>
         <SectionCard
           title={t("journal.medications")}
           icon={<Icons.Temp />}
@@ -264,10 +262,10 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
             </div>
           )}
         </SectionCard>
-      </div>}
+      </div>
 
       {/* Notes */}
-      {isFeatureEnabled("note") && <div className="fade-in fade-in-3">
+      <div className="fade-in fade-in-3">
         <SectionCard
           title={t("journal.notes")}
           icon={<Icons.StickyNote />}
@@ -319,7 +317,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
             </div>
           )}
         </SectionCard>
-      </div>}
+      </div>
     </>
   );
 }

@@ -265,9 +265,9 @@ export function feedingTypeLabel(type, t = englishT) {
 
 export function toFeedingTimeline(feedings, volumeUnit = "mL", t = englishT) {
   return feedings.map((f) => {
-    // Nursing sessions are timed rather than measured, so surface the session
-    // length alongside the method. Bottle feeds already lead with their amount.
-    const sessionHours = BREAST_METHODS.includes(f.method) ? parseDuration(f.duration) : 0;
+    // Keep the headline order consistent for every feeding: amount, method,
+    // then the total session duration when the backend provides one.
+    const sessionHours = parseDuration(f.duration);
     const how =
       (f.method && FEEDING_METHOD_KEYS[f.method] && t(FEEDING_METHOD_KEYS[f.method])) ||
       (f.type && FEEDING_TYPE_KEYS[f.type] && t(FEEDING_TYPE_KEYS[f.type])) ||
@@ -404,6 +404,17 @@ export function aggregateTummyByDay(entries) {
     if (key in sums) sums[key] += parseDuration(e.duration) * 60;
   });
   return days.map((d) => ({ day: d.label, minutes: Math.round(sums[d.dateStr]) }));
+}
+
+export function aggregateDiapersByDay(entries) {
+  const days = getLast7Days();
+  const counts = {};
+  days.forEach((d) => (counts[d.dateStr] = 0));
+  entries.forEach((e) => {
+    const key = entryDateStr(e.time);
+    if (key in counts) counts[key] += 1;
+  });
+  return days.map((d) => ({ day: d.label, count: counts[d.dateStr] }));
 }
 
 function getLastNDays(n) {
