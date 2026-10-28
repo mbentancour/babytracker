@@ -66,6 +66,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
         data.child = childId;
         if (timerId) {
           data.timer = timerId;
+          data.end = localInputToUTC(end);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);
@@ -110,25 +111,24 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
           <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>
         {(isEdit || !timerId) && (
-          <>
-            <FormField label={t("general.start")}>
-              <FormInput
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                required
-              />
-            </FormField>
-            <FormField label={t("general.end")}>
-              <FormInput
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                required
-              />
-            </FormField>
-          </>
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
         )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? toLocalDatetime(now) : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <FormField label={t("general.notes")}>
           <FormInput
