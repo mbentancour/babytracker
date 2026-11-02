@@ -269,6 +269,22 @@ export default {
   "auth.createAccountHint": "Créez votre compte pour commencer",
   "auth.signInHint": "Connectez-vous pour continuer",
   "auth.pleaseWait": "Veuillez patienter...",
+  // OIDC sign-in
+  "auth.signInWith": "Se connecter avec {{provider}}",
+  "auth.or": "ou",
+  "auth.oidcErrorUnavailable": "Le fournisseur de connexion est injoignable pour le moment. Veuillez réessayer plus tard.",
+  "auth.oidcErrorExpired": "La connexion a pris trop de temps ou a été lancée dans un autre onglet. Veuillez réessayer.",
+  "auth.oidcErrorDenied": "La connexion a été annulée chez le fournisseur.",
+  "auth.oidcErrorFailed": "La connexion via le fournisseur a échoué. Veuillez réessayer.",
+  "auth.oidcErrorNotAllowed": "Votre compte chez le fournisseur n'est pas autorisé à utiliser BabyTracker.",
+  "auth.oidcErrorNoAccount": "Aucun compte BabyTracker n'est lié à cette connexion. Demandez à un administrateur, ou connectez-vous avec votre mot de passe et liez-le dans Réglages → Compte.",
+  "auth.oidcErrorUsernameTaken": "Un compte BabyTracker avec ce nom d'utilisateur existe déjà. Connectez-vous avec son mot de passe et liez-le dans Réglages → Compte.",
+  "auth.oidcErrorAlreadyLinked": "Ce compte du fournisseur est déjà lié à un autre utilisateur BabyTracker.",
+  "auth.oidcLinkedNotice": "Votre compte est maintenant lié à {{provider}}.",
+  "settings.oidcTitle": "Authentification unique",
+  "settings.oidcLinked": "Votre compte est lié à {{provider}}.",
+  "settings.oidcNotLinked": "Liez votre compte pour vous connecter avec {{provider}}.",
+  "settings.oidcLink": "Lier le compte {{provider}}",
 
   // Onboarding
   "onboarding.welcome": "Bienvenue dans BabyTracker !",

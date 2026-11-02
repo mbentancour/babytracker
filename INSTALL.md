@@ -236,6 +236,16 @@ All configuration is done through environment variables.
 | `BABYTRACKER_PROXY_URL` | (empty) | Proxy mode: forward all requests to this URL |
 | `BACKUP_LOCAL_ROOTS` | (empty) | Colon-separated list of extra filesystem roots a Local backup destination may resolve into. `{DATA_DIR}/backups` is always allowed. Example: `/mnt/usb:/mnt/nas`. |
 | `BABYTRACKER_HSTS_PRELOAD` | `false` | When `true` and the request arrived over TLS, append `preload` to the HSTS header. Only enable if you've registered the domain at [hstspreload.org](https://hstspreload.org) — it's a long-lived commitment. |
+| `OIDC_ISSUER_URL` | (empty) | OpenID Connect issuer. Together with `OIDC_CLIENT_ID`, enables "Sign in with …". See [Single sign-on (OIDC)](#11-single-sign-on-oidc). |
+| `OIDC_CLIENT_ID` | (empty) | OAuth2 client ID registered at the provider |
+| `OIDC_CLIENT_SECRET` | (empty) | Client secret. Leave empty for a public client (PKCE only). |
+| `OIDC_REDIRECT_URL` | (derived) | Callback URL, `https://<host>/api/auth/oidc/callback`. Derived from the request (`X-Forwarded-Proto`/`X-Forwarded-Host`) when empty; set it explicitly behind a proxy. |
+| `OIDC_SCOPES` | `openid profile email groups` | Requested scopes; `openid` is always added |
+| `OIDC_PROVIDER_NAME` | `SSO` | Label on the sign-in button |
+| `OIDC_AUTO_PROVISION` | `false` | Create an account on first OIDC sign-in |
+| `OIDC_ADMIN_GROUP` | (empty) | Group whose members are admins; checked on every OIDC sign-in |
+| `OIDC_ALLOWED_GROUPS` | (empty) | Comma-separated groups; when set, only their members may sign in via OIDC |
+| `OIDC_DISABLE_PASSWORD_LOGIN` | `false` | Hide the password form and refuse password sign-in/registration (only while OIDC is enabled) |
 
 ---
 
@@ -368,3 +378,49 @@ BabyTracker will use the HTTP-01 challenge on port 80 to validate and obtain a c
 ### Manual TLS
 
 To use your own certificate files, set `TLS_CERT` and `TLS_KEY` to the paths of your certificate and private key files.
+
+---
+
+## 11. Single sign-on (OIDC)
+
+BabyTracker can sign people in through an OpenID Connect provider (Kanidm, Authelia, Authentik, Keycloak, …) alongside or instead of passwords. It is meant for Docker, Kubernetes and bare-metal installs; it is not offered inside the Home Assistant add-on, where HA already authenticates everyone who opens the panel.
+
+At the provider, register a client with:
+
+- **Redirect URI:** `https://<your-babytracker-host>/api/auth/oidc/callback`
+- **Grant:** authorization code. BabyTracker always uses PKCE (S256), `state` and `nonce`, so public clients work.
+- **Scopes:** `openid profile email`, plus `groups` if you use `OIDC_ADMIN_GROUP` or `OIDC_ALLOWED_GROUPS`.
+
+Then set at least `OIDC_ISSUER_URL` and `OIDC_CLIENT_ID` (see the [Configuration Reference](#7-configuration-reference)). When BabyTracker runs behind a reverse proxy that terminates TLS (`TLS_ENABLED=false`), also set `OIDC_REDIRECT_URL` to the exact URL registered at the provider.
+
+**How accounts are matched.** BabyTracker remembers each provider account by its issuer and stable subject (`sub`) and never matches by username or email, which a user may be able to change at the provider.
+
+- On a fresh install, the first person to sign in through the provider becomes the admin, just as the first registered account would.
+- With `OIDC_AUTO_PROVISION=true`, anyone else the provider signs in (and who passes `OIDC_ALLOWED_GROUPS`) gets a new account named after their `preferred_username`. New accounts can't see any child until an admin grants access in **Settings → Users**, unless they are admins.
+- An existing password account is linked from inside it: sign in with the password, then **Settings → Account → Link … account**. If an unlinked account already has the provider's username, auto-provisioning stops with an error rather than taking it over.
+
+**Groups.** `OIDC_ADMIN_GROUP` and `OIDC_ALLOWED_GROUPS` are compared exactly against the `groups` claim (from the ID token, or from userinfo if the ID token has none). If the provider sends no groups claim at all, admin flags are left unchanged. The last remaining admin is never demoted.
+
+**Sessions.** After the provider signs someone in, BabyTracker issues its own session exactly as for a password sign-in, so API tokens, the Home Assistant integration and the picture frame keep working. Signing out of BabyTracker doesn't sign out of the provider, and removing someone at the provider doesn't end a BabyTracker session they already have — delete or demote the user in BabyTracker for that.
+
+### Example: Kanidm
+
+```bash
+kanidm system oauth2 create-public babytracker "BabyTracker" https://baby.example.com
+kanidm system oauth2 add-redirect-url babytracker https://baby.example.com/api/auth/oidc/callback
+kanidm system oauth2 update-scope-map babytracker family openid profile email groups
+# Optional: send "alice" instead of "alice@idm.example.com" as preferred_username
+kanidm system oauth2 prefer-short-username babytracker
+```
+
+```bash
+OIDC_ISSUER_URL=https://idm.example.com/oauth2/openid/babytracker
+OIDC_CLIENT_ID=babytracker
+OIDC_REDIRECT_URL=https://baby.example.com/api/auth/oidc/callback
+OIDC_PROVIDER_NAME=Kanidm
+OIDC_AUTO_PROVISION=true
+OIDC_ALLOWED_GROUPS=family@idm.example.com
+OIDC_ADMIN_GROUP=babytracker_admins@idm.example.com
+```
+
+Kanidm's issuer is per client (`/oauth2/openid/<client_id>`), it signs ID tokens with ES256 and requires PKCE, all of which BabyTracker handles. Groups arrive as SPNs (`name@domain`) and UUIDs; use either form in the group settings. For a confidential client use `kanidm system oauth2 create` and set `OIDC_CLIENT_SECRET` from `kanidm system oauth2 show-basic-secret babytracker`.

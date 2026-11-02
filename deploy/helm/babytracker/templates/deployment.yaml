@@ -42,6 +42,28 @@ spec:
               value: {{ .Values.config.demoMode | quote }}
             - name: TLS_ENABLED
               value: {{ .Values.config.tlsEnabled | quote }}
+            {{- with .Values.config.oidc }}
+            {{- if and .issuerUrl .clientId }}
+            - name: OIDC_ISSUER_URL
+              value: {{ .issuerUrl | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .clientId | quote }}
+            - name: OIDC_REDIRECT_URL
+              value: {{ .redirectUrl | quote }}
+            - name: OIDC_SCOPES
+              value: {{ .scopes | quote }}
+            - name: OIDC_PROVIDER_NAME
+              value: {{ .providerName | quote }}
+            - name: OIDC_AUTO_PROVISION
+              value: {{ .autoProvision | quote }}
+            - name: OIDC_ADMIN_GROUP
+              value: {{ .adminGroup | quote }}
+            - name: OIDC_ALLOWED_GROUPS
+              value: {{ .allowedGroups | quote }}
+            - name: OIDC_DISABLE_PASSWORD_LOGIN
+              value: {{ .disablePasswordLogin | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_PASSWORD
               valueFrom:

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"unicode"
 )
 
 type Config struct {
@@ -32,6 +33,10 @@ type Config struct {
 	ACMEEmail       string // Email for ACME account registration
 	ACMEManageA     bool   // Create/update A record via DNS provider
 	ACMEIP          string // IP for the A record (empty = auto-detect)
+
+	// OIDC configures sign-in through an OpenID Connect provider. Off unless
+	// both OIDC_ISSUER_URL and OIDC_CLIENT_ID are set — see OIDCConfig.
+	OIDC OIDCConfig
 
 	// setupMode tracks whether .needs-setup is active. Atomic so the
 	// RequireSetupMode middleware (reader on every request) and the
@@ -60,6 +65,74 @@ type Config struct {
 	// on an older schema doesn't leave the running server with a downgraded
 	// public schema until the next process restart.
 	MigrationsFS fs.FS
+}
+
+// OIDCConfig holds the OpenID Connect single sign-on settings. Everything is
+// optional: without an issuer and client ID the feature is simply absent and
+// password sign-in works as it always has.
+type OIDCConfig struct {
+	IssuerURL    string   // OIDC_ISSUER_URL — exactly as the provider's discovery document states it
+	ClientID     string   // OIDC_CLIENT_ID
+	ClientSecret string   // OIDC_CLIENT_SECRET — empty for a public client (PKCE only)
+	RedirectURL  string   // OIDC_REDIRECT_URL — empty = derived from each request
+	Scopes       []string // OIDC_SCOPES — "openid" is always included
+	ProviderName string   // OIDC_PROVIDER_NAME — label on the sign-in button
+
+	// AutoProvision creates a local account the first time someone the
+	// provider vouches for signs in. Without it only accounts that are already
+	// linked (and the very first account, on a fresh install) can sign in.
+	AutoProvision bool // OIDC_AUTO_PROVISION
+
+	// AdminGroup, when set, makes the provider authoritative for the admin
+	// flag: it is granted and revoked on every OIDC sign-in.
+	AdminGroup string // OIDC_ADMIN_GROUP
+
+	// AllowedGroups, when set, refuses OIDC sign-in to anyone in none of them.
+	AllowedGroups []string // OIDC_ALLOWED_GROUPS
+
+	// DisablePasswordLogin turns the username/password form (and first-run
+	// registration with a password) off. Only honoured while OIDC is enabled,
+	// so a typo in the OIDC settings can't lock everyone out.
+	DisablePasswordLogin bool // OIDC_DISABLE_PASSWORD_LOGIN
+}
+
+// Enabled reports whether enough is configured to attempt an OIDC sign-in.
+func (o OIDCConfig) Enabled() bool {
+	return o.IssuerURL != "" && o.ClientID != ""
+}
+
+func oidcFromEnv() OIDCConfig {
+	return OIDCConfig{
+		IssuerURL:            strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL")),
+		ClientID:             strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID")),
+		ClientSecret:         os.Getenv("OIDC_CLIENT_SECRET"),
+		RedirectURL:          strings.TrimSpace(os.Getenv("OIDC_REDIRECT_URL")),
+		Scopes:               parseOIDCScopes(envOrDefault("OIDC_SCOPES", "openid profile email groups")),
+		ProviderName:         envOrDefault("OIDC_PROVIDER_NAME", "SSO"),
+		AutoProvision:        os.Getenv("OIDC_AUTO_PROVISION") == "true",
+		AdminGroup:           strings.TrimSpace(os.Getenv("OIDC_ADMIN_GROUP")),
+		AllowedGroups:        splitList(os.Getenv("OIDC_ALLOWED_GROUPS")),
+		DisablePasswordLogin: os.Getenv("OIDC_DISABLE_PASSWORD_LOGIN") == "true",
+	}
+}
+
+// parseOIDCScopes splits a space- or comma-separated scope list and makes sure
+// "openid" is in it — without it the provider returns no ID token at all.
+func parseOIDCScopes(raw string) []string {
+	scopes := []string{"openid"}
+	for _, s := range splitList(raw) {
+		if s != "openid" {
+			scopes = append(scopes, s)
+		}
+	}
+	return scopes
+}
+
+// splitList splits on commas and whitespace, dropping empty entries.
+func splitList(raw string) []string {
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || unicode.IsSpace(r)
+	})
 }
 
 func (c *Config) IsProxyMode() bool {
@@ -112,6 +185,7 @@ func New() *Config {
 		ACMEManageA:     os.Getenv("ACME_MANAGE_A") != "false", // default true
 		ACMEIP:          os.Getenv("ACME_IP"),
 		BackupLocalRoots: parseBackupLocalRoots(dataDir, os.Getenv("BACKUP_LOCAL_ROOTS")),
+		OIDC:             oidcFromEnv(),
 	}
 	c.setupMode.Store(fileExists(filepath.Join(dataDir, ".needs-setup")))
 	return c

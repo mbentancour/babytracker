@@ -269,6 +269,22 @@ export default {
   "auth.createAccountHint": "Erstelle dein Konto, um loszulegen",
   "auth.signInHint": "Melde dich an, um fortzufahren",
   "auth.pleaseWait": "Bitte warten...",
+  // OIDC sign-in
+  "auth.signInWith": "Anmelden mit {{provider}}",
+  "auth.or": "oder",
+  "auth.oidcErrorUnavailable": "Der Anmeldedienst ist gerade nicht erreichbar. Bitte versuche es später erneut.",
+  "auth.oidcErrorExpired": "Die Anmeldung hat zu lange gedauert oder wurde in einem anderen Tab gestartet. Bitte versuche es erneut.",
+  "auth.oidcErrorDenied": "Die Anmeldung wurde beim Anbieter abgebrochen.",
+  "auth.oidcErrorFailed": "Die Anmeldung beim Anbieter ist fehlgeschlagen. Bitte versuche es erneut.",
+  "auth.oidcErrorNotAllowed": "Dein Konto beim Anbieter darf BabyTracker nicht verwenden.",
+  "auth.oidcErrorNoAccount": "Mit dieser Anmeldung ist kein BabyTracker-Konto verknüpft. Frag einen Admin, oder melde dich mit deinem Passwort an und verknüpfe es unter Einstellungen → Konto.",
+  "auth.oidcErrorUsernameTaken": "Ein BabyTracker-Konto mit diesem Benutzernamen existiert bereits. Melde dich mit dessen Passwort an und verknüpfe es unter Einstellungen → Konto.",
+  "auth.oidcErrorAlreadyLinked": "Dieses Konto beim Anbieter ist bereits mit einem anderen BabyTracker-Benutzer verknüpft.",
+  "auth.oidcLinkedNotice": "Dein Konto ist jetzt mit {{provider}} verknüpft.",
+  "settings.oidcTitle": "Single Sign-On",
+  "settings.oidcLinked": "Dein Konto ist mit {{provider}} verknüpft.",
+  "settings.oidcNotLinked": "Verknüpfe dein Konto, um dich mit {{provider}} anzumelden.",
+  "settings.oidcLink": "{{provider}}-Konto verknüpfen",
 
   // Onboarding
   "onboarding.welcome": "Willkommen bei BabyTracker!",

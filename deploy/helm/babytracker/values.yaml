@@ -14,6 +14,19 @@ config:
   # TLS_ENABLED=false is for environments where an ingress/LB terminates TLS.
   # When true (default), the app serves HTTPS on the container port.
   tlsEnabled: true
+  # Optional OpenID Connect sign-in (see INSTALL.md, "Single sign-on (OIDC)").
+  # Enabled when issuerUrl and clientId are set; the client secret, if any,
+  # goes in secrets.oidcClientSecret.
+  oidc:
+    issuerUrl: ""
+    clientId: ""
+    redirectUrl: ""        # https://<host>/api/auth/oidc/callback
+    scopes: ""             # default: "openid profile email groups"
+    providerName: ""       # sign-in button label, default "SSO"
+    autoProvision: false
+    adminGroup: ""
+    allowedGroups: ""      # comma-separated
+    disablePasswordLogin: false
 
 # --- Secrets ---
 # If provided, these values are written to a Secret; leave unset to let the
@@ -23,6 +36,8 @@ secrets:
   postgresPassword: ""     # Required if postgresql.enabled=true
   # External database URL (used when postgresql.enabled=false)
   databaseUrl: ""
+  # OIDC client secret; leave empty for a public (PKCE-only) client.
+  oidcClientSecret: ""
   # ACME DNS provider credentials — set via Settings UI after deploy, or
   # pre-configure here. Example for Cloudflare: CF_DNS_API_TOKEN: ...
   acmeCredentials: {}

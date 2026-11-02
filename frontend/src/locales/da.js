@@ -263,6 +263,22 @@ export default {
   "auth.createAccountHint": "Opret din konto for at komme i gang",
   "auth.signInHint": "Log ind for at fortsætte",
   "auth.pleaseWait": "Vent venligst...",
+  // OIDC sign-in
+  "auth.signInWith": "Log ind med {{provider}}",
+  "auth.or": "eller",
+  "auth.oidcErrorUnavailable": "Login-udbyderen kan ikke nås lige nu. Prøv igen senere.",
+  "auth.oidcErrorExpired": "Login tog for lang tid eller blev startet i en anden fane. Prøv igen.",
+  "auth.oidcErrorDenied": "Login blev annulleret hos udbyderen.",
+  "auth.oidcErrorFailed": "Login hos udbyderen mislykkedes. Prøv igen.",
+  "auth.oidcErrorNotAllowed": "Din konto hos udbyderen har ikke adgang til BabyTracker.",
+  "auth.oidcErrorNoAccount": "Ingen BabyTracker-konto er knyttet til dette login. Spørg en administrator, eller log ind med din adgangskode og tilknyt den under Indstillinger → Konto.",
+  "auth.oidcErrorUsernameTaken": "Der findes allerede en BabyTracker-konto med dette brugernavn. Log ind med dens adgangskode og tilknyt den under Indstillinger → Konto.",
+  "auth.oidcErrorAlreadyLinked": "Denne konto hos udbyderen er allerede knyttet til en anden BabyTracker-bruger.",
+  "auth.oidcLinkedNotice": "Din konto er nu knyttet til {{provider}}.",
+  "settings.oidcTitle": "Single sign-on",
+  "settings.oidcLinked": "Din konto er knyttet til {{provider}}.",
+  "settings.oidcNotLinked": "Tilknyt din konto for at logge ind med {{provider}}.",
+  "settings.oidcLink": "Tilknyt {{provider}}-konto",
 
   // Onboarding
   "onboarding.welcome": "Velkommen til BabyTracker!",

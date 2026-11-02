@@ -23,6 +23,7 @@ func NewConfigHandler(cfg *config.Config) *ConfigHandler {
 }
 
 func (h *ConfigHandler) Get(w http.ResponseWriter, r *http.Request) {
+	oidcOn := oidcAvailable(h.cfg, haIngress)
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"refresh_interval": h.cfg.RefreshInterval,
 		"demo_mode":        h.cfg.DemoMode,
@@ -30,5 +31,10 @@ func (h *ConfigHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"setup_mode":       h.cfg.IsSetupMode(),
 		"appliance_mode":   h.cfg.TLSCert != "",
 		"ha_ingress":       haIngress,
+		// OIDC sign-in, for the login screen. password_login is false only
+		// when OIDC_DISABLE_PASSWORD_LOGIN is set and OIDC is actually usable.
+		"oidc_enabled":       oidcOn,
+		"oidc_provider_name": h.cfg.OIDC.ProviderName,
+		"password_login":     !(oidcOn && h.cfg.OIDC.DisablePasswordLogin),
 	})
 }
