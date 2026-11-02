@@ -35,6 +35,8 @@ Key values (see [values.yaml](values.yaml) for the full list):
 | `secrets.postgresPassword` | — | **Required** when `postgresql.enabled=true` |
 | `secrets.databaseUrl` | — | **Required** when `postgresql.enabled=false` |
 | `secrets.jwtSecret` | `""` (auto-generated) | JWT signing secret |
+| `config.oidc.issuerUrl` / `config.oidc.clientId` | `""` | Enable OpenID Connect sign-in; other `config.oidc.*` keys map to the `OIDC_*` variables in [INSTALL.md](../../../INSTALL.md#11-single-sign-on-oidc) |
+| `secrets.oidcClientSecret` | `""` | OIDC client secret (empty for a public client) |
 
 ## Architecture
 

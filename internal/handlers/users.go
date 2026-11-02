@@ -403,9 +403,13 @@ func (h *UsersHandler) GetCurrentUserAccess(w http.ResponseWriter, r *http.Reque
 
 	access, _ := models.GetUserChildAccess(h.db, userID)
 
+	var oidcLinked bool
+	_ = h.db.Get(&oidcLinked, `SELECT EXISTS (SELECT 1 FROM user_identities WHERE user_id = $1)`, userID)
+
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
-		"user":     user,
-		"is_admin": user.IsAdmin,
-		"access":   access,
+		"user":        user,
+		"is_admin":    user.IsAdmin,
+		"access":      access,
+		"oidc_linked": oidcLinked,
 	})
 }

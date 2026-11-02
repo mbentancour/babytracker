@@ -46,6 +46,11 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
   const [showNaraImport, setShowNaraImport] = useState(false);
   const naraOpener = useRef(null);
   const { prefs, setFeatureEnabled, setViewEnabled, setFormDefault, setPref } = usePreferences();
+  // OIDC / password sign-in availability, for the Account section.
+  const [authConfig, setAuthConfig] = useState(null);
+  useEffect(() => {
+    api.getConfig().then(setAuthConfig).catch(() => {});
+  }, []);
   const [deviceName, setDeviceName] = useState(
     () => localStorage.getItem("babytracker_device_name") || ""
   );
@@ -525,7 +530,11 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.account")}</h3>
 
-                {onLogout && <ChangePasswordSection />}
+                {onLogout && authConfig?.oidc_enabled && (
+                  <OIDCLinkSection providerName={authConfig.oidc_provider_name} />
+                )}
+
+                {onLogout && authConfig?.password_login !== false && <ChangePasswordSection />}
 
                 {onLogout && (
                   <button onClick={onLogout} className="settings-signout">
@@ -2269,6 +2278,61 @@ function TLSSection() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// OIDCLinkSection links the signed-in account to an account at the OIDC
+// provider. Linking is only possible from inside the account — the server
+// never matches provider accounts to local ones by name or email.
+function OIDCLinkSection({ providerName }) {
+  const { t } = useI18n();
+  const provider = providerName || "SSO";
+  const [linked, setLinked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getCurrentUserAccess()
+      .then((res) => setLinked(!!res.oidc_linked))
+      .catch(() => setLinked(false));
+  }, []);
+
+  const handleLink = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await api.linkOIDC();
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.error || err.message || t("auth.oidcErrorFailed"));
+      setBusy(false);
+    }
+  };
+
+  if (linked === null) return null;
+
+  return (
+    <div className="settings-card" style={{ marginTop: 16 }}>
+      <h4 className="settings-card-title">{t("settings.oidcTitle")}</h4>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 12px" }}>
+        {linked
+          ? t("settings.oidcLinked", { provider })
+          : t("settings.oidcNotLinked", { provider })}
+      </p>
+      {error && (
+        <div style={{
+          padding: "8px 12px", borderRadius: 8, marginBottom: 12, fontSize: 13,
+          background: "#e74c3c18", color: "#e74c3c",
+        }}>
+          {error}
+        </div>
+      )}
+      {!linked && (
+        <button type="button" className="settings-export-main" onClick={handleLink} disabled={busy}>
+          {busy ? t("auth.pleaseWait") : t("settings.oidcLink", { provider })}
+        </button>
+      )}
     </div>
   );
 }

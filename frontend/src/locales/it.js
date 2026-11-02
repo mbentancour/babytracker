@@ -269,6 +269,22 @@ export default {
   "auth.createAccountHint": "Crea il tuo account per iniziare",
   "auth.signInHint": "Accedi per continuare",
   "auth.pleaseWait": "Attendere...",
+  // OIDC sign-in
+  "auth.signInWith": "Accedi con {{provider}}",
+  "auth.or": "oppure",
+  "auth.oidcErrorUnavailable": "Il provider di accesso non è raggiungibile al momento. Riprova più tardi.",
+  "auth.oidcErrorExpired": "L'accesso ha richiesto troppo tempo o è stato avviato in un'altra scheda. Riprova.",
+  "auth.oidcErrorDenied": "L'accesso è stato annullato presso il provider.",
+  "auth.oidcErrorFailed": "L'accesso tramite il provider non è riuscito. Riprova.",
+  "auth.oidcErrorNotAllowed": "Il tuo account presso il provider non è autorizzato a usare BabyTracker.",
+  "auth.oidcErrorNoAccount": "Nessun account BabyTracker è collegato a questo accesso. Chiedi a un amministratore, oppure accedi con la tua password e collegalo in Impostazioni → Account.",
+  "auth.oidcErrorUsernameTaken": "Esiste già un account BabyTracker con questo nome utente. Accedi con la sua password e collegalo in Impostazioni → Account.",
+  "auth.oidcErrorAlreadyLinked": "Questo account del provider è già collegato a un altro utente BabyTracker.",
+  "auth.oidcLinkedNotice": "Il tuo account è ora collegato a {{provider}}.",
+  "settings.oidcTitle": "Single sign-on",
+  "settings.oidcLinked": "Il tuo account è collegato a {{provider}}.",
+  "settings.oidcNotLinked": "Collega il tuo account per accedere con {{provider}}.",
+  "settings.oidcLink": "Collega account {{provider}}",
 
   // Onboarding
   "onboarding.welcome": "Benvenuto in BabyTracker!",
