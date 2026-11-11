@@ -21,12 +21,12 @@ const AVAILABLE_LANGUAGES = [
   { code: "it", label: "Italiano" },
 ];
 
-function detectBrowserLocale() {
-  const stored = localStorage.getItem("babytracker_locale");
+export function detectBrowserLocale(browserLangs = navigator.languages || [navigator.language], stored = localStorage.getItem("babytracker_locale")) {
   if (stored) return stored;
   // Match browser language to available translations
-  const browserLangs = navigator.languages || [navigator.language];
   for (const lang of browserLangs) {
+    const exact = Object.keys(translations).find((code) => code.toLowerCase() === lang.toLowerCase());
+    if (exact) return exact;
     const code = lang.split("-")[0].toLowerCase();
     if (translations[code]) return code;
   }

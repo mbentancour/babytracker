@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { translations, AVAILABLE_LANGUAGES, interpolate } from "./i18n";
+import { translations, AVAILABLE_LANGUAGES, interpolate, detectBrowserLocale } from "./i18n";
 
 describe("interpolate", () => {
   it("fills every occurrence of a placeholder", () => {
@@ -72,6 +72,22 @@ describe("i18n translation parity", () => {
   it("every advertised language has a translation table", () => {
     for (const lang of AVAILABLE_LANGUAGES) {
       expect(translations[lang.code]).toBeDefined();
+    }
+  });
+});
+
+
+describe("browser locale detection", () => {
+  it("matches regional language tags case-insensitively before the base language", () => {
+    translations["pt-PT"] = {};
+    try {
+      expect(detectBrowserLocale(["PT-pt"], null)).toBe("pt-PT");
+      expect(detectBrowserLocale(["fr-CA"], null)).toBe("fr");
+      expect(detectBrowserLocale(["zz", "pt-PT"], null)).toBe("pt-PT");
+      expect(detectBrowserLocale(["zz"], null)).toBe("en");
+      expect(detectBrowserLocale(["pt-PT"], "fr")).toBe("fr");
+    } finally {
+      delete translations["pt-PT"];
     }
   });
 });
