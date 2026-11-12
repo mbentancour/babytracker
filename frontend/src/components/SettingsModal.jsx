@@ -1,3 +1,4 @@
+import { getDisplayLocale } from "../utils/formatters";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton, trapTab } from "./Modal";
@@ -35,7 +36,7 @@ function formatBackupDate(raw) {
   if (!raw) return "";
   const d = new Date(raw);
   if (isNaN(d.getTime())) return raw;
-  return d.toLocaleString();
+  return d.toLocaleString(getDisplayLocale());
 }
 
 export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
@@ -723,7 +724,7 @@ function TLSVerificationField({ url, mode, setMode, pinnedMeta, setPinnedCertPEM
       const msg = t("settings.tlsConfirmTrust")
         .replace("{subject}", info.subject)
         .replace("{issuer}", info.issuer)
-        .replace("{notAfter}", new Date(info.not_after).toLocaleDateString())
+        .replace("{notAfter}", new Date(info.not_after).toLocaleDateString(getDisplayLocale()))
         .replace("{fingerprint}", info.sha256_fingerprint);
       if (confirm(msg)) {
         setPinnedCertPEM(info.pem);
@@ -771,7 +772,7 @@ function TLSVerificationField({ url, mode, setMode, pinnedMeta, setPinnedCertPEM
                   <div style={{ marginTop: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 }}>
                     <div style={{ fontWeight: 500 }}>{pinnedMeta.subject}</div>
                     <div style={{ color: "var(--text-dim)", marginTop: 2 }}>
-                      {t("settings.tlsExpires")}: {pinnedMeta.not_after ? new Date(pinnedMeta.not_after).toLocaleDateString() : "—"}
+                      {t("settings.tlsExpires")}: {pinnedMeta.not_after ? new Date(pinnedMeta.not_after).toLocaleDateString(getDisplayLocale()) : "—"}
                     </div>
                     <div style={{ fontFamily: "var(--mono, monospace)", fontSize: 10, color: "var(--text-dim)", marginTop: 2, wordBreak: "break-all" }}>
                       {pinnedMeta.fingerprint}
@@ -2244,7 +2245,7 @@ function TLSSection() {
         {certInfo ? (
           <div style={{ fontSize: 13 }}>
             <div style={{ color: "#00b894", marginBottom: 4 }}>
-              Valid until {new Date(certInfo.expires).toLocaleDateString()}
+              Valid until {new Date(certInfo.expires).toLocaleDateString(getDisplayLocale())}
               {certInfo.issuer ? ` — issued by ${certInfo.issuer}` : " — self-signed"}
             </div>
             {certInfo.issuer && (

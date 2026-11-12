@@ -1,3 +1,4 @@
+import { formatNumber } from "../utils/formatters";
 import { useState } from "react";
 import {
   BarChart,
@@ -149,7 +150,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             <StatCard
               icon={<Icons.Moon />}
               label={t("overview.sleep")}
-              value={`${totalSleep.toFixed(1)}h`}
+              value={`${formatNumber(totalSleep)}h`}
               sub={t("overview.sleepLast24")}
               foot={lastSleep}
               color={colors.sleep}
@@ -524,10 +525,10 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                   <div key={temp.id} className="entry-clickable" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 10, background: i === 0 ? `${colors.temp}08` : "transparent" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => onEditEntry?.("temp", temp)}>
                       <span style={{ fontSize: 18, fontWeight: 700, color: colors.temp }}>
-                        {temp.temperature.toFixed(1)}
+                        {formatNumber(temp.temperature)}
                       </span>
                       <span style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                        {new Date(temp.time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(temp.time).toLocaleString(getDisplayLocale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
                       <TagChips tags={tagMaps.temperature?.[temp.id]} size="sm" />
                     </div>

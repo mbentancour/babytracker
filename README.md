@@ -37,7 +37,7 @@ Since I use it on a wall-mounted tablet, it includes a "picture frame" slideshow
 - **Restore from backup at first boot** — bring an instance back up on a new machine without re-creating accounts
 - **Baby Buddy and Nara Baby data import**
 - **API tokens and webhooks** for external integrations
-- **Multi-language**: English, Danish, German, Spanish, French, Italian
+- **Multi-language**: English, Danish, German, Spanish, French, Italian, European Portuguese
 - **Light / dark / system theme**
 - **HTTPS by default** on port 443 (self-signed certificate, upgradeable to Let's Encrypt via DNS-01 with Cloudflare, Route53, DuckDNS, Namecheap, or Simply.com)
 - **CSV data export**

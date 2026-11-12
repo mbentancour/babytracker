@@ -1,3 +1,4 @@
+import { getDisplayLocale } from "../utils/formatters";
 import { useState, useEffect, useRef } from "react";
 import { api } from "../api";
 import { Icons } from "../components/Icons";
@@ -273,7 +274,7 @@ export default function GalleryTab({ childId, children = [], canWrite = false })
           // as a nice visual confirmation that the filter applied.
           <div key={`${filter}:${date}`} className="fade-in" style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.03em" }}>
-              {new Date(date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
+              {new Date(date + "T00:00:00").toLocaleDateString(getDisplayLocale(), { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
               {grouped[date].map((item) => (
@@ -524,7 +525,7 @@ function Lightbox({ item, hasPrev, hasNext, onPrev, onNext, onClose }) {
         <div style={{ fontWeight: 600 }}>{item.label}</div>
         {item.detail && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>{item.detail}</div>}
         <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>
-          {new Date(item.date + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+          {new Date(item.date + "T00:00:00").toLocaleDateString(getDisplayLocale(), { year: "numeric", month: "long", day: "numeric" })}
         </div>
       </div>
     </div>

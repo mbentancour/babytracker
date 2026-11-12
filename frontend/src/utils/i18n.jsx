@@ -5,9 +5,10 @@ import da from "../locales/da";
 import fr from "../locales/fr";
 import it from "../locales/it";
 import de from "../locales/de";
+import ptPT from "../locales/pt-PT";
 import { setDisplayLocale } from "./formatters";
 
-const translations = { en, es, da, fr, it, de };
+const translations = { en, es, da, fr, it, de, "pt-PT": ptPT };
 
 // A language must appear here as well as in `translations` to show up in the
 // picker — registerTranslations() below only touches the latter, so a locale
@@ -19,6 +20,7 @@ const AVAILABLE_LANGUAGES = [
   { code: "es", label: "Español" },
   { code: "fr", label: "Français" },
   { code: "it", label: "Italiano" },
+  { code: "pt-PT", label: "Português (Portugal)" },
 ];
 
 export function detectBrowserLocale(browserLangs = navigator.languages || [navigator.language], stored = localStorage.getItem("babytracker_locale")) {
