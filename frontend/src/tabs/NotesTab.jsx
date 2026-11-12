@@ -1,3 +1,4 @@
+import { getDisplayLocale } from "../utils/formatters";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import SectionCard from "../components/SectionCard";
@@ -147,7 +148,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
                         {m.category}
                       </span>
                       <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                        {new Date(m.date).toLocaleDateString()}
+                        {new Date(m.date).toLocaleDateString(getDisplayLocale())}
                       </span>
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
@@ -228,7 +229,7 @@ export default function NotesTab({ notes, milestones = [], medications = [], tag
                       )}
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                      {new Date(m.time).toLocaleString([], {
+                      {new Date(m.time).toLocaleString(getDisplayLocale(), {
                         month: "short", day: "numeric",
                         hour: "2-digit", minute: "2-digit",
                       })}

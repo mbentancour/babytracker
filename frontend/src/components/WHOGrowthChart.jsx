@@ -32,7 +32,7 @@ export default function WHOGrowthChart({
   unit,
   color,
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const childPoints = mapMeasurementsToAge(entries || [], valueField, birthDate);
 
   // Adaptive X-axis: show a window appropriate for the child's age and data range.
@@ -97,8 +97,9 @@ export default function WHOGrowthChart({
   });
 
   const tickFormat = (months) => {
-    if (months < 24) return `${months}m`;
+    if (months < 24) return locale === "pt-PT" ? `${months} m` : `${months}m`;
     const years = months / 12;
+    if (locale === "pt-PT") return t("age.years", { y: years.toLocaleString(locale, { maximumFractionDigits: 1 }) });
     return years % 1 === 0 ? `${years}y` : `${years.toFixed(1)}y`;
   };
 

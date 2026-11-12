@@ -1,5 +1,8 @@
+import { createElement } from "react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { I18nProvider, useI18n } from "./i18n";
 import { describe, it, expect } from "vitest";
-import { translations, AVAILABLE_LANGUAGES, interpolate } from "./i18n";
+import { translations, AVAILABLE_LANGUAGES, interpolate, detectBrowserLocale } from "./i18n";
 
 describe("interpolate", () => {
   it("fills every occurrence of a placeholder", () => {
@@ -72,6 +75,67 @@ describe("i18n translation parity", () => {
   it("every advertised language has a translation table", () => {
     for (const lang of AVAILABLE_LANGUAGES) {
       expect(translations[lang.code]).toBeDefined();
+    }
+  });
+});
+
+
+describe("browser locale detection", () => {
+  it("matches regional language tags case-insensitively before the base language", () => {
+    expect(detectBrowserLocale(["PT-pt"], null)).toBe("pt-PT");
+    expect(detectBrowserLocale(["fr-CA"], null)).toBe("fr");
+    expect(detectBrowserLocale(["zz", "pt-PT"], null)).toBe("pt-PT");
+    expect(detectBrowserLocale(["zz"], null)).toBe("en");
+    expect(detectBrowserLocale(["pt-PT"], "fr")).toBe("fr");
+  });
+});
+
+
+describe("European Portuguese", () => {
+  it("registers the regional dictionary and picker option", () => {
+    expect(AVAILABLE_LANGUAGES.find((l) => l.code === "pt-PT")?.label).toBe("Português (Portugal)");
+    expect(translations["pt-PT"]["auth.password"]).toBe("Palavra-passe");
+    expect(detectBrowserLocale(["pt-BR"], null)).toBe("en");
+    expect(detectBrowserLocale(["en-US", "pt-PT"], null)).toBe("en");
+  });
+
+  it("preserves single-brace markers and line breaks used by settings", () => {
+    for (const [key, value] of Object.entries(translations.en)) {
+      const markers = (s) => (s.match(/\{\w+\}/g) || []).sort();
+      expect(markers(translations["pt-PT"][key]), key).toEqual(markers(value));
+      expect(translations["pt-PT"][key].split("\n").length, key).toBe(value.split("\n").length);
+    }
+  });
+
+  it("provides both plural forms with their count", () => {
+    for (const key of Object.keys(translations.en).filter((k) => k.endsWith("_one"))) {
+      const other = key.replace(/_one$/, "_other");
+      expect(translations["pt-PT"][other]).toBeTruthy();
+      expect(interpolate(translations["pt-PT"][other], { count: 2 })).not.toContain("{{count}}");
+    }
+  });
+
+  it("persists selection across remounts and retains English/key fallback", () => {
+    function Probe() {
+      const { t, locale, setLocale } = useI18n();
+      return createElement("button", { onClick: () => setLocale("pt-PT") }, locale + ":" + t("auth.password") + ":" + t("unknown.key"));
+    }
+    localStorage.setItem("babytracker_locale", "en");
+    try {
+      render(createElement(I18nProvider, null, createElement(Probe)));
+      fireEvent.click(screen.getByRole("button"));
+      expect(screen.getByRole("button").textContent).toBe("pt-PT:Palavra-passe:unknown.key");
+      expect(localStorage.getItem("babytracker_locale")).toBe("pt-PT");
+      cleanup();
+      render(createElement(I18nProvider, null, createElement(Probe)));
+      expect(screen.getByRole("button").textContent).toContain("pt-PT:Palavra-passe");
+      cleanup();
+      localStorage.setItem("babytracker_locale", "unsupported");
+      render(createElement(I18nProvider, null, createElement(Probe)));
+      expect(screen.getByRole("button").textContent).toBe("unsupported:Password:unknown.key");
+    } finally {
+      cleanup();
+      localStorage.removeItem("babytracker_locale");
     }
   });
 });

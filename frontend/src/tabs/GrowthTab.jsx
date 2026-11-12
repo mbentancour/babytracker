@@ -1,3 +1,4 @@
+import { getDisplayLocale } from "../utils/formatters";
 import { useState } from "react";
 import {
   LineChart,
@@ -204,7 +205,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestWeight && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestWeight.date).toLocaleDateString()}
+                {new Date(latestWeight.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -251,7 +252,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestHeight && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestHeight.date).toLocaleDateString()}
+                {new Date(latestHeight.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -285,7 +286,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             </div>
             {latestHeadCirc && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-                {new Date(latestHeadCirc.date).toLocaleDateString()}
+                {new Date(latestHeadCirc.date).toLocaleDateString(getDisplayLocale())}
               </div>
             )}
           </div>
@@ -322,7 +323,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
               {bmi
                 ? bmi.source === "manual"
-                  ? `${t("growth.doctorValue")} · ${new Date(bmi.date).toLocaleDateString()}`
+                  ? `${t("growth.doctorValue")} · ${new Date(bmi.date).toLocaleDateString(getDisplayLocale())}`
                   : t("growth.calculatedFrom", { weight: `${latestWeight.weight} ${units.weight}`, height: `${latestHeight.height} ${units.length}` })
                 : t("general.noData")}
             </div>

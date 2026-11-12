@@ -102,7 +102,7 @@ export default function PictureFrame({ photos, children = [], onWake }) {
             <div className="picture-frame-detail">{current.detail}</div>
           )}
           <div className="picture-frame-date">
-            {new Date(current.date + "T00:00:00").toLocaleDateString(undefined, {
+            {new Date(current.date + "T00:00:00").toLocaleDateString(getDisplayLocale(), {
               year: "numeric",
               month: "long",
               day: "numeric",
