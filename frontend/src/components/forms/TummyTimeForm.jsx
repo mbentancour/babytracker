@@ -13,6 +13,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   const isEdit = !!entry;
   const now = new Date();
   const tenMinsAgo = new Date(now.getTime() - 10 * 60 * 1000);
+  const currentLocalDatetime = toLocalDatetime(now);
   const [milestone, setMilestone] = useState(entry?.milestone || "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(tenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
@@ -44,6 +45,7 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
         const data = { child: childId };
         if (timerId) {
           data.timer = timerId;
+          data.end = localInputToUTC(end);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);
@@ -69,31 +71,25 @@ export default function TummyTimeForm({ childId, timerId, entry, onDone, onClose
   return (
     <Modal title={isEdit ? t("tummy.edit") : t("tummy.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
-        {!isEdit && timerId ? (
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-            The timer's start and end times will be used for this tummy time entry.
-          </p>
-        ) : null}
         {(isEdit || !timerId) && (
-          <>
-            <FormField label={t("general.start")}>
-              <FormInput
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                required
-              />
-            </FormField>
-            <FormField label={t("general.end")}>
-              <FormInput
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                required
-              />
-            </FormField>
-          </>
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
         )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? currentLocalDatetime : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <FormField label={`${t("milestone.title")} (${t("form.optional").toLowerCase()})`}>
           <FormInput

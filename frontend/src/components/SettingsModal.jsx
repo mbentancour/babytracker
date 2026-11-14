@@ -10,7 +10,7 @@ import {
   FEATURE_LIST,
   VIEW_LIST,
   FEEDING_TYPES,
-  FEEDING_METHODS,
+  methodsForType,
 } from "../utils/preferences";
 
 const UNIT_OPTIONS = [
@@ -412,12 +412,19 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
                       <FormSelect
                         options={FEEDING_TYPES.map(o => ({ ...o, label: t(o.labelKey) }))}
                         value={prefs.defaults.feeding?.type || "breast milk"}
-                        onChange={(e) => setFormDefault("feeding", "type", e.target.value)}
+                        onChange={(e) => {
+                          const nextType = e.target.value;
+                          setFormDefault("feeding", "type", nextType);
+                          const currentMethod = prefs.defaults.feeding?.method || "bottle";
+                          if (!methodsForType(nextType).some((m) => m.value === currentMethod)) {
+                            setFormDefault("feeding", "method", methodsForType(nextType)[0].value);
+                          }
+                        }}
                       />
                     </FormField>
                     <FormField label={t("settings.defaultMethod")}>
                       <FormSelect
-                        options={FEEDING_METHODS.map(o => ({ ...o, label: t(o.labelKey) }))}
+                        options={methodsForType(prefs.defaults.feeding?.type || "breast milk").map(o => ({ ...o, label: t(o.labelKey) }))}
                         value={prefs.defaults.feeding?.method || "bottle"}
                         onChange={(e) => setFormDefault("feeding", "method", e.target.value)}
                       />

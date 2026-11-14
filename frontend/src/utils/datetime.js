@@ -5,6 +5,14 @@ export function toLocalDatetime(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Nap is the default during the daytime window [09:00, 18:00).
+// Read the hour directly from the local datetime-local value so no timezone
+// conversion can move an entry across one of the boundaries.
+export function isNapTime(localDatetime) {
+  const hour = Number(localDatetime?.slice(11, 13));
+  return Number.isInteger(hour) && hour >= 9 && hour < 18;
+}
+
 // localInputToUTC converts a naive "YYYY-MM-DDTHH:MM" string (as produced by
 // datetime-local inputs, in the user's local timezone) into a naive UTC
 // string "YYYY-MM-DDTHH:MM:SS" suitable for the backend, which parses

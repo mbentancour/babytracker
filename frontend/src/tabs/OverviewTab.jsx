@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -17,6 +17,7 @@ import ChartDetailBar from "../components/ChartDetailBar";
 import DayActivitiesModal from "../components/DayActivitiesModal";
 import MilkStock from "../components/MilkStock";
 import TagChips from "../components/TagChips";
+import SleepTypeToggle from "../components/SleepTypeToggle";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import {
@@ -27,6 +28,7 @@ import {
   aggregateByDayOfWeek,
   aggregateSleepByDay,
   aggregateTummyByDay,
+  aggregateDiapersByDay,
   getEntriesForDay,
   overlapHours,
   parseDuration,
@@ -48,25 +50,40 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   const [expanded, setExpanded] = useState({});
   const [dayModal, setDayModal] = useState(null);
   const [selectedBar, setSelectedBar] = useState(null);
+  const [sleepType, setSleepType] = useState("total");
+  const [sleepPeriod, setSleepPeriod] = useState("today");
+  const [diaperType, setDiaperType] = useState("total");
+  const touchSelectionUntil = useRef(0);
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const feedingTimeline = toFeedingTimeline(feedings, units.volume, t);
-  const diaperTimeline = toDiaperTimeline(changes, t);
+  const diaperMatches = (c) => diaperType === "total" || (diaperType === "wet" ? c.wet : c.solid);
+  const diaperTimeline = toDiaperTimeline(changes.filter(diaperMatches), t);
   const sleepBlocks = toSleepBlocks(sleepEntries);
+  const filteredSleepBlocks = sleepType === "total"
+    ? sleepBlocks
+    : sleepBlocks.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
   const weeklyFeedings = aggregateByDayOfWeek(weeklyFeedingsRaw, "amount");
-  const sleepByDay = aggregateSleepByDay(weeklySleep);
+  const filteredWeeklySleep = sleepType === "total"
+    ? weeklySleep
+    : weeklySleep.filter((entry) => sleepType === "nap" ? entry.nap : !entry.nap);
+  const sleepByDay = aggregateSleepByDay(filteredWeeklySleep);
   const tummyByDay = aggregateTummyByDay(weeklyTummyTimes);
+  const filteredWeeklyChanges = weeklyChanges.filter(diaperMatches);
+  const diapersByDay = aggregateDiapersByDay(filteredWeeklyChanges);
   const pumpingTimeline = toPumpingTimeline(pumpingSessions, units.volume, t);
   const pumpingByDay = aggregateByDayOfWeek(weeklyPumping, "amount");
 
   const totalFeeding = feedings.reduce((s, f) => s + (f.amount || 0), 0);
   const totalPumping = pumpingSessions.reduce((s, p) => s + (p.amount || 0), 0);
-  // "Last 24 hours" sleep total: clip each entry to the rolling window so an
-  // overnight sleep that straddles the boundary contributes only the portion
-  // that actually falls inside the window (not its whole duration, and not
-  // zero). Ongoing sleeps are clipped to "now".
+  // Clip sleep entries to either the local calendar day or rolling 24-hour
+  // window. This preserves partial overnight sessions and ongoing sleeps.
   const sleepWindowEnd = Date.now();
-  const sleepWindowStart = sleepWindowEnd - 24 * 60 * 60 * 1000;
+  const todayStart = new Date(sleepWindowEnd);
+  todayStart.setHours(0, 0, 0, 0);
+  const sleepWindowStart = sleepPeriod === "24h"
+    ? sleepWindowEnd - 24 * 60 * 60 * 1000
+    : todayStart.getTime();
   const totalSleep = sleepEntries.reduce(
     (s, e) => s + overlapHours(e, sleepWindowStart, sleepWindowEnd),
     0
@@ -101,14 +118,46 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
   // Recharts v3 dropped `activePayload` from chart click events, so we can't
   // read the bar's value directly out of the event. Resolve it by indexing
   // into the chart's data array using `activeTooltipIndex` (or the legacy
-  // `activeIndex` as a fallback).
-  const handleChartClick = (data, type, seriesData, dataKey) => {
-    if (!data || !data.activeLabel || !seriesData) return;
+  // `activeIndex` as a fallback). Read the label from that point rather than
+  // `activeLabel`: on touch devices activeLabel can lag one tap behind.
+  const selectChartPoint = (data, type, seriesData, dataKey) => {
+    if (!data || !seriesData) return;
     const idx = data.activeTooltipIndex ?? data.activeIndex;
     const point = idx != null ? seriesData[idx] : undefined;
     const value = point ? point[dataKey] : undefined;
     if (value == null) return;
-    setSelectedBar({ type, label: data.activeLabel, value });
+    const label = point.day ?? point.date;
+    if (!label) return;
+    setSelectedBar({ type, label, value });
+  };
+
+  const handleChartClick = (data, type, seriesData, dataKey) => {
+    // Mobile browsers dispatch a click after touchend. Recharts can still
+    // expose the previous active point for that synthetic click, so keep the
+    // touch selection and ignore the stale follow-up event.
+    if (Date.now() < touchSelectionUntil.current) return;
+    selectChartPoint(data, type, seriesData, dataKey);
+  };
+
+  const handleBarTouchEnd = (event, type, seriesData, dataKey) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+    // The wrapper and the seven category bands share the same horizontal
+    // coordinate system. This also works when Recharts omits zero bars.
+    const relativeX = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+    const index = Math.max(0, Math.min(seriesData.length - 1,
+      Math.floor(relativeX / (rect.width / seriesData.length))));
+    const point = seriesData[index];
+    if (!point) return;
+    touchSelectionUntil.current = Date.now() + 750;
+    setSelectedBar({ type, label: point.day ?? point.date, value: point[dataKey] });
+  };
+
+  const blockSyntheticChartClick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const openDayModal = (day, type) => {
@@ -116,11 +165,13 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
     if (type === "feeding") {
       dayData = getEntriesForDay(weeklyFeedingsRaw, day, "start");
     } else if (type === "sleep") {
-      dayData = getEntriesForDay(weeklySleep, day, "start");
+      dayData = getEntriesForDay(filteredWeeklySleep, day, "start");
     } else if (type === "tummy") {
       dayData = getEntriesForDay(weeklyTummyTimes, day, "start");
     } else if (type === "pumping") {
       dayData = getEntriesForDay(weeklyPumping, day, "start");
+    } else if (type === "diaper") {
+      dayData = getEntriesForDay(filteredWeeklyChanges, day, "time");
     }
     setSelectedBar(null);
     setDayModal({ day, type, data: dayData });
@@ -150,7 +201,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               icon={<Icons.Moon />}
               label={t("overview.sleep")}
               value={`${totalSleep.toFixed(1)}h`}
-              sub={t("overview.sleepLast24")}
+              sub={<SleepPeriodToggle value={sleepPeriod} onChange={setSleepPeriod} />}
               foot={lastSleep}
               color={colors.sleep}
               onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
@@ -240,7 +291,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {weeklyFeedings.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "feeding", weeklyFeedings, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={weeklyFeedings} barSize={18} onClick={(data) => handleChartClick(data, "feeding", weeklyFeedings, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -268,14 +319,23 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
 
         {/* Sleep */}
         {isFeatureEnabled("sleep") && <div className="fade-in fade-in-4">
-          <SectionCard title={t("overview.sleepPattern")} icon={<Icons.Moon />} color={colors.sleep}>
-            {sleepBlocks.length > 0 ? (
+          <SectionCard
+            title={t("overview.sleepPattern")}
+            icon={<Icons.Moon />}
+            color={colors.sleep}
+            action={<SleepTypeToggle value={sleepType} onChange={(type) => {
+              setSleepType(type);
+              setSelectedBar(null);
+              setDayModal(null);
+            }} />}
+          >
+            {filteredSleepBlocks.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
-                {(expanded.sleep ? sleepBlocks : sleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
+                {(expanded.sleep ? filteredSleepBlocks : filteredSleepBlocks.slice(0, COLLAPSED_COUNT)).map((s, i, arr) => (
                   <div key={i} className="entry-clickable" onClick={() => onEditEntry?.("sleep", s.entry)}>
                     <TimelineItem
                       time={`${s.start}–${s.end}`}
-                      label={`${formatSleepDuration(s.duration)}${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                      label={`${formatSleepDuration(s.duration)} · ${s.nap ? t("sleep.nap") : t("sleep.night")}`}
                       detail={t("general.timeRange", { from: s.start, to: s.end })}
                       color={colors.sleep}
                       isLast={i === arr.length - 1}
@@ -283,9 +343,9 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                     />
                   </div>
                 ))}
-                {sleepBlocks.length > COLLAPSED_COUNT && (
+                {filteredSleepBlocks.length > COLLAPSED_COUNT && (
                   <button className="expand-toggle" onClick={() => toggle("sleep")}>
-                    {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: sleepBlocks.length - COLLAPSED_COUNT })}
+                    {expanded.sleep ? t("overview.showLess") : t("overview.showMore", { count: filteredSleepBlocks.length - COLLAPSED_COUNT })}
                   </button>
                 )}
               </div>
@@ -296,7 +356,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {sleepByDay.some((d) => d.hours > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "sleep", sleepByDay, "hours")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sleepByDay} barSize={18} onClick={(data) => handleChartClick(data, "sleep", sleepByDay, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -324,7 +384,16 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
 
         {/* Diapers */}
         {isFeatureEnabled("diaper") && <div className="fade-in fade-in-5">
-          <SectionCard title={t("overview.diaperChanges")} icon={<Icons.Droplet />} color={colors.diaper}>
+          <SectionCard
+            title={t("overview.diaperChanges")}
+            icon={<Icons.Droplet />}
+            color={colors.diaper}
+            action={<DiaperTypeToggle value={diaperType} onChange={(type) => {
+              setDiaperType(type);
+              setSelectedBar(null);
+              setDayModal(null);
+            }} />}
+          >
             {diaperTimeline.length > 0 ? (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -390,6 +459,31 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
                 {t("overview.noDiapers")}
               </div>
             )}
+            {diapersByDay.some((d) => d.count > 0) && (
+              <>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "diaper", diapersByDay, "count")} onClick={blockSyntheticChartClick}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={diapersByDay} barSize={18} onClick={(data) => handleChartClick(data, "diaper", diapersByDay, "count")}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
+                      <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="count" fill={colors.diaper} radius={[6, 6, 0, 0]} opacity={0.85} cursor="pointer" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {selectedBar?.type === "diaper" && (
+                  <ChartDetailBar
+                    label={selectedBar.label}
+                    value={selectedBar.value}
+                    unit={t("overview.diaperChanges")}
+                    color={colors.diaper}
+                    onViewEntries={() => openDayModal(selectedBar.label, "diaper")}
+                    onDismiss={() => setSelectedBar(null)}
+                  />
+                )}
+              </>
+            )}
           </SectionCard>
         </div>}
 
@@ -398,7 +492,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
           <SectionCard title={t("overview.tummyTime")} icon={<Icons.Sun />} color={colors.tummy}>
             {tummyByDay.some((d) => d.minutes > 0) ? (
               <>
-                <div style={{ height: 140 }}>
+                <div style={{ height: 140 }} onTouchEnd={(event) => handleBarTouchEnd(event, "tummy", tummyByDay, "minutes")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={tummyByDay} barSize={22} onClick={(data) => handleChartClick(data, "tummy", tummyByDay, "minutes")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -476,7 +570,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {pumpingByDay.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }}>
+                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "pumping", pumpingByDay, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={pumpingByDay} barSize={18} onClick={(data) => handleChartClick(data, "pumping", pumpingByDay, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -588,5 +682,78 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         />
       )}
     </>
+  );
+}
+
+function DiaperTypeToggle({ value, onChange }) {
+  const { t } = useI18n();
+  const options = [
+    ["total", t("overview.total")],
+    ["wet", t("overview.wet")],
+    ["solid", t("overview.solid")],
+  ];
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("overview.diaperFilterLabel")}>
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: value === key ? colors.diaper : "var(--card-bg)",
+            color: value === key ? "white" : "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SleepPeriodToggle({ value, onChange }) {
+  const { t } = useI18n();
+  const options = [
+    ["today", t("overview.sleepToday")],
+    ["24h", t("overview.sleep24h")],
+  ];
+
+  return (
+    <div
+      role="group"
+      aria-label={t("overview.sleepPeriodLabel")}
+      style={{ display: "flex", gap: 6, marginTop: -2 }}
+    >
+      {options.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: value === key ? "#6C5CE7" : "var(--card-bg)",
+            color: value === key ? "white" : "var(--text-muted)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }

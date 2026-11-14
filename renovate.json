@@ -2,9 +2,17 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "packageRules": [
     {
+      "description": "group all dependencies into a single PR",
       "groupName": "all dependencies",
       "groupSlug": "all-dependencies",
       "matchPackageNames": ["*"]
+    },
+    {
+      "description": "auto merge non-major updates",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
     }
   ]
 }

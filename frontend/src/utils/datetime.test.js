@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { toLocalDatetime, localInputToUTC } from "./datetime";
+import { toLocalDatetime, localInputToUTC, isNapTime } from "./datetime";
+
+function localTime(hour, minute) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return toLocalDatetime(date);
+}
 
 // These helpers are timezone-sensitive by design, so pin the zone. Vitest
 // respects the TZ env var via the underlying Node runtime; we assert on a
@@ -33,5 +39,20 @@ describe("toLocalDatetime", () => {
     // Construct from explicit local components.
     const d = new Date(2026, 0, 3, 4, 5); // Jan 3 2026 04:05 local
     expect(toLocalDatetime(d)).toBe("2026-01-03T04:05");
+  });
+});
+
+describe("isNapTime", () => {
+  it("defaults to nap between 09:00 inclusive and 18:00 exclusive", () => {
+    expect(isNapTime(localTime(8, 59))).toBe(false);
+    expect(isNapTime(localTime(9, 0))).toBe(true);
+    expect(isNapTime(localTime(12, 30))).toBe(true);
+    expect(isNapTime(localTime(17, 59))).toBe(true);
+  });
+
+  it("defaults to night sleep outside the daytime window", () => {
+    expect(isNapTime(localTime(18, 0))).toBe(false);
+    expect(isNapTime(localTime(23, 30))).toBe(false);
+    expect(isNapTime(localTime(8, 59))).toBe(false);
   });
 });
