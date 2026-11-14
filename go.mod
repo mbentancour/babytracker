@@ -7,13 +7,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.18
 	github.com/aws/aws-sdk-go-v2/credentials v1.21.0
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.24
-	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.10
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.71.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.10
 	github.com/go-acme/lego/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/studio-b12/gowebdav v0.13.0
