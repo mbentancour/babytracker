@@ -271,6 +271,22 @@ export default {
   "auth.createAccountHint": "Create your account to get started",
   "auth.signInHint": "Sign in to continue",
   "auth.pleaseWait": "Please wait...",
+  // OIDC sign-in
+  "auth.signInWith": "Sign in with {{provider}}",
+  "auth.or": "or",
+  "auth.oidcErrorUnavailable": "The sign-in provider can't be reached right now. Please try again later.",
+  "auth.oidcErrorExpired": "The sign-in took too long or was started in another tab. Please try again.",
+  "auth.oidcErrorDenied": "Sign-in was cancelled at the provider.",
+  "auth.oidcErrorFailed": "Signing in with the provider failed. Please try again.",
+  "auth.oidcErrorNotAllowed": "Your account at the provider isn't allowed to use BabyTracker.",
+  "auth.oidcErrorNoAccount": "No BabyTracker account is linked to this sign-in. Ask an admin, or sign in with your password and link it under Settings → Account.",
+  "auth.oidcErrorUsernameTaken": "A BabyTracker account with this username already exists. Sign in with its password and link it under Settings → Account.",
+  "auth.oidcErrorAlreadyLinked": "This provider account is already linked to another BabyTracker user.",
+  "auth.oidcLinkedNotice": "Your account is now linked to {{provider}}.",
+  "settings.oidcTitle": "Single sign-on",
+  "settings.oidcLinked": "Your account is linked to {{provider}}.",
+  "settings.oidcNotLinked": "Link your account to sign in with {{provider}}.",
+  "settings.oidcLink": "Link {{provider}} account",
 
   // Onboarding
   "onboarding.welcome": "Welcome to BabyTracker!",

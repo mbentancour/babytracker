@@ -9,8 +9,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.7
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.1
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-acme/lego/v5 v5.4.1
 	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/jackc/pgx/v5 v5.11.0
@@ -19,6 +21,7 @@ require (
 	github.com/studio-b12/gowebdav v0.13.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (
@@ -37,7 +40,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.0 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
