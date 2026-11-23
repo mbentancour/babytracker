@@ -95,7 +95,19 @@ func (h *AuthHandler) sessionToken(r *http.Request) string {
 	return cookieToken
 }
 
+// passwordLoginDisabled reports whether OIDC_DISABLE_PASSWORD_LOGIN is in
+// effect. It only counts while OIDC sign-in is actually available, so a broken
+// OIDC configuration falls back to passwords instead of locking everyone out.
+func (h *AuthHandler) passwordLoginDisabled() bool {
+	return h.cfg.OIDC.DisablePasswordLogin && oidcAvailable(h.cfg, h.inIngress)
+}
+
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	if h.passwordLoginDisabled() {
+		pagination.WriteError(w, http.StatusForbidden, "password sign-in is disabled")
+		return
+	}
+
 	// Only allow registration if no users exist
 	count, err := models.CountUsers(h.db)
 	if err != nil {
@@ -138,6 +150,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	if h.passwordLoginDisabled() {
+		pagination.WriteError(w, http.StatusForbidden, "password sign-in is disabled")
+		return
+	}
+
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -248,6 +265,25 @@ func (h *AuthHandler) Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// startSession stores a new refresh token for the user and sets it as the
+// refresh_token cookie. Shared by every way of signing in, so a session that
+// began at an OIDC provider is indistinguishable from a password one.
+func (h *AuthHandler) startSession(w http.ResponseWriter, r *http.Request, user *models.User) (string, error) {
+	refreshToken, err := crypto.GenerateRefreshToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate refresh token")
+	}
+
+	tokenHash := crypto.HashRefreshToken(refreshToken)
+	expiresAt := time.Now().Add(crypto.RefreshTokenExpiry)
+	if err := models.CreateRefreshToken(h.db, user.ID, tokenHash, expiresAt); err != nil {
+		return "", fmt.Errorf("failed to store refresh token")
+	}
+
+	http.SetCookie(w, h.refreshCookie(r, refreshToken, int(crypto.RefreshTokenExpiry.Seconds())))
+	return refreshToken, nil
+}
+
 func (h *AuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, user *models.User) {
 	accessToken, err := crypto.GenerateAccessToken(h.cfg.JWTSecret, user.ID, user.Username, user.IsAdmin)
 	if err != nil {
@@ -255,20 +291,11 @@ func (h *AuthHandler) issueTokens(w http.ResponseWriter, r *http.Request, user *
 		return
 	}
 
-	refreshToken, err := crypto.GenerateRefreshToken()
+	refreshToken, err := h.startSession(w, r, user)
 	if err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to generate refresh token")
+		pagination.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	tokenHash := crypto.HashRefreshToken(refreshToken)
-	expiresAt := time.Now().Add(crypto.RefreshTokenExpiry)
-	if err := models.CreateRefreshToken(h.db, user.ID, tokenHash, expiresAt); err != nil {
-		pagination.WriteError(w, http.StatusInternalServerError, "failed to store refresh token")
-		return
-	}
-
-	http.SetCookie(w, h.refreshCookie(r, refreshToken, int(crypto.RefreshTokenExpiry.Seconds())))
 
 	resp := authResponse{
 		AccessToken: accessToken,

@@ -2,6 +2,7 @@ package config
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -49,6 +50,19 @@ func TestEscapeUserinfoAtLeavesOtherURLsAlone(t *testing.T) {
 	} {
 		if got := escapeUserinfoAt(raw); got != raw {
 			t.Errorf("escapeUserinfoAt(%q) = %q, want unchanged", raw, got)
+		}
+	}
+}
+
+func TestParseOIDCScopesAlwaysIncludesOpenID(t *testing.T) {
+	for raw, want := range map[string]string{
+		"openid profile email groups": "openid profile email groups",
+		"profile,email":               "openid profile email",
+		"  groups  openid ":           "openid groups",
+		"":                            "openid",
+	} {
+		if got := strings.Join(parseOIDCScopes(raw), " "); got != want {
+			t.Errorf("parseOIDCScopes(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }

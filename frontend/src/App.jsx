@@ -32,7 +32,7 @@ import PumpingForm from "./components/forms/PumpingForm";
 import MilkWasteForm from "./components/forms/MilkWasteForm";
 import BMIForm from "./components/forms/BMIForm";
 import TimerButton from "./components/TimerButton";
-import LoginScreen from "./components/LoginScreen";
+import LoginScreen, { oidcErrorKey } from "./components/LoginScreen";
 const SetupWizard = lazy(() => import("./components/SetupWizard"));
 import OnboardingScreen from "./components/OnboardingScreen";
 import SetupChoiceScreen from "./components/SetupChoiceScreen";
@@ -133,6 +133,23 @@ function getTimerLabel(name, tr) {
   return timer ? tr(timer.labelKey) : name;
 }
 
+// takeOidcResult reads ?oidc_error= / ?oidc_linked= left by the OIDC callback
+// and removes them from the URL.
+function takeOidcResult() {
+  try {
+    const url = new URL(window.location.href);
+    const error = url.searchParams.get("oidc_error");
+    const linked = url.searchParams.get("oidc_linked") === "1";
+    if (!error && !linked) return null;
+    url.searchParams.delete("oidc_error");
+    url.searchParams.delete("oidc_linked");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    return { error, linked };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const { t } = useI18n();
   const [authState, setAuthState] = useState("loading"); // loading, setup-choice, setup, login, authenticated
@@ -142,6 +159,11 @@ export default function App() {
   const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import" | "nara"
   const [demoMode, setDemoMode] = useState(false);
   const [applianceMode, setApplianceMode] = useState(false);
+  const [oidc, setOidc] = useState({ enabled: false, providerName: "" });
+  const [passwordLogin, setPasswordLogin] = useState(true);
+  // What the OIDC callback redirected back with, read once and cleared from
+  // the address bar so a reload doesn't show it again.
+  const [oidcResult] = useState(takeOidcResult);
 
   const handleLogout = useCallback(() => {
     setAccessToken(null);
@@ -162,6 +184,8 @@ export default function App() {
         setDemoMode(config.demo_mode);
         setApplianceMode(config.appliance_mode || false);
         if (config.ha_ingress) enableTokenPersistence();
+        setOidc({ enabled: !!config.oidc_enabled, providerName: config.oidc_provider_name || "" });
+        setPasswordLogin(config.password_login !== false);
 
         if (config.demo_mode) {
           setAuthState("authenticated");
@@ -193,6 +217,19 @@ export default function App() {
       });
     });
   }, []);
+
+  // A link attempt from Settings → Account comes back to a signed-in app, so
+  // its outcome can't go on the login screen.
+  const oidcNoticeShown = useRef(false);
+  useEffect(() => {
+    if (authState !== "authenticated" || !oidcResult || oidcNoticeShown.current) return;
+    oidcNoticeShown.current = true;
+    if (oidcResult.linked) {
+      alert(t("auth.oidcLinkedNotice", { provider: oidc.providerName || "SSO" }));
+    } else if (oidcResult.error) {
+      alert(t(oidcErrorKey(oidcResult.error)));
+    }
+  }, [authState, oidcResult, oidc.providerName, t]);
 
   if (authState === "loading") {
     return (
@@ -227,6 +264,9 @@ export default function App() {
         isSetup={authState === "setup"}
         onAuthenticated={() => setAuthState("authenticated")}
         onBack={authState === "setup" ? () => setAuthState("setup-choice") : null}
+        oidc={oidc}
+        passwordLogin={passwordLogin}
+        oidcError={oidcResult?.error}
       />
     );
   }

@@ -26,6 +26,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 	// Handlers
 	authH := handlers.NewAuthHandler(db, cfg)
+	oidcH := handlers.NewOIDCHandler(db, cfg, authH)
 	childrenH := handlers.NewChildrenHandler(db)
 	feedingsH := handlers.NewFeedingsHandler(db)
 	sleepH := handlers.NewSleepHandler(db)
@@ -88,6 +89,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Use(middleware.RateLimit(60, time.Minute))
 		r.Post("/api/auth/register", authH.Register)
 		r.Post("/api/auth/login", authH.Login)
+
+		// OIDC sign-in: browser navigations, not fetches — see oidc.go.
+		r.Get("/api/auth/oidc/login", oidcH.Login)
+		r.Get("/api/auth/oidc/callback", oidcH.Callback)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.RateLimit(180, time.Minute))
@@ -317,6 +322,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 
 		// Non-admin user-management self-service endpoints
 		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
+		r.Post("/api/auth/oidc/link", oidcH.Link)
 		r.Put("/api/users/me/password", usersH.ChangeOwnPassword)
 
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)

@@ -681,6 +681,9 @@ export const api = {
     request("users/me/password", { method: "PUT", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
   resetUserPassword: (userId, newPassword) =>
     request(`users/${userId}/password`, { method: "PUT", body: JSON.stringify({ new_password: newPassword }) }),
+  // Starts linking the signed-in account to the OIDC provider. Returns
+  // { url } for the browser to navigate to; the server has set the flow cookie.
+  linkOIDC: () => request("auth/oidc/link", { method: "POST" }),
 
   // Roles
   getRoles: () => request("roles/"),

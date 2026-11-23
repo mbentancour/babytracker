@@ -754,6 +754,29 @@ body {
   cursor: not-allowed;
 }
 
+/* The OIDC sign-in button is a link (a top-level navigation), styled to
+   match the form's submit button. */
+.login-oidc-button {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
 /* Delete button for entries */
 .delete-entry-btn {
   background: none;

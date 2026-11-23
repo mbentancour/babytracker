@@ -4,8 +4,28 @@ import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
 
-export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
+// Callback error codes from the server (oidc.go) → translation keys.
+const OIDC_ERRORS = {
+  unavailable: "auth.oidcErrorUnavailable",
+  expired: "auth.oidcErrorExpired",
+  denied: "auth.oidcErrorDenied",
+  failed: "auth.oidcErrorFailed",
+  not_allowed: "auth.oidcErrorNotAllowed",
+  no_account: "auth.oidcErrorNoAccount",
+  username_taken: "auth.oidcErrorUsernameTaken",
+  already_linked: "auth.oidcErrorAlreadyLinked",
+};
+
+export function oidcErrorKey(code) {
+  return OIDC_ERRORS[code] || "auth.oidcErrorFailed";
+}
+
+// oidc: { enabled, providerName } from /api/config. passwordLogin is false
+// when the server only accepts OIDC sign-in. oidcError is the code the OIDC
+// callback redirected back with, if any.
+export default function LoginScreen({ isSetup, onAuthenticated, onBack, oidc, passwordLogin = true, oidcError }) {
   const { t } = useI18n();
+  const oidcEnabled = !!oidc?.enabled;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -57,6 +77,23 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
           </p>
         </div>
 
+        {oidcEnabled && (
+          <div className="login-form" style={{ marginBottom: passwordLogin ? 16 : 0 }}>
+            {oidcError && !error && <div className="login-error">{t(oidcErrorKey(oidcError))}</div>}
+            {/* A plain navigation, not a fetch: the server redirects to the
+                provider, and only a top-level navigation can follow that. */}
+            <a
+              href="./api/auth/oidc/login"
+              className="login-button login-oidc-button"
+              style={{ background: colors.feeding }}
+            >
+              {t("auth.signInWith", { provider: oidc.providerName || "SSO" })}
+            </a>
+            {passwordLogin && <div className="login-divider">{t("auth.or")}</div>}
+          </div>
+        )}
+
+        {passwordLogin && (
         <form onSubmit={handleSubmit} className="login-form">
           {error && <div className="login-error">{error}</div>}
 
@@ -130,6 +167,7 @@ export default function LoginScreen({ isSetup, onAuthenticated, onBack }) {
             </button>
           )}
         </form>
+        )}
       </div>
     </div>
   );
