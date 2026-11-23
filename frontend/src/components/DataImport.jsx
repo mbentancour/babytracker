@@ -25,7 +25,39 @@ const STAT_LABELS = [
   ["notes", "feature.note"],
 ];
 
-// NaraImport walks an admin through importing a Nara Baby CSV export: pick
+// What differs between the apps an export can come from. The api calls are
+// looked up when used, not here, so tests can replace them.
+const SOURCES = {
+  nara: {
+    preview: (file, units) => api.previewNaraImport(file, units),
+    run: (file, fields) => api.importFromNara(file, fields),
+    title: "onboarding.importNara",
+    hint: "onboarding.naraHint",
+    chooseFile: "nara.chooseFile",
+    sleepNote: "nara.sleepClassified",
+    // text/* as well: Android WebView hosts (e.g. the Home Assistant app)
+    // grey out .csv files whose type is text/comma-separated-values.
+    accept: ".csv,text/csv,text/*",
+    multiple: false,
+    accent: ACCENT,
+    button: ACCENT_BUTTON,
+  },
+  // Baby Tracker by Nighp Software: a zip of CSVs, or the CSVs themselves.
+  nighp: {
+    preview: (files, units) => api.previewNighpImport(files, units),
+    run: (files, fields) => api.importFromNighp(files, fields),
+    title: "onboarding.importNighp",
+    hint: "onboarding.nighpHint",
+    chooseFile: "nighp.chooseFile",
+    sleepNote: "nighp.sleepClassified",
+    accept: ".zip,application/zip,.csv,text/csv,text/*",
+    multiple: true,
+    accent: "#0984e3",
+    button: "#0866b3",
+  },
+};
+
+// DataImport walks an admin through importing another app's export: pick
 // the file, see what's in it (the baby's details are prefilled from the
 // export's profile row), then import into a new child and review what came
 // across.
@@ -37,9 +69,11 @@ const STAT_LABELS = [
 // this device then shows the units the amounts were saved in. onBusy(true) is
 // called while the new child exists but the summary hasn't been dismissed, so
 // a background refresh doesn't swap the screen out from under it. doneLabel
-// names the summary's button.
-export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, onBusy, doneLabel }) {
+// names the summary's button. source picks the app the export comes from
+// ("nara", the default, or "nighp"); the steps and the summary are the same.
+export default function DataImport({ source = "nara", unitSystem, onUnitsChange, onDone, onBack, onBusy, doneLabel }) {
   const { t } = useI18n();
+  const src = SOURCES[source] || SOURCES.nara;
   const ids = useId();
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -75,20 +109,20 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
     // (an HTML page, no code) has some lower limit we can't know.
     if (err?.status === 413) {
       return err.code === "too_large" && err.detail
-        ? t("nara.error.too_large", { detail: err.detail })
-        : t("nara.error.too_large_proxy");
+        ? t("import.error.too_large", { detail: err.detail })
+        : t("import.error.too_large_proxy");
     }
-    if (err?.status === 401) return t("nara.error.session_expired");
+    if (err?.status === 401) return t("import.error.session_expired");
     if (err?.code) {
-      const key = `nara.error.${err.code}`;
+      const key = `import.error.${err.code}`;
       const text = t(key, { detail: err.detail || "" });
       if (text !== key) return text;
     }
     // A failed fetch (offline, dropped connection) or a timeout; anything
     // else without a code (a proxy's error page, a rate limit) gets the
     // generic text.
-    if (err instanceof TypeError || /timed out/i.test(err?.message || "")) return t("nara.error.network");
-    return t("nara.error.generic");
+    if (err instanceof TypeError || /timed out/i.test(err?.message || "")) return t("import.error.network");
+    return t("import.error.generic");
   };
 
   const runPreview = async (picked, system) => {
@@ -97,7 +131,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
     setError("");
     setChecking(true);
     try {
-      const res = await api.previewNaraImport(picked, system);
+      const res = await src.preview(picked, system);
       if (seq !== previewSeq.current) return;
       if (!res || !res.stats) throw new Error("empty response");
       setPreview(res);
@@ -120,7 +154,8 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
   };
 
   const handleFile = (e) => {
-    const picked = e.target.files?.[0] || null;
+    const all = Array.from(e.target.files || []);
+    const picked = src.multiple ? (all.length ? all : null) : all[0] || null;
     e.target.value = ""; // let the same file be picked again after a fix
     if (!picked) return;
     setFile(picked);
@@ -140,7 +175,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
     setImporting(true);
     onBusy?.(true);
     try {
-      const res = await api.importFromNara(file, { firstName, lastName, birthDate, sex, unitSystem: units, includeDuplicates });
+      const res = await src.run(file, { firstName, lastName, birthDate, sex, unitSystem: units, includeDuplicates });
       if (!res || !res.stats) throw new Error("empty response");
       setResult(res);
       onUnitsChange?.(units);
@@ -166,7 +201,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
           <div className="login-icon" style={{ background: "#00b89418", color: "#00b894" }}><Icons.Activity /></div>
           <h1 className="login-title" ref={resultHeading} tabIndex={-1} style={{ outline: "none" }}>{t("onboarding.importComplete")}</h1>
         </div>
-        <Summary data={result} done />
+        <Summary data={result} done sleepNote={src.sleepNote} />
         <button onClick={finish} className="login-button" style={{ background: colors.feeding, width: "100%" }}>
           {doneLabel || t("onboarding.continueToDashboard")}
         </button>
@@ -188,24 +223,23 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
   return (
     <Card>
       <div className="login-header">
-        <div className="login-icon" style={{ background: `${ACCENT}18`, color: ACCENT }}><Icons.Download /></div>
-        <h1 className="login-title">{t("onboarding.importNara")}</h1>
-        <p className="login-subtitle">{t("onboarding.naraHint")}</p>
+        <div className="login-icon" style={{ background: `${src.accent}18`, color: src.accent }}><Icons.Download /></div>
+        <h1 className="login-title">{t(src.title)}</h1>
+        <p className="login-subtitle">{t(src.hint)}</p>
       </div>
       <form onSubmit={handleImport} className="login-form">
         {error && <div className="login-error" role="alert">{error}</div>}
         <label className="file-picker" style={{ color: importing ? "var(--text-dim)" : "var(--text-muted)", cursor: importing ? "not-allowed" : "pointer" }}>
           <span style={{ flexShrink: 0, display: "flex" }}><Icons.Download /></span>
           <span>
-            {t("nara.chooseFile")}
-            {file && <span style={{ display: "block", fontSize: 12, marginTop: 2 }}>{file.name}</span>}
+            {t(src.chooseFile)}
+            {file && <span style={{ display: "block", fontSize: 12, marginTop: 2 }}>{[].concat(file).map((f) => f.name).join(", ")}</span>}
           </span>
           <input
             type="file"
             className="visually-hidden"
-            // text/* as well: Android WebView hosts (e.g. the Home Assistant
-            // app) grey out .csv files whose type is text/comma-separated-values.
-            accept=".csv,text/csv,text/*"
+            accept={src.accept}
+            multiple={src.multiple}
             onChange={handleFile}
             // Not disabled while the preview runs, so focus stays here; a
             // newer pick simply replaces the older one.
@@ -215,7 +249,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
 
         {onUnitsChange && (
           <div className="login-field">
-            <label className="login-label" htmlFor={`${ids}-units`}>{t("nara.saveUnits")}</label>
+            <label className="login-label" htmlFor={`${ids}-units`}>{t("import.saveUnits")}</label>
             <select id={`${ids}-units`} className="login-input" value={units} onChange={handleUnits} disabled={importing}>
               <option value="metric">{t("settings.metric")}</option>
               <option value="imperial">{t("settings.imperial")}</option>
@@ -224,14 +258,14 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
         )}
 
         <div role="status" aria-live="polite">
-          {checking && <p className="login-label" style={{ margin: 0 }}>{t("nara.checking")}</p>}
+          {checking && <p className="login-label" style={{ margin: 0 }}>{t("import.checking")}</p>}
           {preview && (
             <div>
-              <div className="login-label" style={{ marginBottom: 6 }}>{t("nara.found")}</div>
+              <div className="login-label" style={{ marginBottom: 6 }}>{t("import.found")}</div>
               {nothingToImport && (
-                <div className="login-error" style={{ textAlign: "left", marginBottom: 8 }}>{t("nara.error.nothing_to_import")}</div>
+                <div className="login-error" style={{ textAlign: "left", marginBottom: 8 }}>{t("import.error.nothing_to_import")}</div>
               )}
-              <Summary data={preview} includeDuplicates={includeDuplicates} />
+              <Summary data={preview} includeDuplicates={includeDuplicates} sleepNote={src.sleepNote} />
             </div>
           )}
         </div>
@@ -239,7 +273,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
         {duplicates > 0 && (
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "var(--text-muted)" }}>
             <input type="checkbox" checked={includeDuplicates} onChange={(e) => setIncludeChoice(e.target.checked)} style={{ marginTop: 3 }} />
-            <span>{t("nara.importDuplicates", { count: duplicates })}</span>
+            <span>{t("import.importDuplicates", { count: duplicates })}</span>
           </label>
         )}
 
@@ -269,7 +303,7 @@ export default function NaraImport({ unitSystem, onUnitsChange, onDone, onBack, 
         )}
 
         {!nothingToImport && (
-          <button type="submit" className="login-button" style={{ background: ACCENT_BUTTON }} disabled={!preview || checking || importing || importable === 0}>
+          <button type="submit" className="login-button" style={{ background: src.button }} disabled={!preview || checking || importing || importable === 0}>
             {importing ? t("onboarding.importing") : t("onboarding.startImport")}
           </button>
         )}
@@ -311,7 +345,7 @@ function joinNames(names, locale) {
 // saved as notes or not imported, and rows imported with an assumption or
 // not read. includeDuplicates is the preview's duplicate-pumping choice; a
 // result says itself whether those sessions were imported.
-function Summary({ data, done, includeDuplicates }) {
+function Summary({ data, done, includeDuplicates, sleepNote = "nara.sleepClassified" }) {
   const { t, locale } = useI18n();
   const counts = STAT_LABELS.filter(([k]) => data.stats?.[k] > 0);
   const skipped = Object.entries(data.skipped || {});
@@ -320,8 +354,8 @@ function Summary({ data, done, includeDuplicates }) {
   const list = (entries) => entries.map(([type, n]) => `${type} (${n})`).join(", ");
   const dup = data.duplicate_pumping;
   const dupKey = done
-    ? (dup?.included ? "nara.duplicatePumpingImported" : "nara.duplicatePumpingSkipped")
-    : (includeDuplicates ? "nara.duplicatePumpingWillImport" : "nara.duplicatePumpingWillSkip");
+    ? (dup?.included ? "import.duplicatePumpingImported" : "import.duplicatePumpingSkipped")
+    : (includeDuplicates ? "import.duplicatePumpingWillImport" : "import.duplicatePumpingWillSkip");
   return (
     <div style={{ marginBottom: 16 }}>
       {counts.length > 0 && (
@@ -335,18 +369,19 @@ function Summary({ data, done, includeDuplicates }) {
         </div>
       )}
       <div style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 8 }}>
-        {counts.length > 0 && u.volume && <p style={{ margin: 0 }}>{t("nara.unitsUsed", u)}</p>}
-        {data.stats?.sleep > 0 && <p style={{ margin: 0 }}>{t("nara.sleepClassified")}</p>}
+        {counts.length > 0 && u.volume && <p style={{ margin: 0 }}>{t("import.unitsUsed", u)}</p>}
+        {data.stats?.sleep > 0 && <p style={{ margin: 0 }}>{t(sleepNote)}</p>}
+        {data.date_order_assumed && counts.length > 0 && <p style={{ margin: 0 }}>{t("nighp.dateOrderAssumed")}</p>}
         {data.solid_feeds > 0 && <p style={{ margin: 0 }}>{t("nara.solidsParentFed")}</p>}
-        {asNotes.length > 0 && <p style={{ margin: 0 }}>{t("nara.asNotes")} {list(asNotes)}</p>}
+        {asNotes.length > 0 && <p style={{ margin: 0 }}>{t("import.asNotes")} {list(asNotes)}</p>}
         {dup?.count > 0 && (
           <p style={{ margin: 0 }}>
             {t(dupKey, { count: dup.count, children: joinNames(dup.children || [], locale) })}
           </p>
         )}
-        {skipped.length > 0 && <p style={{ margin: 0 }}>{t("nara.skipped")} {list(skipped)}</p>}
-        <Issues title={t("nara.warnings", { count: data.warning_count })} items={data.warnings} total={data.warning_count} />
-        <Issues title={t("nara.rejected", { count: data.rejected_count })} items={data.rejected} total={data.rejected_count} />
+        {skipped.length > 0 && <p style={{ margin: 0 }}>{t("import.skipped")} {list(skipped)}</p>}
+        <Issues title={t("import.warnings", { count: data.warning_count })} items={data.warnings} total={data.warning_count} />
+        <Issues title={t("import.rejected", { count: data.rejected_count })} items={data.rejected} total={data.rejected_count} />
       </div>
     </div>
   );
@@ -358,7 +393,7 @@ function Issues({ title, items, total }) {
   const list = items || [];
   const more = total - list.length;
   const reason = (it) => {
-    const key = `nara.reason.${it.code}`;
+    const key = `import.reason.${it.code}`;
     const text = t(key, { detail: it.detail || "", value: it.value || "" });
     return text !== key ? text : it.reason;
   };
@@ -367,9 +402,9 @@ function Issues({ title, items, total }) {
       <summary style={{ cursor: "pointer" }}>{title}</summary>
       <ul style={{ margin: "8px 0 0", paddingLeft: 18, maxHeight: 180, overflowY: "auto" }}>
         {list.map((it, i) => (
-          <li key={`${it.line}-${i}`}>{t("nara.issue", { line: it.line, type: it.type, reason: reason(it) })}</li>
+          <li key={`${it.line}-${i}`}>{t("import.issue", { line: it.line, type: it.type, reason: reason(it) })}</li>
         ))}
-        {more > 0 && <li>{t(more === 1 ? "nara.more_one" : "nara.more_other", { count: more })}</li>}
+        {more > 0 && <li>{t(more === 1 ? "import.more_one" : "import.more_other", { count: more })}</li>}
       </ul>
     </details>
   );

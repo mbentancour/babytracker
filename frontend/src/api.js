@@ -299,9 +299,10 @@ function qs(params) {
   return s ? `?${s}` : "";
 }
 
-function naraForm(file, { firstName, lastName, birthDate, sex, unitSystem, includeDuplicates } = {}) {
+function importForm(file, { firstName, lastName, birthDate, sex, unitSystem, includeDuplicates } = {}) {
   const formData = new FormData();
-  formData.append("file", file);
+  // One file for Nara; a Nighp Baby Tracker export can be several CSVs.
+  for (const f of [].concat(file)) formData.append("file", f);
   if (firstName !== undefined) formData.append("first_name", firstName);
   if (lastName !== undefined) formData.append("last_name", lastName);
   if (birthDate !== undefined) formData.append("birth_date", birthDate);
@@ -566,8 +567,13 @@ export const api = {
 
   // Nara Baby CSV import (admin). preview parses the export without saving
   // anything; import creates the child and imports into it.
-  previewNaraImport: (file, unitSystem) => uploadRequest(`${API_BASE}/import/nara/preview`, naraForm(file, { unitSystem })),
-  importFromNara: (file, fields) => uploadRequest(`${API_BASE}/import/nara`, naraForm(file, fields)),
+  previewNaraImport: (file, unitSystem) => uploadRequest(`${API_BASE}/import/nara/preview`, importForm(file, { unitSystem })),
+  importFromNara: (file, fields) => uploadRequest(`${API_BASE}/import/nara`, importForm(file, fields)),
+
+  // Baby Tracker (Nighp Software) import (admin): the export's zip, or the
+  // CSV files inside it. Same two steps and the same summary as Nara.
+  previewNighpImport: (files, unitSystem) => uploadRequest(`${API_BASE}/import/nighp-babytracker/preview`, importForm(files, { unitSystem })),
+  importFromNighp: (files, fields) => uploadRequest(`${API_BASE}/import/nighp-babytracker`, importForm(files, fields)),
 
   // Backups (admin)
   getBackups: () => request("backups/"),

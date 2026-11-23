@@ -340,4 +340,23 @@ describe("Nara import uploads", () => {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
   });
+
+  // A Nighp Baby Tracker export is a zip or several CSVs: every file goes
+  // under the same field, which the server reads as a list.
+  it("sends every file of a Nighp Baby Tracker export", async () => {
+    const fetchMock = jsonFetch({ stats: {} });
+    vi.stubGlobal("fetch", fetchMock);
+    const files = [new File(["x"], "Rosa_sleep.csv"), new File(["y"], "pump.csv")];
+
+    await api.previewNighpImport(files, "metric");
+    await api.importFromNighp(files, { firstName: "Rosa", birthDate: "2026-08-09", unitSystem: "metric" });
+
+    const [previewUrl, preview] = fetchMock.mock.calls[0];
+    expect(String(previewUrl)).toMatch(/\/import\/nighp-babytracker\/preview$/);
+    expect(preview.body.getAll("file")).toEqual(files);
+    const [importUrl, run] = fetchMock.mock.calls[1];
+    expect(String(importUrl)).toMatch(/\/import\/nighp-babytracker$/);
+    expect(run.body.getAll("file")).toEqual(files);
+    expect(fields(run.body)).toMatchObject({ first_name: "Rosa", birth_date: "2026-08-09", unit_system: "metric" });
+  });
 });

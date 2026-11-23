@@ -8,7 +8,7 @@ vi.mock("../api", () => ({
   api: new Proxy({}, { get: (_, name) => (name === "then" ? undefined : () => Promise.resolve({})) }),
 }));
 
-const { default: SettingsModal, NaraImportDialog } = await import("./SettingsModal");
+const { default: SettingsModal, DataImportDialog } = await import("./SettingsModal");
 
 // jsdom has no layout, so offsetParent is always null, and the Tab trap
 // (which skips controls that aren't rendered by that) would see none.
@@ -24,7 +24,7 @@ afterEach(cleanup);
 
 const tab = (shiftKey = false) => fireEvent.keyDown(document, { key: "Tab", shiftKey });
 
-describe("NaraImportDialog", () => {
+describe("DataImportDialog", () => {
   it("takes focus, keeps Tab inside, and gives focus back to the opener", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
@@ -32,11 +32,11 @@ describe("NaraImportDialog", () => {
     const { unmount } = render(
       <>
         <button>Behind</button>
-        <NaraImportDialog label="Import from Nara Baby" opener={{ current: opener }}>
+        <DataImportDialog label="Import from Nara Baby" opener={{ current: opener }}>
           <h1 tabIndex={-1}>Import Complete!</h1>
           <input type="file" aria-label="File" />
           <button>Back</button>
-        </NaraImportDialog>
+        </DataImportDialog>
       </>,
     );
     const file = screen.getByLabelText("File");
@@ -98,9 +98,9 @@ describe("NaraImportDialog", () => {
 
   it("holds focus itself while every control is disabled", () => {
     render(
-      <NaraImportDialog label="Import from Nara Baby" opener={{ current: null }}>
+      <DataImportDialog label="Import from Nara Baby" opener={{ current: null }}>
         <button disabled>Importing...</button>
-      </NaraImportDialog>,
+      </DataImportDialog>,
     );
     tab();
     expect(document.activeElement).toBe(screen.getByRole("dialog"));
