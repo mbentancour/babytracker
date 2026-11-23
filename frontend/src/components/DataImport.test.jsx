@@ -178,7 +178,8 @@ describe("DataImport", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Start Import" }));
     const heading = await screen.findByRole("heading", { name: "Import Complete!" });
     // The form is gone, so focus moves to the result (which also announces it).
-    expect(document.activeElement).toBe(heading);
+    // Focus is set in an effect, which can run just after the heading appears.
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(onBusy.mock.calls).toEqual([[true]]);
 
     fireEvent.click(screen.getByRole("button", { name: "Done" }));

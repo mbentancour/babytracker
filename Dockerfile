@@ -25,7 +25,7 @@ RUN ARCH=$(uname -m) && \
       i686|i386) GOARCH=386 ;; \
       *) GOARCH=amd64 ;; \
     esac && \
-    wget -q "https://go.dev/dl/go1.26.2.linux-${GOARCH}.tar.gz" -O /tmp/go.tar.gz && \
+    wget -q "https://go.dev/dl/go1.27.4.linux-${GOARCH}.tar.gz" -O /tmp/go.tar.gz && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
