@@ -616,10 +616,7 @@ func (m *Manager) loadOrCreateAccount(cfg Config) (*legoUser, error) {
 	// Try loading registration
 	regData, err := os.ReadFile(m.accountDataPath())
 	if err == nil {
-		var reg acme.ExtendedAccount
-		if json.Unmarshal(regData, &reg) == nil {
-			user.reg = &reg
-		}
+		user.reg = parseAccount(regData)
 	}
 
 	return user, nil

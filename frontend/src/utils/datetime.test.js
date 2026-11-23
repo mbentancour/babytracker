@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { toLocalDatetime, localInputToUTC, isNapTime } from "./datetime";
+import { toLocalDatetime, localInputToUTC, isNapTime, timerEndToUTC } from "./datetime";
 
 function localTime(hour, minute) {
   const date = new Date();
@@ -54,5 +54,18 @@ describe("isNapTime", () => {
     expect(isNapTime(localTime(18, 0))).toBe(false);
     expect(isNapTime(localTime(23, 30))).toBe(false);
     expect(isNapTime(localTime(8, 59))).toBe(false);
+  });
+});
+
+describe("timerEndToUTC", () => {
+  const stoppedAt = new Date("2026-03-04T10:00:50Z");
+
+  it("sends the exact stop time while the end field is untouched", () => {
+    expect(timerEndToUTC(toLocalDatetime(stoppedAt), stoppedAt)).toBe("2026-03-04T10:00:50");
+  });
+
+  it("sends the edited end time once the user changes it", () => {
+    const earlier = toLocalDatetime(new Date("2026-03-04T09:45:00Z"));
+    expect(timerEndToUTC(earlier, stoppedAt)).toBe("2026-03-04T09:45:00");
   });
 });

@@ -195,7 +195,7 @@ describe("RoutineTab", () => {
     expect(JSON.parse(localStorage.getItem("babytracker_preferences")).routineHidden).toEqual(["pumping"]);
   });
 
-  it("shows an activity even when its feature is switched off in settings", async () => {
+  it("hides an activity whose feature is switched off in settings", async () => {
     const at = new Date();
     at.setHours(9, 0, 0, 0);
     apiMock.getChanges.mockResolvedValue({
@@ -203,8 +203,9 @@ describe("RoutineTab", () => {
     });
 
     const { container } = renderRoutineTab({}, { features: { diaper: false } });
-    await waitFor(() => expect(marks(container).length).toBe(1));
-    expect(screen.getByRole("button", { name: /diaper|windel/i })).toBeTruthy();
+    await waitFor(() => expect(apiMock.getChanges).toHaveBeenCalled());
+    expect(marks(container).length).toBe(0);
+    expect(screen.queryByRole("button", { name: /diaper|windel/i })).toBeNull();
   });
 
   it("skips endpoints the user can't read", async () => {

@@ -5,10 +5,10 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
-import { methodsForType } from "../../utils/preferences";
+import { methodsForType, FEEDING_METHODS } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, timerEndToUTC } from "../../utils/datetime";
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -22,16 +22,24 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
     { value: "solid food", label: t("feeding.solidFood") },
   ];
 
-  const now = new Date();
+  // Fixed at first render: when a timer was just stopped, this is the stop time.
+  const [now] = useState(() => new Date());
   const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
   const initialType = entry?.type || defaultType || "breast milk";
   const initialMethod = entry?.method || defaultMethod || "bottle";
   const initialMethods = methodsForType(initialType);
   const [type, setType] = useState(initialType);
+  // A saved entry keeps its method even when the combination is no longer
+  // offered (older or imported entries), so opening and saving it changes
+  // nothing. Only defaults for a new entry are coerced to fit the type.
   const [method, setMethod] = useState(
-    initialMethods.some((m) => m.value === initialMethod) ? initialMethod : initialMethods[0].value
+    entry?.method || (initialMethods.some((m) => m.value === initialMethod) ? initialMethod : initialMethods[0].value)
   );
-  const METHODS = methodsForType(type).map((m) => ({ value: m.value, label: t(m.labelKey) }));
+  const typeMethods = methodsForType(type);
+  const offeredMethods = typeMethods.some((m) => m.value === method)
+    ? typeMethods
+    : [...typeMethods, ...FEEDING_METHODS.filter((m) => m.value === method)];
+  const METHODS = offeredMethods.map((m) => ({ value: m.value, label: t(m.labelKey) }));
   const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount) : "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
@@ -66,7 +74,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
         data.child = childId;
         if (timerId) {
           data.timer = timerId;
-          data.end = localInputToUTC(end);
+          data.end = timerEndToUTC(end, now);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);

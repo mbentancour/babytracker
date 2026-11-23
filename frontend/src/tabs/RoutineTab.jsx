@@ -50,14 +50,14 @@ function recordedEnd(entry, startMs) {
 
 export default function RoutineTab({ childId, canRead = () => true }) {
   const { t } = useI18n();
-  const { prefs, setPref } = usePreferences();
+  const { prefs, setPref, isFeatureEnabled } = usePreferences();
   const days = prefs.routineDays || 14;
   const { entries, loading, error } = useRoutineData(childId, canRead, days);
 
   // Empty means "show everything" — the chips narrow the view rather than
   // building it up, so the plot is useful before you touch anything.
   const hidden = prefs.routineHidden || [];
-  const available = ACTIVITIES.filter((a) => canRead(a.id));
+  const available = ACTIVITIES.filter((a) => isFeatureEnabled(a.id) && canRead(a.id));
   const toggle = (id) =>
     setPref("routineHidden", hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id]);
 

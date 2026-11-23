@@ -28,3 +28,13 @@ export function localInputToUTC(localStr) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
+
+// timerEndToUTC picks the end time to send when saving a stopped timer. The
+// end field only has minute precision, so sending it untouched would round the
+// stop time down — up to a minute lost, and a timer shorter than that could end
+// before it started. While the field still shows the minute the form opened
+// in, send the exact stop time instead.
+export function timerEndToUTC(localEnd, stoppedAt) {
+  if (localEnd !== toLocalDatetime(stoppedAt)) return localInputToUTC(localEnd);
+  return stoppedAt.toISOString().slice(0, 19);
+}
