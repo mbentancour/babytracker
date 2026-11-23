@@ -190,6 +190,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalFeeding > 0 ? `${Math.round(totalFeeding)} ${units.volume}` : `${feedings.length}`}
               sub={t(feedings.length === 1 ? "overview.feedingsToday_one" : "overview.feedingsToday_other", { count: feedings.length })}
               foot={lastFeeding}
+              keepFoot
               color={colors.feeding}
               onAdd={canWrite("feeding") ? () => onEditEntry?.("feeding") : undefined}
               addLabel={t("action.feeding")}
@@ -204,6 +205,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${formatNumber(totalSleep)}h`}
               sub={<SleepPeriodToggle value={sleepPeriod} onChange={setSleepPeriod} />}
               foot={lastSleep}
+              keepFoot
               color={colors.sleep}
               onAdd={canWrite("sleep") ? () => onEditEntry?.("sleep") : undefined}
               addLabel={t("action.sleep")}
@@ -218,6 +220,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalDiapers}
               sub={t("overview.diaperBreakdown", { wet: wetCount, solid: solidCount, both: bothCount })}
               foot={lastDiaper}
+              keepFoot
               color={colors.diaper}
               onAdd={canWrite("diaper") ? () => onEditEntry?.("diaper") : undefined}
               addLabel={t("action.diaper")}
@@ -232,6 +235,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={`${Math.round(avgTummy)}m`}
               sub={t(tummyTimes.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: tummyTimes.length })}
               foot={lastTummy}
+              keepFoot
               color={colors.tummy}
               onAdd={canWrite("tummy") ? () => onEditEntry?.("tummy") : undefined}
               addLabel={t("action.tummy")}
@@ -246,6 +250,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
               value={totalPumping > 0 ? `${Math.round(totalPumping)} ${units.volume}` : `${pumpingSessions.length}`}
               sub={t(pumpingSessions.length === 1 ? "overview.sessionsToday_one" : "overview.sessionsToday_other", { count: pumpingSessions.length })}
               foot={lastPumping}
+              keepFoot
               color={colors.pumping}
               onAdd={canWrite("pumping") ? () => onEditEntry?.("pumping") : undefined}
               addLabel={t("action.pumping")}
@@ -732,7 +737,7 @@ function SleepPeriodToggle({ value, onChange }) {
     <div
       role="group"
       aria-label={t("overview.sleepPeriodLabel")}
-      style={{ display: "flex", gap: 6, marginTop: -2 }}
+      style={{ display: "flex", gap: 6 }}
     >
       {options.map(([key, label]) => (
         <button
