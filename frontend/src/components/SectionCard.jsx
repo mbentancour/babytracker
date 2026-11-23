@@ -1,4 +1,7 @@
-export default function SectionCard({ title, icon, children, color, action }) {
+// The card fills its grid cell, so cards sharing a row end level. With `fill`
+// the body is a column too, which lets a child push itself to the bottom of
+// the card with `marginTop: "auto"` (the Overview pins its weekly charts so).
+export default function SectionCard({ title, icon, children, color, action, fill }) {
   return (
     <div
       style={{
@@ -6,6 +9,10 @@ export default function SectionCard({ title, icon, children, color, action }) {
         borderRadius: 16,
         border: "1px solid var(--border)",
         overflow: "hidden",
+        height: "100%",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
@@ -45,7 +52,7 @@ export default function SectionCard({ title, icon, children, color, action }) {
         </span>
         {action && <div>{action}</div>}
       </div>
-      <div style={{ padding: "16px 20px" }}>{children}</div>
+      <div style={{ padding: "16px 20px", flex: 1, ...(fill ? { display: "flex", flexDirection: "column" } : null) }}>{children}</div>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import AddButton from "./AddButton";
 
-export default function StatCard({ icon, label, value, sub, foot, color, accent, onAdd, addLabel }) {
+// keepFoot holds the space for the `foot` line even when there is nothing to
+// put in it, so a card with no entries yet is as tall as its neighbours.
+export default function StatCard({ icon, label, value, sub, foot, keepFoot, color, accent, onAdd, addLabel }) {
   return (
     <div
       style={{
@@ -14,6 +16,9 @@ export default function StatCard({ icon, label, value, sub, foot, color, accent,
         position: "relative",
         overflow: "hidden",
         minWidth: 0,
+        // Fill the grid cell, so cards sharing a row end level.
+        height: "100%",
+        boxSizing: "border-box",
       }}
     >
       <div
@@ -72,15 +77,17 @@ export default function StatCard({ icon, label, value, sub, foot, color, accent,
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -2 }}>
+        // A fixed-height row: `sub` is a line of text on most cards but a pair
+        // of buttons on the sleep card, and the two would otherwise differ.
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -2, minHeight: 26, display: "flex", alignItems: "center" }}>
           {sub}
         </div>
       )}
       {/* How long ago this last happened. In the card's own colour rather than
           the muted grey of `sub`, because at 3am it's the line you're actually
           looking for. */}
-      {foot && (
-        <div style={{ fontSize: 12, fontWeight: 600, color, marginTop: -2 }}>
+      {(foot || keepFoot) && (
+        <div style={{ fontSize: 12, fontWeight: 600, color, marginTop: -2, minHeight: 16 }}>
           {foot}
         </div>
       )}
