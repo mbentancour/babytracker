@@ -33,6 +33,11 @@ export function setDisplayLocale(locale) {
   displayLocale = locale || undefined;
 }
 
+// Display-only numbers; keep API values and numeric inputs unformatted.
+export function formatNumber(value, digits = 1) {
+  return Number(value).toLocaleString(displayLocale, { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
+}
+
 // For the handful of components that call toLocale*String directly.
 export function getDisplayLocale() {
   return displayLocale;
@@ -170,7 +175,7 @@ export function formatDuration(durationStr) {
   if (!durationStr) return "—";
   const hours = parseDuration(durationStr);
   if (hours < 1) return `${Math.round(hours * 60)}m`;
-  return `${hours.toFixed(1)}h`;
+  return `${formatNumber(hours)}h`;
 }
 
 // Sleep timeline labels use minutes for short sessions and decimal hours for
@@ -178,7 +183,7 @@ export function formatDuration(durationStr) {
 export function formatSleepDuration(hours) {
   if (!Number.isFinite(hours) || hours < 0) return "—";
   if (hours < 1) return `${Math.round(hours * 60)}m`;
-  return `${hours.toFixed(1)}h`;
+  return `${formatNumber(hours)}h`;
 }
 
 // Renders a duration given in hours as "4h 39m" / "39m" / "2h". Distinct from

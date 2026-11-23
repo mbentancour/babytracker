@@ -1,3 +1,4 @@
+import { formatNumber } from "../utils/formatters";
 import Modal from "./Modal";
 import TimelineItem from "./TimelineItem";
 import DiaperBadge from "./DiaperBadge";
@@ -98,7 +99,7 @@ export default function DayActivitiesModal({ day, type, data, onEditEntry, onClo
             >
               <TimelineItem
                 time={`${s.start}–${s.end}`}
-                label={`${s.duration.toFixed(1)}h${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
+                label={`${formatNumber(s.duration)}h${s.nap ? ` · ${t("sleep.nap")}` : ""}`}
                 detail={t("general.timeRange", { from: s.start, to: s.end })}
                 color={colors.sleep}
                 isLast={i === arr.length - 1}

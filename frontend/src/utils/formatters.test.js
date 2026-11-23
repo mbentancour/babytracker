@@ -543,3 +543,21 @@ describe("lastSeenLabel", () => {
     expect(lastSeenLabel(new Date(), spanish)).toBe("ahora mismo");
   });
 });
+
+
+describe("Portuguese display formatting", () => {
+  it("uses Portuguese dates, 24-hour times and decimal commas", async () => {
+    const { setDisplayLocale, formatTime, formatGrowthTick, formatNumber } = await import("./formatters");
+    try {
+      setDisplayLocale("pt-PT");
+      expect(formatNumber(1.5)).toBe("1,5");
+      expect(formatDuration("01:30:00")).toBe("1,5h");
+      expect(formatSleepDuration(1.5)).toBe("1,5h");
+      const date = new Date(2026, 10, 11, 14, 30);
+      expect(formatTime(date)).toBe("14:30");
+      expect(formatGrowthTick(date)).toBe(date.toLocaleDateString("pt-PT", { month: "short", day: "numeric" }));
+    } finally {
+      setDisplayLocale(undefined);
+    }
+  });
+});
