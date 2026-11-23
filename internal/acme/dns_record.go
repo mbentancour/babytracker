@@ -337,32 +337,38 @@ func namecheapEnsureA(domain, ip string, creds map[string]string) error {
 
 // --- Simply.com ---
 
-func simplyEnsureA(domain, ip string, creds map[string]string) error {
-	account := credOrEnv(creds, "SIMPLY_ACCOUNT_NAME")
-	apiKey := credOrEnv(creds, "SIMPLY_API_KEY")
-	if account == "" || apiKey == "" {
-		return fmt.Errorf("SIMPLY_ACCOUNT_NAME and SIMPLY_API_KEY required")
-	}
+var simplyBaseURL = "https://api.simply.com/2"
 
-	// Extract zone and hostname
-	parts := strings.Split(domain, ".")
-	if len(parts) < 3 {
-		return fmt.Errorf("domain must have a subdomain (e.g. baby.example.com)")
+func simplyEnsureA(domain, ip string, creds map[string]string) error {
+	apiKey := credOrEnv(creds, "SIMPLY_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("SIMPLY_API_KEY required")
 	}
-	zoneName := parts[len(parts)-2] + "." + parts[len(parts)-1]
-	hostname := strings.Join(parts[:len(parts)-2], ".")
 
 	client := &http.Client{Timeout: 30 * time.Second}
-	baseURL := "https://api.simply.com/2"
+
+	// Find the product holding the domain and the hostname relative to it
+	object, hostname, err := simplyResolveProduct(client, apiKey, domain)
+	if err != nil {
+		return err
+	}
+	if hostname == "" {
+		return fmt.Errorf("domain must have a subdomain (e.g. baby.example.com), %s is a Simply.com product itself", domain)
+	}
+	recordsURL := fmt.Sprintf("%s/my/products/%s/dns/records/", simplyBaseURL, urlpkg.PathEscape(object))
 
 	// List existing records to find if A record exists
-	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/my/products/%s/dns/records", baseURL, zoneName), nil)
-	req.SetBasicAuth(account, apiKey)
+	req, _ := http.NewRequest("GET", recordsURL, nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("simply API error %d: %s", resp.StatusCode, b)
+	}
 
 	var listResp struct {
 		Records []struct {
@@ -397,12 +403,12 @@ func simplyEnsureA(domain, ip string, creds map[string]string) error {
 
 	if existingID > 0 {
 		// Update
-		req, _ = http.NewRequest("PUT", fmt.Sprintf("%s/my/products/%s/dns/records/%d", baseURL, zoneName, existingID), bytes.NewReader(body))
+		req, _ = http.NewRequest("PUT", fmt.Sprintf("%s%d/", recordsURL, existingID), bytes.NewReader(body))
 	} else {
 		// Create
-		req, _ = http.NewRequest("POST", fmt.Sprintf("%s/my/products/%s/dns/records", baseURL, zoneName), bytes.NewReader(body))
+		req, _ = http.NewRequest("POST", recordsURL, bytes.NewReader(body))
 	}
-	req.SetBasicAuth(account, apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = client.Do(req)
 	if err != nil {
@@ -416,4 +422,61 @@ func simplyEnsureA(domain, ip string, creds map[string]string) error {
 
 	slog.Info("acme: A record set via Simply.com", "domain", domain, "ip", ip)
 	return nil
+}
+
+// simplyResolveProduct returns the object (handle) of the Simply.com product
+// holding domain and the hostname relative to it. The longest matching product
+// wins, so a subdomain product such as www.example.com is preferred over
+// example.com, and punycode names map to the Unicode object of IDN domains.
+func simplyResolveProduct(client *http.Client, apiKey, domain string) (string, string, error) {
+	req, _ := http.NewRequest("GET", simplyBaseURL+"/my/products/", nil)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("simply API error %d: %s", resp.StatusCode, b)
+	}
+
+	var productsResp struct {
+		Products []struct {
+			Object string `json:"object"`
+			Domain struct {
+				Name    string `json:"name"`
+				NameIDN string `json:"name_idn"`
+			} `json:"domain"`
+		} `json:"products"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&productsResp); err != nil {
+		return "", "", fmt.Errorf("decode simply products: %w", err)
+	}
+
+	objects := make(map[string]string, len(productsResp.Products)*3)
+	for _, p := range productsResp.Products {
+		objects[strings.ToLower(p.Object)] = p.Object
+	}
+	for _, p := range productsResp.Products {
+		for _, name := range []string{p.Domain.Name, p.Domain.NameIDN} {
+			key := strings.ToLower(name)
+			if _, exists := objects[key]; name != "" && !exists {
+				objects[key] = p.Object
+			}
+		}
+	}
+
+	name := strings.ToLower(strings.TrimSuffix(domain, "."))
+	for candidate := name; candidate != ""; {
+		if object, ok := objects[candidate]; ok {
+			return object, strings.TrimSuffix(strings.TrimSuffix(name, candidate), "."), nil
+		}
+		dot := strings.IndexByte(candidate, '.')
+		if dot < 0 {
+			break
+		}
+		candidate = candidate[dot+1:]
+	}
+	return "", "", fmt.Errorf("no Simply.com product found for %s", domain)
 }
