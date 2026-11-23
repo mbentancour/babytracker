@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "../utils/i18n";
 import { PreferencesProvider } from "../utils/preferences";
 import { localInputToUTC } from "../utils/datetime";
@@ -122,9 +122,31 @@ describe("DayTab", () => {
 
     renderDayTab();
 
-    await waitFor(() => expect(screen.getByText("Diaper")).toBeTruthy());
-    const labels = screen.getAllByText(/^(Feeding|Diaper)$/).map((el) => el.textContent);
+    // The filter chips reuse the same labels, so timeline queries skip anything
+    // inside the chip group.
+    const timelineLabels = (re) =>
+      screen.queryAllByText(re).filter((el) => !el.closest('[role="group"]'));
+
+    await waitFor(() => expect(timelineLabels(/^Diaper$/)).toHaveLength(1));
+    const labels = timelineLabels(/^(Feeding|Diaper)$/).map((el) => el.textContent);
     expect(labels).toEqual(["Diaper", "Feeding"]);
+  });
+
+  it("hides a type when its filter chip is switched off, and remembers it", async () => {
+    apiMock.getFeedings.mockResolvedValueOnce({
+      results: [{ id: 1, start: new Date().toISOString(), end: null, type: "breast milk", method: "bottle", amount: 90 }],
+    });
+
+    renderDayTab();
+
+    const feedingLabel = () =>
+      screen.queryAllByText(/^Feeding$/).filter((el) => !el.closest('[role="group"]'));
+    await waitFor(() => expect(feedingLabel()).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: /feeding/i }));
+
+    expect(feedingLabel()).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem("babytracker_preferences")).dayHidden).toEqual(["feeding"]);
   });
 
   it("shows an empty state when nothing was logged", async () => {

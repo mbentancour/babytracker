@@ -137,14 +137,31 @@ func validPausedSeconds(body map[string]any) bool {
 	return ok && seconds >= 0 && seconds == math.Trunc(seconds)
 }
 
+// pausedUntil sums the pause time that falls before end. An open pause runs
+// until end; pauses starting after end are ignored.
+func pausedUntil(pauses []models.TimerPause, end time.Time) time.Duration {
+	var paused time.Duration
+	for _, pause := range pauses {
+		if pause.Start == nil || pause.Start.After(end) {
+			continue
+		}
+		pauseEnd := end
+		if pause.End != nil && pause.End.Before(end) {
+			pauseEnd = *pause.End
+		}
+		paused += pauseEnd.Sub(*pause.Start)
+	}
+	return paused
+}
+
 // resolveEntryTimes derives start/end for a duration-style entry (feeding,
 // sleep, tummy time). When timerID is set the timer's start anchors the
-// entry, "now" closes it, the time the timer spent paused is returned as
-// pausedSeconds (the entry stores it so the generated duration excludes it
-// while end_time stays the real end), and the timer is consumed; otherwise
-// the caller's startStr/endStr are parsed as the API's tz-naive
-// "2006-01-02T15:04:05" UTC layout. On any error it writes the response
-// itself and returns ok=false; the caller should just `return`.
+// entry, endStr (or "now" when empty) closes it, the time the timer spent
+// paused before that end is returned as pausedSeconds (the entry stores it so
+// the generated duration excludes it while end_time stays the real end), and
+// the timer is consumed; otherwise the caller's startStr/endStr are parsed as
+// the API's tz-naive "2006-01-02T15:04:05" UTC layout. On any error it writes
+// the response itself and returns ok=false; the caller should just `return`.
 func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startStr, endStr string) (start, end time.Time, pausedSeconds int, resolvedTimer *int, ok bool) {
 	if timerID != nil {
 		timer, err := models.GetTimer(db, *timerID)
@@ -154,25 +171,25 @@ func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startSt
 		}
 
 		end = time.Now()
+		if endStr != "" {
+			end, err = time.Parse("2006-01-02T15:04:05", endStr)
+			if err != nil {
+				pagination.WriteError(w, http.StatusBadRequest, "invalid end time")
+				return
+			}
+			// Allow a minute of client clock skew before rejecting a future end.
+			if end.After(time.Now().Add(time.Minute)) {
+				pagination.WriteError(w, http.StatusBadRequest, "end time is in the future")
+				return
+			}
+		}
 		// The timer start is freely editable, so it can land in the future;
 		// refuse rather than persist an inverted row.
 		if end.Before(timer.Start) {
 			pagination.WriteError(w, http.StatusBadRequest, "timer start is later than its end")
 			return
 		}
-		// A pause that is still open (timer saved while paused) runs until now.
-		var paused time.Duration
-		for _, pause := range timer.Pauses {
-			if pause.Start == nil {
-				continue
-			}
-			pauseEnd := end
-			if pause.End != nil {
-				pauseEnd = *pause.End
-			}
-			paused += pauseEnd.Sub(*pause.Start)
-		}
-		pausedSeconds = int(paused / time.Second)
+		pausedSeconds = int(pausedUntil(timer.Pauses, end) / time.Second)
 
 		// Timer cleanup is best-effort — the entry has already been logically
 		// derived from the timer, so we don't roll back on a stale timer row.

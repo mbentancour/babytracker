@@ -105,12 +105,9 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
       const todayMin = localInputToUTC(`${todayStr}T00:00:00`);
       const todayMax = localInputToUTC(`${todayStr}T23:59:59`);
 
-      // Sleep entries can span the rolling 24h window boundary, and the API
-      // only filters by start_time. To make sure the OverviewTab "Last 24h"
-      // total — which clips each entry to the window — sees overnight sleeps
-      // that started *before* the window but ended inside it, we ask for a
-      // wider lookback (~36h). Anything fully outside the window contributes
-      // 0 hours after the clip, so the wider fetch is harmless to the stat.
+      // Sleep entries can span both midnight and the rolling 24h window, and
+      // the API only filters by start_time. Fetch a wider lookback (~36h) so
+      // the OverviewTab can clip overnight sessions to either selected period.
       const sleepFetchAgo = new Date(now.getTime() - 36 * 60 * 60 * 1000);
       const sleepMin = localInputToUTC(
         `${toLocalISODate(sleepFetchAgo)}T${String(sleepFetchAgo.getHours()).padStart(2, "0")}:${String(sleepFetchAgo.getMinutes()).padStart(2, "0")}:00`,

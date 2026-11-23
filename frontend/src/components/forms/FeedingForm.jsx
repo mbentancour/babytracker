@@ -5,9 +5,10 @@ import TagPicker from "../TagPicker";
 import PhotoPicker from "../PhotoPicker";
 import EntryTiming from "../EntryTiming";
 import { colors } from "../../utils/colors";
+import { methodsForType, FEEDING_METHODS } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
-import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { toLocalDatetime, localInputToUTC, timerEndToUTC } from "../../utils/datetime";
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -21,18 +22,24 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
     { value: "solid food", label: t("feeding.solidFood") },
   ];
 
-  const METHODS = [
-    { value: "bottle", label: t("feeding.bottle") },
-    { value: "left breast", label: t("feeding.leftBreast") },
-    { value: "right breast", label: t("feeding.rightBreast") },
-    { value: "both breasts", label: t("feeding.bothBreasts") },
-    { value: "parent fed", label: t("feeding.parentFed") },
-    { value: "self fed", label: t("feeding.selfFed") },
-  ];
-  const now = new Date();
+  // Fixed at first render: when a timer was just stopped, this is the stop time.
+  const [now] = useState(() => new Date());
   const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
-  const [type, setType] = useState(entry?.type || defaultType || "breast milk");
-  const [method, setMethod] = useState(entry?.method || defaultMethod || "bottle");
+  const initialType = entry?.type || defaultType || "breast milk";
+  const initialMethod = entry?.method || defaultMethod || "bottle";
+  const initialMethods = methodsForType(initialType);
+  const [type, setType] = useState(initialType);
+  // A saved entry keeps its method even when the combination is no longer
+  // offered (older or imported entries), so opening and saving it changes
+  // nothing. Only defaults for a new entry are coerced to fit the type.
+  const [method, setMethod] = useState(
+    entry?.method || (initialMethods.some((m) => m.value === initialMethod) ? initialMethod : initialMethods[0].value)
+  );
+  const typeMethods = methodsForType(type);
+  const offeredMethods = typeMethods.some((m) => m.value === method)
+    ? typeMethods
+    : [...typeMethods, ...FEEDING_METHODS.filter((m) => m.value === method)];
+  const METHODS = offeredMethods.map((m) => ({ value: m.value, label: t(m.labelKey) }));
   const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount) : "");
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
@@ -67,6 +74,7 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
         data.child = childId;
         if (timerId) {
           data.timer = timerId;
+          data.end = timerEndToUTC(end, now);
         } else {
           data.start = localInputToUTC(start);
           data.end = localInputToUTC(end);
@@ -94,7 +102,15 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
     <Modal title={isEdit ? t("feeding.edit") : t("feeding.log")} onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <FormField label={t("feeding.type")}>
-          <FormSelect options={TYPES} value={type} onChange={(e) => setType(e.target.value)} />
+          <FormSelect
+            options={TYPES}
+            value={type}
+            onChange={(e) => {
+              const nextType = e.target.value;
+              setType(nextType);
+              if (!methodsForType(nextType).some((m) => m.value === method)) setMethod(methodsForType(nextType)[0].value);
+            }}
+          />
         </FormField>
         <FormField label={t("feeding.method")}>
           <FormSelect options={METHODS} value={method} onChange={(e) => setMethod(e.target.value)} />
@@ -103,25 +119,24 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
           <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>
         {(isEdit || !timerId) && (
-          <>
-            <FormField label={t("general.start")}>
-              <FormInput
-                type="datetime-local"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-                required
-              />
-            </FormField>
-            <FormField label={t("general.end")}>
-              <FormInput
-                type="datetime-local"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-                required
-              />
-            </FormField>
-          </>
+          <FormField label={t("general.start")}>
+            <FormInput
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+            />
+          </FormField>
         )}
+        <FormField label={t("general.end")}>
+          <FormInput
+            type="datetime-local"
+            value={end}
+            max={!isEdit && timerId ? toLocalDatetime(now) : undefined}
+            onChange={(e) => setEnd(e.target.value)}
+            required
+          />
+        </FormField>
         <EntryTiming entry={entry} pausedMinutes={pausedMinutes} onPausedMinutesChange={isEdit ? setPausedMinutes : undefined} />
         <FormField label={t("general.notes")}>
           <FormInput

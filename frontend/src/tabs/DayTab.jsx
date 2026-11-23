@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import SectionCard from "../components/SectionCard";
 import TimelineItem from "../components/TimelineItem";
+import ActivityFilterChips from "../components/ActivityFilterChips";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
@@ -15,14 +16,15 @@ import { formatTime, formatDuration, parseDuration, formatHoursMinutes, feedingM
 // and nothing at all lets you look at a day that isn't today.
 
 // Each row's colour and label. `feature` is the RBAC/preference key that gates
-// the type; `milkWaste` borrows pumping's, as it does everywhere else.
+// the type; `milkWaste` borrows pumping's, as it does everywhere else. `filter`
+// is the chip group a type belongs to; milkWaste is hidden along with pumping.
 const ROW_TYPES = {
-  feeding: { color: colors.feeding, labelKey: "action.feeding", feature: "feeding" },
-  sleep: { color: colors.sleep, labelKey: "action.sleep", feature: "sleep" },
-  diaper: { color: colors.diaper, labelKey: "action.diaper", feature: "diaper" },
-  tummy: { color: colors.tummy, labelKey: "action.tummy", feature: "tummy" },
-  pumping: { color: colors.pumping, labelKey: "action.pumping", feature: "pumping" },
-  milkWaste: { color: colors.milkWaste, labelKey: "action.milkWaste", feature: "pumping" },
+  feeding: { color: colors.feeding, labelKey: "action.feeding", feature: "feeding", filter: "feeding" },
+  sleep: { color: colors.sleep, labelKey: "action.sleep", feature: "sleep", filter: "sleep" },
+  diaper: { color: colors.diaper, labelKey: "action.diaper", feature: "diaper", filter: "diaper" },
+  tummy: { color: colors.tummy, labelKey: "action.tummy", feature: "tummy", filter: "tummy" },
+  pumping: { color: colors.pumping, labelKey: "action.pumping", feature: "pumping", filter: "pumping" },
+  milkWaste: { color: colors.milkWaste, labelKey: "action.milkWaste", feature: "pumping", filter: "pumping" },
   temp: { color: colors.temp, labelKey: "action.temp", feature: "temp" },
   weight: { color: colors.growth, labelKey: "action.weight", feature: "weight" },
   height: { color: colors.height, labelKey: "action.height", feature: "height" },
@@ -32,6 +34,17 @@ const ROW_TYPES = {
   milestone: { color: "#00b894", labelKey: "action.milestone", feature: "milestone" },
   note: { color: colors.note, labelKey: "action.note", feature: "note" },
 };
+
+// Chip order and icons for the filter row, matching the Routine plot.
+const DAY_FILTERS = [
+  { id: "feeding", color: colors.feeding, labelKey: "action.feeding", icon: <Icons.Bottle /> },
+  { id: "sleep", color: colors.sleep, labelKey: "action.sleep", icon: <Icons.Moon /> },
+  { id: "diaper", color: colors.diaper, labelKey: "action.diaper", icon: <Icons.Droplet /> },
+  { id: "tummy", color: colors.tummy, labelKey: "action.tummy", icon: <Icons.Sun /> },
+  { id: "pumping", color: colors.pumping, labelKey: "action.pumping", icon: <Icons.Bottle /> },
+];
+
+const NO_HIDDEN = [];
 
 const dayBounds = (date) => {
   const start = new Date(date);
@@ -44,12 +57,18 @@ const dayBounds = (date) => {
 export default function DayTab({ childId, onEditEntry, canRead = () => true, canWrite = () => true }) {
   const units = useUnits();
   const { t } = useI18n();
-  const { isFeatureEnabled, isViewEnabled } = usePreferences();
+  const { isFeatureEnabled, isViewEnabled, prefs, setPref } = usePreferences();
   const [day, setDay] = useState(() => new Date());
 
   const { entries, loading, error } = useDayData(childId, day, canRead, {
     milkStockEnabled: isViewEnabled("milkStock"),
   });
+
+  // Same chip semantics as the Routine plot: empty means show everything.
+  const dayHidden = prefs.dayHidden || NO_HIDDEN;
+  const available = DAY_FILTERS.filter((a) => canRead(a.id));
+  const toggleFilter = (id) =>
+    setPref("dayHidden", dayHidden.includes(id) ? dayHidden.filter((x) => x !== id) : [...dayHidden, id]);
 
   const todayKey = toLocalDateKey(new Date());
   const dayKey = toLocalDateKey(day);
@@ -137,10 +156,11 @@ export default function DayTab({ childId, onEditEntry, canRead = () => true, can
         const meta = ROW_TYPES[row.type];
         if (!isFeatureEnabled(meta.feature)) return false;
         if (row.type === "milkWaste" && !isViewEnabled("milkStock")) return false;
+        if (dayHidden.includes(meta.filter)) return false;
         return true;
       })
       .sort((a, b) => a.at - b.at);
-  }, [entries, day, t, units, isFeatureEnabled, isViewEnabled]);
+  }, [entries, day, t, units, isFeatureEnabled, isViewEnabled, dayHidden]);
 
   return (
     <div className="fade-in">
@@ -171,6 +191,15 @@ export default function DayTab({ childId, onEditEntry, canRead = () => true, can
         <button className="day-nav-today" onClick={() => setDay(new Date())} disabled={isToday}>
           {t("day.today")}
         </button>
+      </div>
+
+      <div className="routine-controls">
+        <ActivityFilterChips
+          activities={available}
+          hidden={dayHidden}
+          onToggle={toggleFilter}
+          label={t("routine.filters")}
+        />
       </div>
 
       <SectionCard

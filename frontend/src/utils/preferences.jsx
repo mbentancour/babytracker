@@ -45,6 +45,9 @@ const DEFAULT_PREFERENCES = {
   // the chips narrow the view rather than building it up.
   routineHidden: [],
 
+  // Activity types hidden on the Day timeline. Same semantics as routineHidden.
+  dayHidden: [],
+
   // Auto-calculate BMI from weight/height when no manual entry exists for a date
   autoCalculateBMI: true,
 
@@ -110,6 +113,7 @@ function loadPreferences() {
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
         routineDays: parsed.routineDays ?? DEFAULT_PREFERENCES.routineDays,
         routineHidden: parsed.routineHidden ?? DEFAULT_PREFERENCES.routineHidden,
+        dayHidden: parsed.dayHidden ?? DEFAULT_PREFERENCES.dayHidden,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         photoQuality: parsed.photoQuality ?? DEFAULT_PREFERENCES.photoQuality,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,
@@ -269,6 +273,20 @@ export const FEEDING_METHODS = [
   { value: "parent fed", labelKey: "feeding.parentFed" },
   { value: "self fed", labelKey: "feeding.selfFed" },
 ];
+
+// Methods offered for each feeding type. The bottle option for breast milk is expressed milk, which the milk stock counts.
+export const FEEDING_TYPE_METHODS = {
+  "breast milk": ["left breast", "right breast", "both breasts", "bottle"],
+  "fortified breast milk": ["bottle", "parent fed"],
+  "formula": ["bottle", "parent fed", "self fed"],
+  "solid food": ["parent fed", "self fed"],
+};
+
+// Returns the FEEDING_METHODS entries that fit the given type.
+export function methodsForType(type) {
+  const allowed = FEEDING_TYPE_METHODS[type];
+  return allowed ? FEEDING_METHODS.filter((m) => allowed.includes(m.value)) : FEEDING_METHODS;
+}
 
 // The feeding types that come out of the expressed-milk stash. Fortified
 // breast milk counts because its base is thawed expressed milk; formula and
