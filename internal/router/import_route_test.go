@@ -69,9 +69,9 @@ func routerTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-// naraTestAdmin adds an admin to db and returns a router config and an access
+// importTestAdmin adds an admin to db and returns a router config and an access
 // token for them.
-func naraTestAdmin(t *testing.T, db *sqlx.DB) (*config.Config, string) {
+func importTestAdmin(t *testing.T, db *sqlx.DB) (*config.Config, string) {
 	t.Helper()
 	var adminID int
 	if err := db.Get(&adminID, `INSERT INTO users (username, password_hash, is_admin) VALUES ('admin', 'x', true) RETURNING id`); err != nil {
@@ -86,8 +86,8 @@ func naraTestAdmin(t *testing.T, db *sqlx.DB) (*config.Config, string) {
 	return cfg, token
 }
 
-// naraUpload renders a multipart body holding an export and form fields.
-func naraUpload(t *testing.T, csv string, fields map[string]string) (*bytes.Buffer, string) {
+// importUpload renders a multipart body holding an export and form fields.
+func importUpload(t *testing.T, csv string, fields map[string]string) (*bytes.Buffer, string) {
 	t.Helper()
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
@@ -108,7 +108,7 @@ func naraUpload(t *testing.T, csv string, fields map[string]string) (*bytes.Buff
 // through the real router so a route moved back into that group fails here.
 func TestNaraImportAcceptsUploadsOverOneMB(t *testing.T) {
 	db := routerTestDB(t)
-	cfg, token := naraTestAdmin(t, db)
+	cfg, token := importTestAdmin(t, db)
 	h := New(db, cfg)
 
 	// About 1.5 MB of diaper rows in Nara's quoted layout.
@@ -128,7 +128,45 @@ func TestNaraImportAcceptsUploadsOverOneMB(t *testing.T) {
 		{"/api/import/nara/preview", nil, `"status":"preview"`},
 		{"/api/import/nara", map[string]string{"first_name": "Rosa", "birth_date": "2026-01-01"}, `"status":"completed"`},
 	} {
-		body, contentType := naraUpload(t, csv.String(), c.fields)
+		body, contentType := importUpload(t, csv.String(), c.fields)
+		if body.Len() <= 1<<20 {
+			t.Fatalf("test body is only %d bytes", body.Len())
+		}
+		req := httptest.NewRequest(http.MethodPost, c.path, body)
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), c.want) {
+			t.Errorf("%s: status %d body %.300s", c.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// The Nighp Baby Tracker import shares that group; the same check, through
+// the real router and its admin re-check, for its two routes.
+func TestNighpImportAcceptsUploadsOverOneMB(t *testing.T) {
+	db := routerTestDB(t)
+	cfg, token := importTestAdmin(t, db)
+	h := New(db, cfg)
+
+	var csv strings.Builder
+	csv.WriteString("Baby,Time,Status,Note\n")
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	padding := strings.Repeat("n", 280)
+	for i := 0; csv.Len() < 3<<19; i++ {
+		fmt.Fprintf(&csv, "Rosa,%s,Wet,%s\n", start.Add(time.Duration(i)*time.Minute).Format("1/2/2006 15:04"), padding)
+	}
+
+	for _, c := range []struct {
+		path   string
+		fields map[string]string
+		want   string
+	}{
+		{"/api/import/nighp-babytracker/preview", nil, `"status":"preview"`},
+		{"/api/import/nighp-babytracker", map[string]string{"first_name": "Rosa", "birth_date": "2026-01-01"}, `"status":"completed"`},
+	} {
+		body, contentType := importUpload(t, csv.String(), c.fields)
 		if body.Len() <= 1<<20 {
 			t.Fatalf("test body is only %d bytes", body.Len())
 		}
@@ -150,7 +188,7 @@ func TestNaraImportAcceptsUploadsOverOneMB(t *testing.T) {
 // so this goes through the real router and server.
 func TestNaraImportOutlivesTheServersWriteTimeout(t *testing.T) {
 	db := routerTestDB(t)
-	cfg, token := naraTestAdmin(t, db)
+	cfg, token := importTestAdmin(t, db)
 	// Make the import outlast the server's timeouts below, which leave the
 	// middleware ample time to hand over before the handler extends them.
 	for _, q := range []string{
@@ -169,7 +207,7 @@ func TestNaraImportOutlivesTheServersWriteTimeout(t *testing.T) {
 	defer srv.Close()
 
 	epoch := time.Now().Add(-time.Hour).UnixMilli()
-	body, contentType := naraUpload(t, fmt.Sprintf("\"Type\",\"Start Date/time (Epoch)\",\"[Diaper] Type\"\n\"Diaper\",\"%d\",\"Wet\"\n", epoch),
+	body, contentType := importUpload(t, fmt.Sprintf("\"Type\",\"Start Date/time (Epoch)\",\"[Diaper] Type\"\n\"Diaper\",\"%d\",\"Wet\"\n", epoch),
 		map[string]string{"first_name": "Rosa", "birth_date": "2026-01-01"})
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/import/nara", body)
 	if err != nil {

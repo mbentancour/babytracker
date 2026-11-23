@@ -3,7 +3,7 @@ import { api } from "../api";
 import { Icons } from "./Icons";
 import { colors } from "../utils/colors";
 import { useI18n } from "../utils/i18n";
-import NaraImport from "./NaraImport";
+import DataImport from "./DataImport";
 
 // onBusy(true) tells the parent an import has created the child but its
 // summary is still on screen; the parent keeps rendering onboarding until
@@ -11,7 +11,7 @@ import NaraImport from "./NaraImport";
 export default function OnboardingScreen({ onChildAdded, initialMode, onInitialModeConsumed, unitSystem, onUnitSystemChange, onBusy }) {
   const { t } = useI18n();
   // Map setup-choice intents ("fresh"/"import"/"nara") to the internal mode names.
-  const seededMode = { fresh: "new", import: "import", nara: "nara" }[initialMode] || null;
+  const seededMode = { fresh: "new", import: "import", nara: "nara", nighp: "nighp" }[initialMode] || null;
   const [mode, setMode] = useState(seededMode); // null = choose, "new", "import", "nara"
 
   // Clear the parent's setupIntent once we've adopted it so back-navigation
@@ -54,6 +54,13 @@ export default function OnboardingScreen({ onChildAdded, initialMode, onInitialM
               color="#e17055"
               onClick={() => setMode("nara")}
             />
+            <OnboardingOption
+              icon={<Icons.Download />}
+              title={t("onboarding.importNighp")}
+              description={t("onboarding.importNighpDesc")}
+              color="#0984e3"
+              onClick={() => setMode("nighp")}
+            />
           </div>
         </div>
       </div>
@@ -62,9 +69,11 @@ export default function OnboardingScreen({ onChildAdded, initialMode, onInitialM
 
   if (mode === "new") return <NewBabyForm onDone={onChildAdded} onBack={() => setMode(null)} />;
   if (mode === "import") return <BabyBuddyImport onDone={onChildAdded} onBack={() => setMode(null)} onBusy={onBusy} />;
-  if (mode === "nara") {
+  if (mode === "nara" || mode === "nighp") {
     return (
-      <NaraImport
+      <DataImport
+        key={mode}
+        source={mode}
         unitSystem={unitSystem}
         onUnitsChange={onUnitSystemChange}
         onDone={onChildAdded}

@@ -156,7 +156,7 @@ export default function App() {
   // setupIntent carries the user's first-boot choice past the register step so
   // OnboardingScreen can skip its own "what next?" picker. null after login or
   // on a pre-existing install.
-  const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import" | "nara"
+  const [setupIntent, setSetupIntent] = useState(null); // null | "fresh" | "import" | "nara" | "nighp"
   const [demoMode, setDemoMode] = useState(false);
   const [applianceMode, setApplianceMode] = useState(false);
   const [oidc, setOidc] = useState({ enabled: false, providerName: "" });

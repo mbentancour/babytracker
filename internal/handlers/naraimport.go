@@ -15,12 +15,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	_ "time/tzdata" // per-row zones and browser zones must resolve on hosts without full tzdata
-	"unicode/utf8"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mbentancour/babytracker/internal/config"
-	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/pagination"
 )
 
@@ -47,77 +44,7 @@ func NewNaraImportHandler(db *sqlx.DB, cfg *config.Config) *NaraImportHandler {
 	return &NaraImportHandler{db: db, cfg: cfg, now: time.Now}
 }
 
-const (
-	naraMaxUpload = 50 << 20
-	naraIssueCap  = 50 // issues returned per list; the full counts are returned too
-
-	// naraResponseTimeout replaces the server's 5-minute read and write
-	// timeouts on these routes: uploading and importing a large export can
-	// take longer, and the web app waits 10 minutes for the response.
-	naraResponseTimeout = 10 * time.Minute
-	// naraImportTimeout ends an import that's still running a minute before
-	// that, rolling it back, so it never commits once its response can no
-	// longer be sent.
-	naraImportTimeout = naraResponseTimeout - time.Minute
-
-	naraMaxDuration = 24 * time.Hour
-	naraMaxVolumeML = 1000.0
-	naraMaxWeightKg = 50.0
-	naraMaxHeightCm = 200.0
-	naraMaxHeadCm   = 100.0
-	naraMinTempC    = 30.0 // the temperature form's range (30–45 °C, 86–113 °F)
-	naraMaxTempC    = 45.0
-	mlPerFlOz       = 29.5735295625
-	kgPerLb         = 0.45359237
-	cmPerIn         = 2.54
-)
-
-// naraEarliest bounds plausible timestamps from below; the upper bound is the
-// request time plus a little slack for clock skew.
-var naraEarliest = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-
-// naraIssue is a row that was rejected or imported with an assumption. Code,
-// Detail (usually the Nara column) and Value (the value read) let the UI show
-// a translated reason; Reason is the English text.
-type naraIssue struct {
-	Line   int    `json:"line"`
-	Type   string `json:"type"`
-	Code   string `json:"code"`
-	Detail string `json:"detail,omitempty"`
-	Value  string `json:"value,omitempty"`
-	Reason string `json:"reason"`
-}
-
-// naraRowError rejects one row.
-type naraRowError struct {
-	Code, Detail, Value, Reason string
-}
-
-func (e *naraRowError) Error() string { return e.Reason }
-
-func rowErr(code, detail, format string, args ...any) error {
-	return &naraRowError{Code: code, Detail: detail, Reason: fmt.Sprintf(format, args...)}
-}
-
-func rowErrValue(code, detail, value, format string, args ...any) error {
-	return &naraRowError{Code: code, Detail: detail, Value: value, Reason: fmt.Sprintf(format, args...)}
-}
-
-// errNaraNothingToImport is returned by insertNaraPlan when nothing is left
-// to insert, so no empty child is created.
-var errNaraNothingToImport = errors.New("nothing to import")
-
-// naraFileError rejects the whole upload.
-type naraFileError struct {
-	Status  int
-	Code    string
-	Detail  string
-	Message string
-}
-
-func (e *naraFileError) Error() string { return e.Message }
-
-var errNotNaraExport = &naraFileError{
+var errNotNaraExport = &importFileError{
 	Status: http.StatusBadRequest, Code: "not_nara_export",
 	Message: "this file doesn't look like a Nara Baby export",
 }
@@ -125,17 +52,9 @@ var errNotNaraExport = &naraFileError{
 // errNaraSpreadsheet is returned for an epoch a spreadsheet app has
 // rewritten in scientific notation (1.78998E+12), which loses up to ±83
 // minutes. Every row in such a file is affected, so the file is refused.
-var errNaraSpreadsheet = &naraFileError{
+var errNaraSpreadsheet = &importFileError{
 	Status: http.StatusBadRequest, Code: "spreadsheet_rounded",
 	Message: "the timestamps in this file were rounded by a spreadsheet app; export again from Nara and upload that file without opening it in a spreadsheet",
-}
-
-func writeNaraError(w http.ResponseWriter, status int, code, detail, message string) {
-	body := map[string]string{"error": message, "code": code}
-	if detail != "" {
-		body["detail"] = detail
-	}
-	pagination.WriteJSON(w, status, body)
 }
 
 // Preview parses an export without saving anything and reports what an
@@ -143,7 +62,7 @@ func writeNaraError(w http.ResponseWriter, status int, code, detail, message str
 // POST /api/import/nara/preview (multipart: file, unit_system, timezone,
 // duplicate_pumping)
 func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
-	extendNaraDeadlines(w)
+	extendImportDeadlines(w)
 	plan, opts, ok := h.readUpload(w, r)
 	if !ok {
 		return
@@ -151,14 +70,14 @@ func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	defer r.MultipartForm.RemoveAll()
 	if err := markDuplicatePumps(h.db, plan); err != nil {
 		slog.Error("nara preview: checking for already imported pumping", "error", err)
-		writeNaraError(w, http.StatusInternalServerError, "generic", "", "couldn't read the database")
+		writeImportError(w, http.StatusInternalServerError, "generic", "", "couldn't read the database")
 		return
 	}
 	plan.Duplicates.Included = r.FormValue("duplicate_pumping") == "import"
 	if !plan.Duplicates.Included {
 		plan.dropDuplicatePumps()
 	}
-	body := naraSummary(plan, opts)
+	body := importSummary(plan, opts)
 	body["status"] = "preview"
 	body["profile"] = plan.Profile
 	pagination.WriteJSON(w, http.StatusOK, body)
@@ -169,8 +88,8 @@ func (h *NaraImportHandler) Preview(w http.ResponseWriter, r *http.Request) {
 // POST /api/import/nara (multipart: file, first_name, last_name, birth_date,
 // sex, unit_system, timezone, duplicate_pumping)
 func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
-	extendNaraDeadlines(w)
-	ctx, cancel := context.WithTimeout(r.Context(), naraImportTimeout)
+	extendImportDeadlines(w)
+	ctx, cancel := context.WithTimeout(r.Context(), importTimeout)
 	defer cancel()
 	plan, opts, ok := h.readUpload(w, r)
 	if !ok {
@@ -178,20 +97,8 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.MultipartForm.RemoveAll()
 
-	firstName := strings.TrimSpace(r.FormValue("first_name"))
-	lastName := strings.TrimSpace(r.FormValue("last_name"))
-	birthDate := r.FormValue("birth_date")
-	sex := r.FormValue("sex")
-	if firstName == "" {
-		writeNaraError(w, http.StatusBadRequest, "missing_name", "", "first name is required")
-		return
-	}
-	if _, err := time.Parse("2006-01-02", birthDate); err != nil {
-		writeNaraError(w, http.StatusBadRequest, "invalid_birth_date", "", "birth date must be YYYY-MM-DD")
-		return
-	}
-	if sex != "" && sex != "male" && sex != "female" {
-		writeNaraError(w, http.StatusBadRequest, "invalid_sex", "", "sex must be male, female, or empty")
+	child, ok := readImportChild(w, r)
+	if !ok {
 		return
 	}
 	// Family pumping that's already in BabyTracker (from a sibling's export,
@@ -199,16 +106,15 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	// import it for this baby too.
 	includeDuplicates := r.FormValue("duplicate_pumping") == "import"
 
-	child := naraChild{FirstName: firstName, LastName: lastName, BirthDate: birthDate, Sex: sex}
-	childID, err := insertNaraPlan(ctx, h.db, child, plan, includeDuplicates)
-	if errors.Is(err, errNaraNothingToImport) {
+	childID, err := insertImportPlan(ctx, h.db, child, plan, includeDuplicates)
+	if errors.Is(err, errNothingToImport) {
 		// No empty child: on first run that would end onboarding with
 		// nothing imported and nowhere to retry.
-		body := naraSummary(plan, opts)
+		body := importSummary(plan, opts)
 		body["error"] = "nothing in this file could be imported"
 		if plan.Duplicates.Count > 0 && !includeDuplicates {
 			body["error"] = "nothing new to import: what's left is family pumping already saved for " +
-				naraNames(plan.Duplicates.Children) + " (send duplicate_pumping=import to import it for this baby too)"
+				importNames(plan.Duplicates.Children) + " (send duplicate_pumping=import to import it for this baby too)"
 		}
 		body["code"] = "nothing_to_import"
 		pagination.WriteJSON(w, http.StatusUnprocessableEntity, body)
@@ -216,11 +122,11 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Error("nara import failed", "error", err)
-		writeNaraError(w, http.StatusInternalServerError, "import_failed", "", "import failed; nothing was saved")
+		writeImportError(w, http.StatusInternalServerError, "import_failed", "", "import failed; nothing was saved")
 		return
 	}
 
-	body := naraSummary(plan, opts)
+	body := importSummary(plan, opts)
 	body["status"] = "completed"
 	body["child_id"] = childID
 	slog.Info("nara import completed", "child_id", childID, "stats", body["stats"],
@@ -228,348 +134,34 @@ func (h *NaraImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	pagination.WriteJSON(w, http.StatusOK, body)
 }
 
-// extendNaraDeadlines gives the request naraResponseTimeout from now to read
-// the upload and write the response. A ResponseWriter that can't change its
-// deadlines (a test recorder) keeps the server's.
-func extendNaraDeadlines(w http.ResponseWriter) {
-	deadline := time.Now().Add(naraResponseTimeout)
-	rc := http.NewResponseController(w)
-	_ = rc.SetReadDeadline(deadline)
-	_ = rc.SetWriteDeadline(deadline)
-}
-
 // readUpload checks access, reads the multipart upload and parses the export.
 // On failure it has already written the response. On success the caller must
 // RemoveAll the multipart form.
-func (h *NaraImportHandler) readUpload(w http.ResponseWriter, r *http.Request) (*naraPlan, naraOptions, bool) {
-	if isAdmin, ok := r.Context().Value(middleware.IsAdminKey).(bool); !ok || !isAdmin {
-		pagination.WriteError(w, http.StatusForbidden, "admin access required")
-		return nil, naraOptions{}, false
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, naraMaxUpload)
-	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			limit := strconv.FormatInt(tooLarge.Limit>>20, 10)
-			writeNaraError(w, http.StatusRequestEntityTooLarge, "too_large", limit,
-				fmt.Sprintf("the upload is larger than the %s MB limit", limit))
-		} else {
-			writeNaraError(w, http.StatusBadRequest, "invalid_upload", "", "invalid upload")
-		}
-		return nil, naraOptions{}, false
+func (h *NaraImportHandler) readUpload(w http.ResponseWriter, r *http.Request) (*importPlan, importOptions, bool) {
+	opts, ok := readImportForm(w, r, h.cfg, h.now())
+	if !ok {
+		return nil, importOptions{}, false
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		r.MultipartForm.RemoveAll()
-		writeNaraError(w, http.StatusBadRequest, "invalid_upload", "", "export file required")
-		return nil, naraOptions{}, false
+		writeImportError(w, http.StatusBadRequest, "invalid_upload", "", "export file required")
+		return nil, importOptions{}, false
 	}
 	defer file.Close()
-
-	opts := naraOptions{UnitSystem: h.cfg.UnitSystem, Location: time.UTC, Now: h.now()}
-	// Stored values carry no unit and each device labels them with its own
-	// setting, so the web app sends its device's units. On first run, with
-	// no data yet, the user picks them on the import form and the device
-	// switches to them.
-	if us := r.FormValue("unit_system"); us == "metric" || us == "imperial" {
-		opts.UnitSystem = us
-	}
-	if tz := r.FormValue("timezone"); tz != "" {
-		if loc, err := time.LoadLocation(tz); err == nil {
-			opts.Location = loc
-		} else {
-			slog.Warn("nara import: unknown browser time zone, using UTC for rows without one", "timezone", tz)
-		}
-	}
 
 	plan, err := parseNaraExport(file, opts)
 	if err != nil {
 		r.MultipartForm.RemoveAll()
-		var fe *naraFileError
-		if errors.As(err, &fe) {
-			writeNaraError(w, fe.Status, fe.Code, fe.Detail, fe.Message)
-		} else {
-			writeNaraError(w, http.StatusBadRequest, "bad_csv", "", err.Error())
-		}
-		return nil, naraOptions{}, false
+		writeImportFileError(w, err)
+		return nil, importOptions{}, false
 	}
 	return plan, opts, true
 }
 
-func naraSummary(p *naraPlan, opts naraOptions) map[string]any {
-	orEmpty := func(list []naraIssue) []naraIssue {
-		if list == nil {
-			return []naraIssue{}
-		}
-		return list
-	}
-	children := p.Duplicates.Children
-	if children == nil {
-		children = []string{}
-	}
-	return map[string]any{
-		"stats":             p.stats(),
-		"skipped":           p.Skipped,
-		"as_notes":          p.AsNotes,
-		"duplicate_pumping": map[string]any{"count": p.Duplicates.Count, "children": children, "included": p.Duplicates.Included},
-		"solid_feeds":       p.SolidFeeds,
-		"rejected":          orEmpty(p.Rejected),
-		"rejected_count":    p.RejectedCount,
-		"warnings":          orEmpty(p.Warnings),
-		"warning_count":     p.WarningCount,
-		"units":             naraUnitLabels(opts.UnitSystem),
-	}
-}
-
-// naraNames lists names in English: "Ana", "Ana and Bo", "Ana, Bo and Cy".
-func naraNames(names []string) string {
-	if len(names) < 2 {
-		return strings.Join(names, "")
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
-}
-
-func naraUnitLabels(system string) map[string]string {
-	if system == "imperial" {
-		return map[string]string{"volume": "oz", "weight": "lb", "length": "in", "temperature": "°F"}
-	}
-	return map[string]string{"volume": "mL", "weight": "kg", "length": "cm", "temperature": "°C"}
-}
-
-// --- Plan ---
-
-type naraOptions struct {
-	UnitSystem string         // "metric" or "imperial"; values are stored in these units
-	Location   *time.Location // for rows with no usable Time Zone
-	Now        time.Time      // upper bound for plausible timestamps
-}
-
-type naraChild struct {
-	FirstName, LastName, BirthDate, Sex string
-}
-
-type naraProfile struct {
-	Name      string `json:"name"`
-	BirthDate string `json:"birth_date"`
-	Sex       string `json:"sex"`
-}
-
-type naraFeeding struct {
-	Start, End   time.Time
-	Type, Method string
-	Amount       *float64
-	Notes        string
-}
-
-type naraSleep struct {
-	Start, End time.Time
-	Nap        bool
-	Notes      string
-}
-
-type naraChange struct {
-	Time       time.Time
-	Wet, Solid bool
-	Color      string
-	Notes      string
-}
-
-type naraPumping struct {
-	Start, End time.Time
-	Amount     *float64
-	Note       string // pumping entries have no notes field; saved as a note
-	Family     bool   // logged for the family, not this child (no profile)
-	Duplicate  bool   // a family session that's already in the database
-}
-
-type naraMeasurement struct {
-	Date  string // YYYY-MM-DD in the row's time zone
-	Value float64
-	Notes string
-}
-
-type naraTemperature struct {
-	Time  time.Time
-	Value float64
-	Notes string
-}
-
-type naraMedication struct {
-	Time                     time.Time
-	Name, Dosage, DosageUnit string
-	Notes                    string
-}
-
-type naraMilestone struct {
-	Date, Title, Description string
-}
-
-type naraNote struct {
-	Time time.Time
-	Note string
-}
-
-// naraPlan is everything parsed out of one export, ready to insert.
-type naraPlan struct {
-	Profile     naraProfile
-	Feedings    []naraFeeding
-	Sleep       []naraSleep
-	Changes     []naraChange
-	Pumping     []naraPumping
-	Weight      []naraMeasurement
-	Height      []naraMeasurement
-	HeadCirc    []naraMeasurement
-	Temperature []naraTemperature
-	Medications []naraMedication
-	Milestones  []naraMilestone
-	Notes       []naraNote
-	Skipped     map[string]int // Nara row types not imported
-	AsNotes     map[string]int // rows kept as notes: no BabyTracker equivalent, or only a note
-	SolidFeeds  int            // feedings from Solid Feed rows (saved as parent fed)
-	// Family pumping sessions already in the database (from a sibling's
-	// export, or an earlier import of this baby), the children that hold
-	// them, and whether they're imported anyway.
-	Duplicates struct {
-		Count    int
-		Children []string
-		Included bool
-	}
-	// The first naraIssueCap issues of each kind, and the full counts.
-	Rejected      []naraIssue
-	RejectedCount int
-	Warnings      []naraIssue
-	WarningCount  int
-
-	zones map[string]*time.Location
-}
-
-func (p *naraPlan) stats() map[string]int {
-	return map[string]int{
-		"feedings":           len(p.Feedings),
-		"sleep":              len(p.Sleep),
-		"changes":            len(p.Changes),
-		"pumping":            len(p.Pumping),
-		"weight":             len(p.Weight),
-		"height":             len(p.Height),
-		"head_circumference": len(p.HeadCirc),
-		"temperature":        len(p.Temperature),
-		"medications":        len(p.Medications),
-		"milestones":         len(p.Milestones),
-		"notes":              len(p.Notes) + p.pumpNotes(),
-	}
-}
-
-func (p *naraPlan) pumpNotes() int {
-	n := 0
-	for _, pm := range p.Pumping {
-		if pm.Note != "" {
-			n++
-		}
-	}
-	return n
-}
-
-// markDuplicatePumps flags family pumping sessions (rows with no profile)
-// that are already in the database. Nara can include the family's pumping in
-// each child's export, so importing a sibling would otherwise add them again.
-// A session matches on its start and end, which don't depend on the unit
-// system the amounts were converted to.
-func markDuplicatePumps(q sqlx.Queryer, p *naraPlan) error {
-	var lo, hi time.Time
-	for _, pm := range p.Pumping {
-		if !pm.Family {
-			continue
-		}
-		if lo.IsZero() || pm.Start.Before(lo) {
-			lo = pm.Start
-		}
-		if hi.IsZero() || pm.Start.After(hi) {
-			hi = pm.Start
-		}
-	}
-	if lo.IsZero() {
-		return nil
-	}
-	var existing []struct {
-		Start time.Time `db:"start_time"`
-		End   time.Time `db:"end_time"`
-		Child string    `db:"first_name"`
-	}
-	if err := sqlx.Select(q, &existing,
-		`SELECT p.start_time, p.end_time, c.first_name FROM pumping p JOIN children c ON c.id = p.child_id
-		 WHERE p.start_time BETWEEN $1 AND $2 ORDER BY c.id`, lo, hi); err != nil {
-		return err
-	}
-	// A session can be held by several children, e.g. after a sibling's
-	// import included it; all of them are named.
-	type key struct{ start, end int64 }
-	holders := make(map[key][]string, len(existing))
-	for _, e := range existing {
-		k := key{e.Start.UnixMicro(), e.End.UnixMicro()}
-		holders[k] = append(holders[k], e.Child)
-	}
-	seen := map[string]bool{}
-	for i, pm := range p.Pumping {
-		children, ok := holders[key{pm.Start.UnixMicro(), pm.End.UnixMicro()}]
-		if !pm.Family || !ok {
-			continue
-		}
-		p.Pumping[i].Duplicate = true
-		p.Duplicates.Count++
-		for _, child := range children {
-			if !seen[child] {
-				seen[child] = true
-				p.Duplicates.Children = append(p.Duplicates.Children, child)
-			}
-		}
-	}
-	return nil
-}
-
-// dropDuplicatePumps removes the sessions markDuplicatePumps flagged.
-func (p *naraPlan) dropDuplicatePumps() {
-	kept := p.Pumping[:0]
-	for _, pm := range p.Pumping {
-		if !pm.Duplicate {
-			kept = append(kept, pm)
-		}
-	}
-	p.Pumping = kept
-}
-
-func (p *naraPlan) total() int {
-	n := 0
-	for _, v := range p.stats() {
-		n += v
-	}
-	return n
-}
-
-// warn and reject record an issue. Only the first naraIssueCap of each are
-// kept, so a broken file can't fill memory; the counts are exact. A row warns
-// only once it can no longer be rejected, so a rejected row has no warnings.
-func (p *naraPlan) warn(row *naraRow, code, detail, reason string) {
-	p.WarningCount++
-	if len(p.Warnings) < naraIssueCap {
-		p.Warnings = append(p.Warnings, naraIssue{Line: row.line, Type: row.typ, Code: code, Detail: detail, Reason: reason})
-	}
-}
-
-func (p *naraPlan) reject(issue naraIssue) {
-	p.RejectedCount++
-	if len(p.Rejected) < naraIssueCap {
-		p.Rejected = append(p.Rejected, issue)
-	}
-}
-
-func (p *naraPlan) note(at time.Time, text string) {
-	p.Notes = append(p.Notes, naraNote{Time: at, Note: text})
-}
-
 // zone returns the row's own time zone (Nara records one per row, and it
 // changes when the family travels), falling back to the importer's.
-func (p *naraPlan) zone(row *naraRow, opts naraOptions) *time.Location {
+func (p *importPlan) zone(row *importRow, opts importOptions) *time.Location {
 	name := row.get("Time Zone")
 	if name == "" {
 		return opts.Location
@@ -585,152 +177,9 @@ func (p *naraPlan) zone(row *naraRow, opts naraOptions) *time.Location {
 	return loc
 }
 
-// insertNaraPlan creates the child and inserts the plan in one transaction,
-// which is rolled back if ctx ends first (the client went away, or the import
-// ran past its deadline). Family pumping already in the database is left out
-// unless includeDuplicates is set. It returns errNaraNothingToImport, without
-// creating the child, when nothing is left.
-func insertNaraPlan(ctx context.Context, db *sqlx.DB, c naraChild, p *naraPlan, includeDuplicates bool) (int, error) {
-	tx, err := db.BeginTxx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	if err := markDuplicatePumps(tx, p); err != nil {
-		return 0, fmt.Errorf("check pumping: %w", err)
-	}
-	p.Duplicates.Included = includeDuplicates
-	if !includeDuplicates {
-		p.dropDuplicatePumps()
-	}
-	if p.total() == 0 {
-		return 0, errNaraNothingToImport
-	}
-
-	var sex any
-	if c.Sex != "" {
-		sex = c.Sex
-	}
-	var childID int
-	if err := tx.QueryRow(
-		`INSERT INTO children (first_name, last_name, birth_date, sex) VALUES ($1, $2, $3, $4) RETURNING id`,
-		c.FirstName, c.LastName, c.BirthDate, sex,
-	).Scan(&childID); err != nil {
-		return 0, fmt.Errorf("insert child: %w", err)
-	}
-
-	type insert struct {
-		what  string
-		query string
-		args  [][]any
-	}
-	var batches []insert
-	add := func(what, query string, args []any) {
-		if len(batches) == 0 || batches[len(batches)-1].what != what {
-			batches = append(batches, insert{what: what, query: query})
-		}
-		batches[len(batches)-1].args = append(batches[len(batches)-1].args, args)
-	}
-	for _, f := range p.Feedings {
-		add("feeding", `INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, notes) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			[]any{childID, f.Start, f.End, f.Type, f.Method, f.Amount, f.Notes})
-	}
-	for _, s := range p.Sleep {
-		add("sleep", `INSERT INTO sleep (child_id, start_time, end_time, nap, notes) VALUES ($1,$2,$3,$4,$5)`,
-			[]any{childID, s.Start, s.End, s.Nap, s.Notes})
-	}
-	for _, ch := range p.Changes {
-		add("change", `INSERT INTO changes (child_id, time, wet, solid, color, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
-			[]any{childID, ch.Time, ch.Wet, ch.Solid, ch.Color, ch.Notes})
-	}
-	for _, pm := range p.Pumping {
-		add("pumping", `INSERT INTO pumping (child_id, start_time, end_time, amount) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, pm.Start, pm.End, pm.Amount})
-	}
-	for _, m := range p.Weight {
-		add("weight", `INSERT INTO weight (child_id, date, weight, notes) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, m.Date, m.Value, m.Notes})
-	}
-	for _, m := range p.Height {
-		add("height", `INSERT INTO height (child_id, date, height, notes) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, m.Date, m.Value, m.Notes})
-	}
-	for _, m := range p.HeadCirc {
-		add("head circumference", `INSERT INTO head_circumference (child_id, date, head_circumference, notes) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, m.Date, m.Value, m.Notes})
-	}
-	for _, t := range p.Temperature {
-		add("temperature", `INSERT INTO temperature (child_id, time, temperature, notes) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, t.Time, t.Value, t.Notes})
-	}
-	for _, m := range p.Medications {
-		add("medication", `INSERT INTO medications (child_id, time, name, dosage, dosage_unit, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
-			[]any{childID, m.Time, m.Name, m.Dosage, m.DosageUnit, m.Notes})
-	}
-	for _, m := range p.Milestones {
-		add("milestone", `INSERT INTO milestones (child_id, date, title, description) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, m.Date, m.Title, m.Description})
-	}
-	for _, n := range p.Notes {
-		add("note", `INSERT INTO notes (child_id, time, note) VALUES ($1,$2,$3)`,
-			[]any{childID, n.Time, n.Note})
-	}
-	for _, pm := range p.Pumping {
-		if pm.Note != "" {
-			add("note", `INSERT INTO notes (child_id, time, note) VALUES ($1,$2,$3)`,
-				[]any{childID, pm.Start, "Pumping: " + pm.Note})
-		}
-	}
-
-	for _, b := range batches {
-		stmt, err := tx.PrepareContext(ctx, b.query)
-		if err != nil {
-			return 0, fmt.Errorf("prepare %s insert: %w", b.what, err)
-		}
-		for _, args := range b.args {
-			if _, err := stmt.ExecContext(ctx, args...); err != nil {
-				stmt.Close()
-				return 0, fmt.Errorf("insert %s: %w", b.what, err)
-			}
-		}
-		stmt.Close()
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return childID, nil
-}
-
 // --- Parsing ---
 
-// naraRow gives column access by header name for one CSV record.
-type naraRow struct {
-	cols     map[string]int
-	record   []string
-	line     int    // physical line the record starts on
-	typ      string // the row's Type
-	repaired bool   // a field held bytes that aren't valid UTF-8, or NULs
-}
-
-// get returns a column's trimmed value ("" if the export has no such
-// column). Text Postgres can't store is repaired rather than failing the
-// whole import; the row is flagged so the user can check it.
-func (r *naraRow) get(col string) string {
-	i, ok := r.cols[col]
-	if !ok || i >= len(r.record) {
-		return ""
-	}
-	v := strings.TrimSpace(r.record[i])
-	if !utf8.ValidString(v) || strings.IndexByte(v, 0) >= 0 {
-		v = strings.ReplaceAll(strings.ToValidUTF8(v, "\uFFFD"), "\x00", "")
-		r.repaired = true
-	}
-	return v
-}
-
-func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
+func parseNaraExport(src io.Reader, opts importOptions) (*importPlan, error) {
 	if opts.Location == nil {
 		opts.Location = time.UTC
 	}
@@ -761,7 +210,7 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 		}
 	}
 
-	p := &naraPlan{Skipped: map[string]int{}, AsNotes: map[string]int{}, zones: map[string]*time.Location{}}
+	p := &importPlan{Skipped: map[string]int{}, AsNotes: map[string]int{}, zones: map[string]*time.Location{}}
 	for {
 		record, err := cr.Read()
 		if err == io.EOF {
@@ -773,13 +222,13 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 			if errors.As(err, &pe) {
 				line = pe.StartLine // where the bad record starts, not where reading stopped
 			}
-			return nil, &naraFileError{
+			return nil, &importFileError{
 				Status: http.StatusBadRequest, Code: "bad_csv", Detail: strconv.Itoa(line),
 				Message: fmt.Sprintf("the file isn't valid CSV near line %d", line),
 			}
 		}
 		line, _ := cr.FieldPos(0)
-		row := &naraRow{cols: cols, record: record, line: line}
+		row := &importRow{cols: cols, record: record, line: line}
 		row.typ = row.get("Type")
 		switch {
 		case row.typ == "":
@@ -788,7 +237,7 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 			p.addProfile(row)
 			continue
 		case len(record) != len(header):
-			p.reject(naraIssue{
+			p.reject(importIssue{
 				Line: line, Type: row.typ, Code: "field_count",
 				Detail: strconv.Itoa(len(header)), Value: strconv.Itoa(len(record)),
 				Reason: fmt.Sprintf("the row has %d columns, the header has %d", len(record), len(header)),
@@ -800,11 +249,11 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 			if errors.Is(err, errNaraSpreadsheet) {
 				return nil, errNaraSpreadsheet
 			}
-			var re *naraRowError
+			var re *importRowError
 			if !errors.As(err, &re) {
-				re = &naraRowError{Code: "invalid", Reason: err.Error()}
+				re = &importRowError{Code: "invalid", Reason: err.Error()}
 			}
-			p.reject(naraIssue{Line: line, Type: row.typ, Code: re.Code, Detail: re.Detail, Value: re.Value, Reason: re.Reason})
+			p.reject(importIssue{Line: line, Type: row.typ, Code: re.Code, Detail: re.Detail, Value: re.Value, Reason: re.Reason})
 			continue
 		}
 		if row.repaired {
@@ -814,7 +263,7 @@ func parseNaraExport(src io.Reader, opts naraOptions) (*naraPlan, error) {
 	return p, nil
 }
 
-func (p *naraPlan) addProfile(row *naraRow) {
+func (p *importPlan) addProfile(row *importRow) {
 	// Skip profiles typed as something other than CHILD. A blank Type is
 	// still taken: one importer says a parent's export leaves it blank, but
 	// that's unverified, and the details it fills in can be edited anyway.
@@ -838,7 +287,7 @@ func (p *naraPlan) addProfile(row *naraRow) {
 	}
 }
 
-func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
+func (p *importPlan) addRow(row *importRow, opts importOptions) error {
 	switch row.typ {
 	case "Breastfeed", "Bottle Feed", "Combo Feed", "Solid Feed", "Diaper", "Pump", "Sleep",
 		"Growth", "Medical", "Milestone", "Baby First", "Routine", "Vaccine":
@@ -902,7 +351,7 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 		if err != nil {
 			return err
 		}
-		var bottles []naraFeeding
+		var bottles []importFeeding
 		if naraHasBottle(row, "Combo Feed") {
 			if bottles, err = p.naraBottle(row, "Combo Feed", start, opts); err != nil {
 				return err
@@ -973,7 +422,7 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 			}
 			return rowErr("zero_length", "", "the sleep ends when it starts")
 		}
-		p.Sleep = append(p.Sleep, naraSleep{Start: start, End: end, Nap: naraIsNap(start, end, p.zone(row, opts)), Notes: note})
+		p.Sleep = append(p.Sleep, importSleep{Start: start, End: end, Nap: importIsNap(start, end, p.zone(row, opts)), Notes: note})
 
 	case "Growth":
 		return p.addGrowth(row, start, note, opts)
@@ -993,7 +442,7 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 		if desc == title {
 			desc = ""
 		}
-		p.Milestones = append(p.Milestones, naraMilestone{
+		p.Milestones = append(p.Milestones, importMilestone{
 			Date: start.In(p.zone(row, opts)).Format("2006-01-02"), Title: title, Description: desc,
 		})
 
@@ -1011,20 +460,20 @@ func (p *naraPlan) addRow(row *naraRow, opts naraOptions) error {
 	return nil
 }
 
-func naraBreastfeed(row *naraRow, prefix string, start time.Time) (naraFeeding, bool, error) {
+func naraBreastfeed(row *importRow, prefix string, start time.Time) (importFeeding, bool, error) {
 	l, err := naraDuration(row, "["+prefix+"] Left Duration (Seconds)")
 	if err != nil {
-		return naraFeeding{}, false, err
+		return importFeeding{}, false, err
 	}
 	r, err := naraDuration(row, "["+prefix+"] Right Duration (Seconds)")
 	if err != nil {
-		return naraFeeding{}, false, err
+		return importFeeding{}, false, err
 	}
-	if l+r > naraMaxDuration {
-		return naraFeeding{}, false, rowErr("too_long", "", "lasts longer than 24 hours")
+	if l+r > importMaxDuration {
+		return importFeeding{}, false, rowErr("too_long", "", "lasts longer than 24 hours")
 	}
-	begin := naraSide(row.get("[" + prefix + "] Begin Side"))
-	end := naraSide(row.get("[" + prefix + "] End Side"))
+	begin := feedingSide(row.get("[" + prefix + "] Begin Side"))
+	end := feedingSide(row.get("[" + prefix + "] End Side"))
 
 	var method string
 	switch {
@@ -1053,24 +502,11 @@ func naraBreastfeed(row *naraRow, prefix string, start time.Time) (naraFeeding, 
 		}
 	}
 	has := l > 0 || r > 0 || begin != "" || end != ""
-	return naraFeeding{Start: start, End: start.Add(l + r), Type: "breast milk", Method: method}, has, nil
-}
-
-// naraSide normalizes side values such as "LEFT" and "RIGHT.nonTimer", in any
-// case, to left, right or both ("" if unrecognized). The .nonTimer suffix
-// marks a manually entered side.
-func naraSide(v string) string {
-	v = strings.ToLower(v)
-	v = strings.TrimSuffix(v, ".nontimer")
-	switch v {
-	case "left", "right", "both":
-		return v
-	}
-	return ""
+	return importFeeding{Start: start, End: start.Add(l + r), Type: "breast milk", Method: method}, has, nil
 }
 
 // naraHasBottle reports whether a row records anything about a bottle.
-func naraHasBottle(row *naraRow, prefix string) bool {
+func naraHasBottle(row *importRow, prefix string) bool {
 	for _, c := range []string{"Type", "Breast Milk Volume", "Formula Volume", "Volume", "Formula Name"} {
 		if row.get("["+prefix+"] "+c) != "" {
 			return true
@@ -1082,7 +518,7 @@ func naraHasBottle(row *naraRow, prefix string) bool {
 // naraBottle maps a bottle to one feeding per milk type. A mixed bottle with
 // a recorded split becomes two feedings (as a Combo Feed does), so per-type
 // totals and the milk stash stay right.
-func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts naraOptions) ([]naraFeeding, error) {
+func (p *importPlan) naraBottle(row *importRow, prefix string, start time.Time, opts importOptions) ([]importFeeding, error) {
 	col := func(name string) string { return "[" + prefix + "] " + name }
 	kind := strings.ToLower(row.get(col("Type")))
 	hasBM := strings.Contains(kind, "breast milk")
@@ -1101,19 +537,19 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 		return nil, err
 	}
 	positive := func(v *float64) bool { return v != nil && *v > 0 }
-	unit := naraUnitLabels(opts.UnitSystem)["volume"]
+	unit := importUnitLabels(opts.UnitSystem)["volume"]
 	brand := row.get(col("Formula Name"))
 	formulaNote := ""
 	if brand != "" {
 		formulaNote = "Formula: " + brand
 	}
-	feeding := func(typ string, amount *float64, notes string) naraFeeding {
-		return naraFeeding{Start: start, End: start, Type: typ, Method: "bottle", Amount: amount, Notes: notes}
+	feeding := func(typ string, amount *float64, notes string) importFeeding {
+		return importFeeding{Start: start, End: start, Type: typ, Method: "bottle", Amount: amount, Notes: notes}
 	}
 
-	mixed := func(b, f *float64, extra string) []naraFeeding {
+	mixed := func(b, f *float64, extra string) []importFeeding {
 		split := fmt.Sprintf("Mixed bottle: %s %s breast milk + %s %s formula", formatAmount(*b), unit, formatAmount(*f), unit)
-		return []naraFeeding{
+		return []importFeeding{
 			feeding("breast milk", b, joinNotes(split, extra)),
 			feeding("formula", f, joinNotes(split, extra, formulaNote)),
 		}
@@ -1144,13 +580,13 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 		}
 		p.warn(row, "mixed_partial", "", "mixed bottle with only one share recorded")
 		if have == bm {
-			return []naraFeeding{feeding("breast milk", bm, joinNotes("Mixed bottle; only the breast milk share recorded in Nara", formulaNote))}, nil
+			return []importFeeding{feeding("breast milk", bm, joinNotes("Mixed bottle; only the breast milk share recorded in Nara", formulaNote))}, nil
 		}
-		return []naraFeeding{feeding("formula", formula, joinNotes("Mixed bottle; only the formula share recorded in Nara", formulaNote))}, nil
+		return []importFeeding{feeding("formula", formula, joinNotes("Mixed bottle; only the formula share recorded in Nara", formulaNote))}, nil
 	case positive(bm):
-		return []naraFeeding{feeding("breast milk", bm, "")}, nil
+		return []importFeeding{feeding("breast milk", bm, "")}, nil
 	case positive(formula):
-		return []naraFeeding{feeding("formula", formula, formulaNote)}, nil
+		return []importFeeding{feeding("formula", formula, formulaNote)}, nil
 	}
 
 	// No per-type volume: the generic Volume, typed by the Type column.
@@ -1166,15 +602,15 @@ func (p *naraPlan) naraBottle(row *naraRow, prefix string, start time.Time, opts
 	switch {
 	case hasFormula && !hasBM, !hasBM && !hasFormula && brand != "":
 		// A formula brand with no Type still means a formula bottle.
-		return []naraFeeding{feeding("formula", amount, formulaNote)}, nil
+		return []importFeeding{feeding("formula", amount, formulaNote)}, nil
 	case hasBM && !hasFormula:
-		return []naraFeeding{feeding("breast milk", amount, "")}, nil
+		return []importFeeding{feeding("breast milk", amount, "")}, nil
 	case hasBM && hasFormula:
 		p.warn(row, "mixed_no_split", "", "mixed bottle with no breast milk/formula split; imported as breast milk")
-		return []naraFeeding{feeding("breast milk", amount, joinNotes("Mixed bottle (breast milk + formula), split not recorded in Nara", formulaNote))}, nil
+		return []importFeeding{feeding("breast milk", amount, joinNotes("Mixed bottle (breast milk + formula), split not recorded in Nara", formulaNote))}, nil
 	default:
 		p.warn(row, "milk_type_unknown", "", "milk type not recorded; imported as breast milk")
-		return []naraFeeding{feeding("breast milk", amount, joinNotes("Milk type not recorded in Nara", formulaNote))}, nil
+		return []importFeeding{feeding("breast milk", amount, joinNotes("Milk type not recorded in Nara", formulaNote))}, nil
 	}
 }
 
@@ -1212,7 +648,7 @@ func naraFood(line string) string {
 	return name + " (" + strings.Join(tags, ", ") + ")"
 }
 
-func naraSolid(row *naraRow, start time.Time) (naraFeeding, error) {
+func naraSolid(row *importRow, start time.Time) (importFeeding, error) {
 	var foods []string
 	for _, line := range strings.Split(row.get("[Solid Feed] Food"), "\n") {
 		if line = naraFood(strings.TrimSpace(line)); line != "" {
@@ -1228,7 +664,7 @@ func naraSolid(row *naraRow, start time.Time) (naraFeeding, error) {
 	}
 	// Nara doesn't record who held the spoon; parent fed is the common case
 	// for babies on solids and can be changed per entry.
-	return naraFeeding{Start: start, End: start, Type: "solid food", Method: "parent fed", Notes: strings.Join(notes, "; ")}, nil
+	return importFeeding{Start: start, End: start, Type: "solid food", Method: "parent fed", Notes: strings.Join(notes, "; ")}, nil
 }
 
 // changes.color only accepts these; anything else goes into the notes.
@@ -1240,19 +676,19 @@ var naraTextures = map[string]string{
 
 // naraDiaper maps a diaper row. dry reports a dry check (neither wet nor
 // dirty), which the caller keeps as a note.
-func naraDiaper(row *naraRow, at time.Time) (c naraChange, dry bool, err error) {
+func naraDiaper(row *importRow, at time.Time) (c importChange, dry bool, err error) {
 	kind := strings.ToLower(row.get("[Diaper] Type"))
 	wet := strings.Contains(kind, "wet")
 	dirty := strings.Contains(kind, "dirty")
 	dry = strings.Contains(kind, "dry") && !wet && !dirty
 	if kind == "" {
-		return naraChange{}, false, rowErr("missing_diaper_type", "", "no diaper type recorded")
+		return importChange{}, false, rowErr("missing_diaper_type", "", "no diaper type recorded")
 	}
 	if !wet && !dirty && !dry {
-		return naraChange{}, false, rowErrValue("unknown_diaper_type", "[Diaper] Type", row.get("[Diaper] Type"),
+		return importChange{}, false, rowErrValue("unknown_diaper_type", "[Diaper] Type", row.get("[Diaper] Type"),
 			"unrecognized diaper type %q", row.get("[Diaper] Type"))
 	}
-	c = naraChange{Time: at, Wet: wet, Solid: dirty}
+	c = importChange{Time: at, Wet: wet, Solid: dirty}
 
 	var notes, otherColors, textures, details []string
 	for _, tok := range strings.Fields(row.get("[Diaper] Dirty Color")) {
@@ -1288,27 +724,27 @@ func naraDiaper(row *naraRow, at time.Time) (c naraChange, dry bool, err error) 
 	return c, dry, nil
 }
 
-func (p *naraPlan) naraPump(row *naraRow, start time.Time, opts naraOptions) (naraPumping, error) {
+func (p *importPlan) naraPump(row *importRow, start time.Time, opts importOptions) (importPumping, error) {
 	left, err := naraVolume(row, "[Pump] Left Volume", opts)
 	if err != nil {
-		return naraPumping{}, err
+		return importPumping{}, err
 	}
 	right, err := naraVolume(row, "[Pump] Right Volume", opts)
 	if err != nil {
-		return naraPumping{}, err
+		return importPumping{}, err
 	}
 	total, err := naraVolume(row, "[Pump] Total Volume", opts)
 	if err != nil {
-		return naraPumping{}, err
+		return importPumping{}, err
 	}
 	end, err := p.naraEnd(row, "Pump", start, opts)
 	if err != nil {
-		return naraPumping{}, err
+		return importPumping{}, err
 	}
 
 	// Pumping is logged for the family, so a pump row can have no profile.
 	family := row.get("_profileKey") == "" || row.get("Profile Name") == ""
-	pm := naraPumping{Start: start, End: end, Family: family}
+	pm := importPumping{Start: start, End: end, Family: family}
 	var sides float64
 	if left != nil {
 		sides += *left
@@ -1324,8 +760,8 @@ func (p *naraPlan) naraPump(row *naraRow, start time.Time, opts naraOptions) (na
 	case sides > 0:
 		// Each side passed naraVolume's limit on its own; their sum must too.
 		v := roundVolume(sides, opts.UnitSystem)
-		if v > naraVolumeLimit(opts.UnitSystem) {
-			return naraPumping{}, rowErr("out_of_range", "[Pump] Left Volume + [Pump] Right Volume", "the left and right volumes add up to an implausible amount")
+		if v > volumeLimit(opts.UnitSystem) {
+			return importPumping{}, rowErr("out_of_range", "[Pump] Left Volume + [Pump] Right Volume", "the left and right volumes add up to an implausible amount")
 		}
 		pm.Amount = &v
 	case total != nil:
@@ -1339,7 +775,7 @@ func (p *naraPlan) naraPump(row *naraRow, start time.Time, opts naraOptions) (na
 // naraEnd reads `[T] End Date/time (Epoch)`, falling back to the local
 // `[T] End Date/time`, then to `[T] Duration (Seconds)`, then to the start
 // time.
-func (p *naraPlan) naraEnd(row *naraRow, prefix string, start time.Time, opts naraOptions) (time.Time, error) {
+func (p *importPlan) naraEnd(row *importRow, prefix string, start time.Time, opts importOptions) (time.Time, error) {
 	end, ok, err := p.naraTime(row, "["+prefix+"] End Date/time", "end time", opts)
 	if err != nil {
 		return time.Time{}, err
@@ -1355,7 +791,7 @@ func (p *naraPlan) naraEnd(row *naraRow, prefix string, start time.Time, opts na
 		}
 		end = start.Add(d)
 	}
-	if end.Sub(start) > naraMaxDuration {
+	if end.Sub(start) > importMaxDuration {
 		return time.Time{}, rowErr("too_long", "", "lasts longer than 24 hours")
 	}
 	return end, nil
@@ -1363,38 +799,30 @@ func (p *naraPlan) naraEnd(row *naraRow, prefix string, start time.Time, opts na
 
 // naraDuration reads a seconds column, rejecting values over a day before
 // they can overflow time.Duration.
-func naraDuration(row *naraRow, col string) (time.Duration, error) {
-	secs, err := naraOptionalNumber(row.get(col), col)
+func naraDuration(row *importRow, col string) (time.Duration, error) {
+	secs, err := optionalNumber(row.get(col), col)
 	if err != nil || secs == nil {
 		return 0, err
 	}
-	if *secs > naraMaxDuration.Seconds() {
+	if *secs > importMaxDuration.Seconds() {
 		return 0, rowErr("too_long", "", "lasts longer than 24 hours")
 	}
 	return time.Duration(math.Round(*secs)) * time.Second, nil
 }
 
-// naraIsNap classifies a sleep, since Nara doesn't record naps separately: a
-// sleep that starts between 07:00 and 19:00 local time and lasts under four
-// hours is a nap.
-func naraIsNap(start, end time.Time, loc *time.Location) bool {
-	h := start.In(loc).Hour()
-	return h >= 7 && h < 19 && end.Sub(start) < 4*time.Hour
-}
-
-func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraOptions) error {
+func (p *importPlan) addGrowth(row *importRow, at time.Time, note string, opts importOptions) error {
 	date := at.In(p.zone(row, opts)).Format("2006-01-02")
 	imperial := opts.UnitSystem == "imperial"
 
-	weight, err := naraOptionalNumber(row.get("[Growth] Weight"), "[Growth] Weight")
+	weight, err := optionalNumber(row.get("[Growth] Weight"), "[Growth] Weight")
 	if err != nil {
 		return err
 	}
-	height, err := naraOptionalNumber(row.get("[Growth] Height"), "[Growth] Height")
+	height, err := optionalNumber(row.get("[Growth] Height"), "[Growth] Height")
 	if err != nil {
 		return err
 	}
-	head, err := naraOptionalNumber(row.get("[Growth] Head Size"), "[Growth] Head Size")
+	head, err := optionalNumber(row.get("[Growth] Head Size"), "[Growth] Head Size")
 	if err != nil {
 		return err
 	}
@@ -1407,11 +835,11 @@ func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraO
 	// weight, 0.1 for lengths) so imported entries can be edited.
 	var w, h, hd float64
 	if weight != nil {
-		kg, err := naraToKg(*weight, row.get("[Growth] Weight Unit"), "[Growth] Weight")
+		kg, err := toKg(*weight, row.get("[Growth] Weight Unit"), "[Growth] Weight")
 		if err != nil {
 			return err
 		}
-		if kg <= 0 || kg > naraMaxWeightKg {
+		if kg <= 0 || kg > importMaxWeightKg {
 			return rowErr("out_of_range", "[Growth] Weight", "the weight is implausible")
 		}
 		w = roundTo(kg, 2)
@@ -1420,7 +848,7 @@ func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraO
 		}
 	}
 	length := func(v float64, col string, max float64) (float64, error) {
-		cm, err := naraToCm(v, row.get(col+" Unit"), col)
+		cm, err := toCm(v, row.get(col+" Unit"), col)
 		if err != nil {
 			return 0, err
 		}
@@ -1433,23 +861,23 @@ func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraO
 		return roundTo(cm, 1), nil
 	}
 	if height != nil {
-		if h, err = length(*height, "[Growth] Height", naraMaxHeightCm); err != nil {
+		if h, err = length(*height, "[Growth] Height", importMaxHeightCm); err != nil {
 			return err
 		}
 	}
 	if head != nil {
-		if hd, err = length(*head, "[Growth] Head Size", naraMaxHeadCm); err != nil {
+		if hd, err = length(*head, "[Growth] Head Size", importMaxHeadCm); err != nil {
 			return err
 		}
 	}
 	if weight != nil {
-		p.Weight = append(p.Weight, naraMeasurement{Date: date, Value: w, Notes: note})
+		p.Weight = append(p.Weight, importMeasurement{Date: date, Value: w, Notes: note})
 	}
 	if height != nil {
-		p.Height = append(p.Height, naraMeasurement{Date: date, Value: h, Notes: note})
+		p.Height = append(p.Height, importMeasurement{Date: date, Value: h, Notes: note})
 	}
 	if head != nil {
-		p.HeadCirc = append(p.HeadCirc, naraMeasurement{Date: date, Value: hd, Notes: note})
+		p.HeadCirc = append(p.HeadCirc, importMeasurement{Date: date, Value: hd, Notes: note})
 	}
 	return nil
 }
@@ -1458,18 +886,18 @@ func (p *naraPlan) addGrowth(row *naraRow, at time.Time, note string, opts naraO
 // "Children's Tylenol, 3.75 (ML)", into name, dose and unit.
 var naraMedicationDose = regexp.MustCompile(`^(.+?),\s*([0-9]+(?:[.,][0-9]+)?)\s*\(([^)]+)\)$`)
 
-func (p *naraPlan) addMedical(row *naraRow, at time.Time, note string, opts naraOptions) error {
+func (p *importPlan) addMedical(row *importRow, at time.Time, note string, opts importOptions) error {
 	// Read everything before appending, so a bad value rejects the whole row
 	// rather than leaving half of it imported.
 	// An entry may list several medicines, one per line (reported by another
 	// importer; unverified).
-	var meds []naraMedication
+	var meds []importMedication
 	for _, line := range strings.Split(row.get("[Medical] Medication"), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		m := naraMedication{Time: at, Name: line}
+		m := importMedication{Time: at, Name: line}
 		if parts := naraMedicationDose.FindStringSubmatch(line); parts != nil {
 			m.Name, m.Dosage, m.DosageUnit = strings.TrimSpace(parts[1]), parts[2], strings.ToLower(parts[3])
 		}
@@ -1478,24 +906,24 @@ func (p *naraPlan) addMedical(row *naraRow, at time.Time, note string, opts nara
 		}
 		meds = append(meds, m)
 	}
-	var temp *naraTemperature
-	tempValue, err := naraOptionalNumber(row.get("[Medical] Temperature"), "[Medical] Temperature")
+	var temp *importTemperature
+	tempValue, err := optionalNumber(row.get("[Medical] Temperature"), "[Medical] Temperature")
 	if err != nil {
 		return err
 	}
 	if tempValue != nil {
-		c, err := naraToCelsius(*tempValue, row.get("[Medical] Temperature Unit"), "[Medical] Temperature")
+		c, err := toCelsius(*tempValue, row.get("[Medical] Temperature Unit"), "[Medical] Temperature")
 		if err != nil {
 			return err
 		}
-		if c < naraMinTempC || c > naraMaxTempC {
+		if c < importMinTempC || c > importMaxTempC {
 			return rowErr("out_of_range", "[Medical] Temperature", "the temperature is implausible")
 		}
 		v := roundTo(c, 1)
 		if opts.UnitSystem == "imperial" {
 			v = roundTo(c*9/5+32, 1)
 		}
-		temp = &naraTemperature{Time: at, Value: v, Notes: note}
+		temp = &importTemperature{Time: at, Value: v, Notes: note}
 		if len(meds) > 0 {
 			temp.Notes = "" // the note is already on the medication
 		}
@@ -1515,98 +943,21 @@ func (p *naraPlan) addMedical(row *naraRow, at time.Time, note string, opts nara
 	return nil
 }
 
-// --- Values ---
-
 // naraVolume reads a volume column and its "<col> Unit" companion, converting
 // to the import's volume unit (mL for metric, fl oz for imperial).
-func naraVolume(row *naraRow, col string, opts naraOptions) (*float64, error) {
-	v, err := naraOptionalNumber(row.get(col), col)
+func naraVolume(row *importRow, col string, opts importOptions) (*float64, error) {
+	v, err := optionalNumber(row.get(col), col)
 	if err != nil || v == nil {
 		return nil, err
 	}
-	var ml float64
-	switch unit := strings.ToUpper(strings.NewReplacer(" ", "", "_", "", ".", "").Replace(row.get(col + " Unit"))); unit {
-	case "ML":
-		ml = *v
-	case "OZ", "FLOZ":
-		ml = *v * mlPerFlOz
-	case "":
-		// Assuming mL could store fl oz values 30x too small; report it.
-		return nil, rowErr("missing_unit", col, "%s has no unit", col)
-	default:
-		return nil, rowErrValue("unknown_unit", col, unit, "%s has unknown unit %q", col, unit)
-	}
-	if ml > naraMaxVolumeML {
-		return nil, rowErr("out_of_range", col, "%s is implausibly large", col)
-	}
-	out := roundVolume(ml, "metric")
-	if opts.UnitSystem == "imperial" {
-		out = roundVolume(ml/mlPerFlOz, "imperial")
-	}
-	return &out, nil
-}
-
-func roundVolume(v float64, system string) float64 {
-	if system == "imperial" {
-		return roundTo(v, 2)
-	}
-	return roundTo(v, 1)
-}
-
-func naraVolumeLimit(system string) float64 {
-	if system == "imperial" {
-		return naraMaxVolumeML / mlPerFlOz
-	}
-	return naraMaxVolumeML
-}
-
-func naraToKg(v float64, unit, col string) (float64, error) {
-	switch strings.ToUpper(unit) {
-	case "KG":
-		return v, nil
-	case "G":
-		return v / 1000, nil
-	case "LB", "LBS":
-		return v * kgPerLb, nil
-	case "OZ":
-		return v * kgPerLb / 16, nil
-	case "":
-		return 0, rowErr("missing_unit", col, "%s has no unit", col)
-	}
-	return 0, rowErrValue("unknown_unit", col, unit, "%s has unknown unit %q", col, unit)
-}
-
-func naraToCm(v float64, unit, col string) (float64, error) {
-	switch strings.ToUpper(unit) {
-	case "CM":
-		return v, nil
-	case "MM":
-		return v / 10, nil
-	case "IN":
-		return v * cmPerIn, nil
-	case "":
-		return 0, rowErr("missing_unit", col, "%s has no unit", col)
-	}
-	return 0, rowErrValue("unknown_unit", col, unit, "%s has unknown unit %q", col, unit)
-}
-
-func naraToCelsius(v float64, unit, col string) (float64, error) {
-	switch strings.ToUpper(unit) {
-	case "C", "CELSIUS":
-		return v, nil
-	case "F", "FAHRENHEIT":
-		return (v - 32) * 5 / 9, nil
-	case "":
-		return 0, rowErr("missing_unit", col, "%s has no unit", col)
-	}
-	return 0, rowErrValue("unknown_unit", col, unit, "%s has unknown unit %q", col, unit)
+	return convertVolume(*v, row.get(col+" Unit"), col, opts)
 }
 
 // naraTime reads a time from `<col> (Epoch)`, the instant Nara records. If
 // that's blank it falls back to the local wall time in `<col>`
 // ("2006-01-02 15:04:05") in the row's time zone. ok is false when both are
 // blank.
-func (p *naraPlan) naraTime(row *naraRow, col, what string, opts naraOptions) (t time.Time, ok bool, err error) {
+func (p *importPlan) naraTime(row *importRow, col, what string, opts importOptions) (t time.Time, ok bool, err error) {
 	if v := row.get(col + " (Epoch)"); v != "" {
 		t, err = naraEpoch(v, what, opts)
 		return t, err == nil, err
@@ -1620,7 +971,7 @@ func (p *naraPlan) naraTime(row *naraRow, col, what string, opts naraOptions) (t
 		return time.Time{}, false, rowErrValue(naraTimeCode("bad", what), col, v, "the %s %q isn't a timestamp", what, v)
 	}
 	t = t.UTC()
-	if t.Before(naraEarliest) || t.After(opts.Now.Add(48*time.Hour)) {
+	if t.Before(importEarliest) || t.After(opts.Now.Add(48*time.Hour)) {
 		return time.Time{}, false, rowErrValue(naraTimeCode("implausible", what), col, v, "the %s %q is outside the plausible range", what, v)
 	}
 	return t, true, nil
@@ -1635,7 +986,7 @@ func naraTimeCode(problem, what string) string {
 // naraEpoch parses an epoch-millisecond timestamp (whole seconds are accepted
 // too). A value in scientific notation means a spreadsheet app rewrote the
 // file, which fails the whole upload.
-func naraEpoch(v, what string, opts naraOptions) (time.Time, error) {
+func naraEpoch(v, what string, opts importOptions) (time.Time, error) {
 	if v == "" {
 		return time.Time{}, rowErr(naraTimeCode("bad", what), "", "the %s is missing", what)
 	}
@@ -1660,38 +1011,8 @@ func naraEpoch(v, what string, opts naraOptions) (time.Time, error) {
 	} else {
 		t = time.UnixMilli(n).UTC()
 	}
-	if t.Before(naraEarliest) || t.After(opts.Now.Add(48*time.Hour)) {
+	if t.Before(importEarliest) || t.After(opts.Now.Add(48*time.Hour)) {
 		return time.Time{}, rowErrValue(naraTimeCode("implausible", what), "", v, "the %s %q is outside the plausible range", what, v)
 	}
 	return t, nil
-}
-
-func naraOptionalNumber(v, what string) (*float64, error) {
-	if v == "" {
-		return nil, nil
-	}
-	n, err := strconv.ParseFloat(v, 64)
-	if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 {
-		return nil, rowErrValue("bad_number", what, v, "%s %q isn't a valid number", what, v)
-	}
-	return &n, nil
-}
-
-func roundTo(v float64, places int) float64 {
-	p := math.Pow(10, float64(places))
-	return math.Round(v*p) / p
-}
-
-func formatAmount(v float64) string {
-	return strconv.FormatFloat(v, 'f', -1, 64)
-}
-
-func joinNotes(parts ...string) string {
-	var out []string
-	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return strings.Join(out, "; ")
 }

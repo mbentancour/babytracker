@@ -4,7 +4,7 @@ import { api } from "../api";
 import { FormField, FormInput, FormSelect, FormButton, trapTab } from "./Modal";
 import { Icons } from "./Icons";
 import UserManagement from "./UserManagement";
-import NaraImport from "./NaraImport";
+import DataImport from "./DataImport";
 import { useI18n, AVAILABLE_LANGUAGES } from "../utils/i18n";
 import {
   usePreferences,
@@ -44,8 +44,10 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
   const [exporting, setExporting] = useState(false);
-  const [showNaraImport, setShowNaraImport] = useState(false);
+  // Which app's import dialog is open: null, "nara" or "nighp".
+  const [importSource, setImportSource] = useState(null);
   const naraOpener = useRef(null);
+  const nighpOpener = useRef(null);
   const { prefs, setFeatureEnabled, setViewEnabled, setFormDefault, setPref } = usePreferences();
   // OIDC / password sign-in availability, for the Account section.
   const [authConfig, setAuthConfig] = useState(null);
@@ -68,7 +70,7 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
 
   return (
     <div className="settings-overlay">
-      <div className="settings-page" inert={showNaraImport || undefined}>
+      <div className="settings-page" inert={!!importSource || undefined}>
         {/* Header */}
         <div className="settings-header">
           <h2 className="settings-title">{t("settings.title")}</h2>
@@ -584,15 +586,20 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
                   </div>
                 </div>
 
-                {/* Import (admin only) — Nara exports one baby per file, so
+                {/* Import (admin only) — these exports cover one baby each, so
                     a second baby can't come in through first-run onboarding */}
                 {isAdmin && (
                   <div className="settings-card" style={{ marginBottom: 16 }}>
                     <h4 className="settings-card-title">{t("settings.import")}</h4>
                     <p className="settings-hint" style={{ marginBottom: 12 }}>{t("settings.importNaraDesc")}</p>
-                    <button ref={naraOpener} className="settings-export-main" onClick={() => setShowNaraImport(true)}>
+                    <button ref={naraOpener} className="settings-export-main" onClick={() => setImportSource("nara")}>
                       <Icons.Download />
                       {t("onboarding.importNara")}
+                    </button>
+                    <p className="settings-hint" style={{ margin: "16px 0 12px" }}>{t("settings.importNighpDesc")}</p>
+                    <button ref={nighpOpener} className="settings-export-main" onClick={() => setImportSource("nighp")}>
+                      <Icons.Download />
+                      {t("onboarding.importNighp")}
                     </button>
                   </div>
                 )}
@@ -643,32 +650,36 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
           </div>
         </div>
       </div>
-      {showNaraImport && (
-        <NaraImportDialog label={t("onboarding.importNara")} opener={naraOpener}>
+      {importSource && (
+        <DataImportDialog
+          label={t(importSource === "nighp" ? "onboarding.importNighp" : "onboarding.importNara")}
+          opener={importSource === "nighp" ? nighpOpener : naraOpener}
+        >
           {/* No unit choice here: stored amounts carry no unit, and the
               other babies' amounts are labelled with this device's setting,
               so a new baby is saved in those units too. */}
-          <NaraImport
+          <DataImport
+            source={importSource}
             unitSystem={units}
-            doneLabel={t("nara.done")}
-            onBack={() => setShowNaraImport(false)}
+            doneLabel={t("import.done")}
+            onBack={() => setImportSource(null)}
             onDone={async () => {
-              setShowNaraImport(false);
+              setImportSource(null);
               await onRefetch?.();
             }}
           />
-        </NaraImportDialog>
+        </DataImportDialog>
       )}
     </div>
   );
 }
 
-// NaraImportDialog shows the Nara import over Settings as a modal dialog:
+// DataImportDialog shows an import over Settings as a modal dialog:
 // focus moves into it on open and back to the button that opened it on
 // close, and Tab can't leave it for the Settings page (also inert) or the
 // dashboard behind both. It closes through the import's own Back and Done
 // buttons, not Escape, so an import can't be dismissed mid-way.
-export function NaraImportDialog({ label, opener, children }) {
+export function DataImportDialog({ label, opener, children }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;

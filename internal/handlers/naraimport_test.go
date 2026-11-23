@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -112,11 +111,11 @@ const naraT0 = "1789578053000"
 
 var naraNow = time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 
-func naraOpts(units string) naraOptions {
-	return naraOptions{UnitSystem: units, Location: time.UTC, Now: naraNow}
+func naraOpts(units string) importOptions {
+	return importOptions{UnitSystem: units, Location: time.UTC, Now: naraNow}
 }
 
-func parseNara(t *testing.T, csv string, opts naraOptions) *naraPlan {
+func parseNara(t *testing.T, csv string, opts importOptions) *importPlan {
 	t.Helper()
 	p, err := parseNaraExport(strings.NewReader(csv), opts)
 	if err != nil {
@@ -126,7 +125,7 @@ func parseNara(t *testing.T, csv string, opts naraOptions) *naraPlan {
 }
 
 // one parses a single row, failing on any rejection.
-func one(t *testing.T, r nrow, units string) *naraPlan {
+func one(t *testing.T, r nrow, units string) *importPlan {
 	t.Helper()
 	p := parseNara(t, naraExport(t, naraHeader, r), naraOpts(units))
 	if p.RejectedCount != 0 {
@@ -136,47 +135,13 @@ func one(t *testing.T, r nrow, units string) *naraPlan {
 }
 
 // rejected parses a single row that must be rejected and returns the issue.
-func rejected(t *testing.T, r nrow) naraIssue {
+func rejected(t *testing.T, r nrow) importIssue {
 	t.Helper()
 	p := parseNara(t, naraExport(t, naraHeader, r), naraOpts("metric"))
 	if p.RejectedCount != 1 || p.total() != 0 {
 		t.Fatalf("want one rejected row and nothing imported, got rejected=%+v stats=%v", p.Rejected, p.stats())
 	}
 	return at(t, p.Rejected, 0)
-}
-
-// String methods make failure messages show amounts rather than pointers.
-func (f naraFeeding) String() string {
-	return fmt.Sprintf("{%s %s %s +%v amount=%s notes=%q}", f.Type, f.Method, f.Start.Format(time.RFC3339), f.End.Sub(f.Start), amountText(f.Amount), f.Notes)
-}
-
-func (pm naraPumping) String() string {
-	return fmt.Sprintf("{%s +%v amount=%s note=%q family=%v duplicate=%v}", pm.Start.Format(time.RFC3339), pm.End.Sub(pm.Start), amountText(pm.Amount), pm.Note, pm.Family, pm.Duplicate)
-}
-
-func amountText(v *float64) string {
-	if v == nil {
-		return "none"
-	}
-	return formatAmount(*v)
-}
-
-// at returns s[i], failing the test instead of panicking when it's missing,
-// so one regression doesn't abort the rest of the package's tests.
-func at[T any](t *testing.T, s []T, i int) T {
-	t.Helper()
-	if i >= len(s) {
-		t.Fatalf("want at least %d entries, got %d: %+v", i+1, len(s), s)
-	}
-	return s[i]
-}
-
-func amount(t *testing.T, v *float64) float64 {
-	t.Helper()
-	if v == nil {
-		t.Fatal("amount is nil")
-	}
-	return *v
 }
 
 // row builds a row of the given type starting at naraT0, from column/value
@@ -187,22 +152,6 @@ func row(typ string, kv ...string) nrow {
 		r[kv[i]] = kv[i+1]
 	}
 	return r
-}
-
-func warningCodes(p *naraPlan) []string {
-	var codes []string
-	for _, w := range p.Warnings {
-		codes = append(codes, w.Code)
-	}
-	return codes
-}
-
-func noteTexts(p *naraPlan) []string {
-	var notes []string
-	for _, n := range p.Notes {
-		notes = append(notes, n.Note)
-	}
-	return notes
 }
 
 // --- File-level handling ---
@@ -260,7 +209,7 @@ func TestNaraRealisticSparseExport(t *testing.T) {
 	if len(p.Notes)+len(p.AsNotes)+len(p.Skipped) != 0 {
 		t.Errorf("blank-typed rows: notes %v as notes %v skipped %v", noteTexts(p), p.AsNotes, p.Skipped)
 	}
-	if want := (naraProfile{Name: "Theo", BirthDate: "2026-07-01", Sex: "male"}); p.Profile != want {
+	if want := (importProfile{Name: "Theo", BirthDate: "2026-07-01", Sex: "male"}); p.Profile != want {
 		t.Errorf("profile = %+v, want %+v", p.Profile, want)
 	}
 }
@@ -294,7 +243,7 @@ func TestNaraBadQuoteFailsTheFileWithTheRowsLine(t *testing.T) {
 			"Diaper," + naraT0 + ",y\n", "2"},
 	} {
 		_, err := parseNaraExport(strings.NewReader(c.csv), naraOpts("metric"))
-		var fe *naraFileError
+		var fe *importFileError
 		if !errors.As(err, &fe) || fe.Code != "bad_csv" || fe.Detail != c.line {
 			t.Errorf("%s: got %#v, want bad_csv on line %s", name, err, c.line)
 		}
@@ -327,12 +276,12 @@ func TestNaraLineNumbersCountPhysicalLines(t *testing.T) {
 
 func TestNaraIssuesAreCappedInMemory(t *testing.T) {
 	rows := []nrow{row("Diaper", "[Diaper] Type", "Wet")}
-	for i := 0; i < naraIssueCap+25; i++ {
+	for i := 0; i < importIssueCap+25; i++ {
 		rows = append(rows, row("Diaper", "[Diaper] Type", "Sparkly"), row("Bottle Feed", "[Bottle Feed] Volume", "60", "[Bottle Feed] Volume Unit", "ML"))
 	}
 	p := parseNara(t, naraExport(t, naraHeader, rows...), naraOpts("metric"))
-	if len(p.Rejected) != naraIssueCap || p.RejectedCount != naraIssueCap+25 ||
-		len(p.Warnings) != naraIssueCap || p.WarningCount != naraIssueCap+25 {
+	if len(p.Rejected) != importIssueCap || p.RejectedCount != importIssueCap+25 ||
+		len(p.Warnings) != importIssueCap || p.WarningCount != importIssueCap+25 {
 		t.Errorf("rejected %d/%d warnings %d/%d", len(p.Rejected), p.RejectedCount, len(p.Warnings), p.WarningCount)
 	}
 }
@@ -354,7 +303,7 @@ func TestNaraProfileRow(t *testing.T) {
 		nrow{"Type": "Profile", "Profile Name": "Second", "[Profile] Type": "CHILD", "[Profile] Birth Date": "2025-01-01"},
 		row("Diaper", "[Diaper] Type", "Wet"),
 	), naraOpts("metric"))
-	if want := (naraProfile{Name: "Rosa", BirthDate: "2026-08-09", Sex: "female"}); p.Profile != want {
+	if want := (importProfile{Name: "Rosa", BirthDate: "2026-08-09", Sex: "female"}); p.Profile != want {
 		t.Errorf("profile = %+v, want %+v (the first child profile wins)", p.Profile, want)
 	}
 	if len(p.Skipped)+p.RejectedCount != 0 {
@@ -799,7 +748,7 @@ func TestNaraNapBoundaries(t *testing.T) {
 		{day.Add(12 * time.Hour), 4*time.Hour - time.Minute, true},
 		{day.Add(12 * time.Hour), 4 * time.Hour, false},
 	} {
-		if got := naraIsNap(c.start, c.start.Add(c.d), time.UTC); got != c.nap {
+		if got := importIsNap(c.start, c.start.Add(c.d), time.UTC); got != c.nap {
 			t.Errorf("start %s for %v: nap=%v, want %v", c.start.Format("15:04"), c.d, got, c.nap)
 		}
 	}
@@ -840,7 +789,7 @@ func TestNaraGrowthDateUsesTheRowsTimeZone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := naraOptions{UnitSystem: "metric", Location: ny, Now: naraNow}
+	opts := importOptions{UnitSystem: "metric", Location: ny, Now: naraNow}
 	p := parseNara(t, naraExport(t, naraHeader,
 		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "Time Zone": "Europe/Copenhagen", "[Growth] Weight": "4", "[Growth] Weight Unit": "KG"},
 		nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789423200000", "Time Zone": "Europe/Copenhagen", "[Growth] Weight": "4.1", "[Growth] Weight Unit": "KG"},
@@ -969,7 +918,7 @@ func TestNaraInsertPlan(t *testing.T) {
 		row("Routine", "[Routine] Routine", "Bath"),
 	), naraOpts("metric"))
 
-	childID, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Rosa", LastName: "Diaz", BirthDate: "2026-08-09", Sex: "female"}, p, false)
+	childID, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Rosa", LastName: "Diaz", BirthDate: "2026-08-09", Sex: "female"}, p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1005,17 +954,6 @@ func TestNaraInsertPlan(t *testing.T) {
 	}
 }
 
-func naraCount(t *testing.T, db interface {
-	Get(dest any, query string, args ...any) error
-}, query string, args ...any) int {
-	t.Helper()
-	var n int
-	if err := db.Get(&n, query, args...); err != nil {
-		t.Fatalf("%s: %v", query, err)
-	}
-	return n
-}
-
 func TestNaraSiblingExportsDontDuplicateFamilyPumping(t *testing.T) {
 	db := setupDB(t)
 	family := row("Pump", "[Pump] Duration (Seconds)", "600", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML", "Note", "shared")
@@ -1023,7 +961,7 @@ func TestNaraSiblingExportsDontDuplicateFamilyPumping(t *testing.T) {
 		"[Pump] Duration (Seconds)", "300", "[Pump] Total Volume", "50", "[Pump] Total Volume Unit", "ML")
 	export := naraExport(t, naraHeader, family, own, row("Diaper", "[Diaper] Type", "Wet"))
 
-	first, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false)
+	first, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1038,31 +976,31 @@ func TestNaraSiblingExportsDontDuplicateFamilyPumping(t *testing.T) {
 		t.Errorf("duplicates %+v", p.Duplicates)
 	}
 	p = parseNara(t, export, naraOpts("imperial"))
-	second, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Bo", BirthDate: "2026-08-09"}, p, false)
+	second, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Bo", BirthDate: "2026-08-09"}, p, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.stats()["pumping"] != 1 || p.stats()["notes"] != 0 || p.stats()["changes"] != 1 {
 		t.Errorf("second import stats %v", p.stats())
 	}
-	if n := naraCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, first); n != 2 {
+	if n := importCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, first); n != 2 {
 		t.Errorf("first child has %d pumping sessions, want 2", n)
 	}
 	// The child's own session isn't family pumping, so the sibling gets it.
-	if n := naraCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, second); n != 1 {
+	if n := importCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, second); n != 1 {
 		t.Errorf("second child has %d pumping sessions, want its own 1", n)
 	}
-	if n := naraCount(t, db, `SELECT count(*) FROM notes WHERE note = 'Pumping: shared'`); n != 1 {
+	if n := importCount(t, db, `SELECT count(*) FROM notes WHERE note = 'Pumping: shared'`); n != 1 {
 		t.Errorf("%d copies of the shared pump note", n)
 	}
 
 	// Asked to, a third import takes the family session too.
 	p = parseNara(t, export, naraOpts("metric"))
-	third, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Cy", BirthDate: "2026-08-09"}, p, true)
+	third, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Cy", BirthDate: "2026-08-09"}, p, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := naraCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, third); n != 2 || p.Duplicates.Count != 1 || !p.Duplicates.Included {
+	if n := importCount(t, db, `SELECT count(*) FROM pumping WHERE child_id=$1`, third); n != 2 || p.Duplicates.Count != 1 || !p.Duplicates.Included {
 		t.Errorf("with duplicates included: %d sessions, duplicates %+v", n, p.Duplicates)
 	}
 
@@ -1093,7 +1031,7 @@ func TestNaraFamilyPumpingMatchesEachSession(t *testing.T) {
 	// Ana's export: family sessions at 17:00, 19:00 and 21:00, out of order,
 	// and her own session at 18:00.
 	ana := naraExport(t, naraHeader, family(120, 600), family(0, 600), own("Ana", 60, 300), family(240, 600))
-	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, ana, naraOpts("metric")), false); err != nil {
+	if _, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, ana, naraOpts("metric")), false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1121,27 +1059,27 @@ func TestNaraFamilyPumpingMatchesEachSession(t *testing.T) {
 func TestNaraNothingLeftCreatesNoChild(t *testing.T) {
 	db := setupDB(t)
 	export := naraExport(t, naraHeader, row("Pump", "[Pump] Duration (Seconds)", "600", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"))
-	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false); err != nil {
+	if _, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Ana", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false); err != nil {
 		t.Fatal(err)
 	}
 	// The only row is family pumping that's already in: nothing left.
-	_, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Bo", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false)
-	if !errors.Is(err, errNaraNothingToImport) || naraCount(t, db, `SELECT count(*) FROM children`) != 1 {
-		t.Errorf("err %v, children %d", err, naraCount(t, db, `SELECT count(*) FROM children`))
+	_, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Bo", BirthDate: "2026-08-09"}, parseNara(t, export, naraOpts("metric")), false)
+	if !errors.Is(err, errNothingToImport) || importCount(t, db, `SELECT count(*) FROM children`) != 1 {
+		t.Errorf("err %v, children %d", err, importCount(t, db, `SELECT count(*) FROM children`))
 	}
 }
 
 func TestNaraInsertPlanRollsBackOnError(t *testing.T) {
 	db := setupDB(t)
-	p := &naraPlan{Feedings: []naraFeeding{
+	p := &importPlan{Feedings: []importFeeding{
 		{Start: naraNow, End: naraNow, Type: "breast milk", Method: "bottle"},
 		{Start: naraNow, End: naraNow, Type: "not a type", Method: "bottle"}, // violates the CHECK constraint
 	}}
 	// The error must come from the second feeding, after rows were written.
-	if _, err := insertNaraPlan(context.Background(), db, naraChild{FirstName: "Rosa", BirthDate: "2026-08-09"}, p, false); err == nil || !strings.Contains(err.Error(), "insert feeding") {
+	if _, err := insertImportPlan(context.Background(), db, importChild{FirstName: "Rosa", BirthDate: "2026-08-09"}, p, false); err == nil || !strings.Contains(err.Error(), "insert feeding") {
 		t.Fatalf("got %v, want the feeding insert to fail", err)
 	}
-	if c, f := naraCount(t, db, `SELECT count(*) FROM children`), naraCount(t, db, `SELECT count(*) FROM feedings`); c != 0 || f != 0 {
+	if c, f := importCount(t, db, `SELECT count(*) FROM children`), importCount(t, db, `SELECT count(*) FROM feedings`); c != 0 || f != 0 {
 		t.Errorf("left behind %d children, %d feedings", c, f)
 	}
 }
@@ -1168,33 +1106,6 @@ func naraMultipart(t *testing.T, path, csv string, fields map[string]string) *ht
 	return req
 }
 
-// naraJSON reads a decoded JSON value by path ("stats.feedings",
-// "rejected.0.code"), failing the test instead of panicking when it's
-// missing or has another type.
-func naraJSON[T any](t *testing.T, v any, path string) T {
-	t.Helper()
-	cur := v
-	for _, part := range strings.Split(path, ".") {
-		switch node := cur.(type) {
-		case map[string]any:
-			cur = node[part]
-		case []any:
-			i, err := strconv.Atoi(part)
-			if err != nil || i < 0 || i >= len(node) {
-				t.Fatalf("%s: no index %q in a list of %d", path, part, len(node))
-			}
-			cur = node[i]
-		default:
-			t.Fatalf("%s: can't index %T", path, cur)
-		}
-	}
-	out, ok := cur.(T)
-	if !ok {
-		t.Fatalf("%s is %T (%v)", path, cur, cur)
-	}
-	return out
-}
-
 func TestNaraHandler(t *testing.T) {
 	db := setupDB(t)
 	h := NewNaraImportHandler(db, &config.Config{UnitSystem: "metric"})
@@ -1217,7 +1128,7 @@ func TestNaraHandler(t *testing.T) {
 		}
 		return rec.Code, out
 	}
-	countChildren := func(t *testing.T) int { return naraCount(t, db, `SELECT count(*) FROM children`) }
+	countChildren := func(t *testing.T) int { return importCount(t, db, `SELECT count(*) FROM children`) }
 	// 2026-09-17T02:00Z: still the 16th in Vancouver, the 17th in UTC.
 	lateGrowth := nrow{"Type": "Growth", "Start Date/time (Epoch)": "1789610400000", "[Growth] Weight": "4", "[Growth] Weight Unit": "KG"}
 	export := naraExport(t, naraHeader,
@@ -1234,13 +1145,13 @@ func TestNaraHandler(t *testing.T) {
 	// The summary fields that render the export's rows that aren't entries.
 	checkSummary := func(t *testing.T, out map[string]any) {
 		t.Helper()
-		if naraJSON[float64](t, out, "warning_count") != 1 || naraJSON[string](t, out, "warnings.0.code") != "milk_type_unknown" ||
-			naraJSON[float64](t, out, "solid_feeds") != 1 || naraJSON[float64](t, out, "as_notes.Routine") != 1 ||
-			naraJSON[float64](t, out, "skipped.Postpartum Mood") != 1 {
+		if importJSON[float64](t, out, "warning_count") != 1 || importJSON[string](t, out, "warnings.0.code") != "milk_type_unknown" ||
+			importJSON[float64](t, out, "solid_feeds") != 1 || importJSON[float64](t, out, "as_notes.Routine") != 1 ||
+			importJSON[float64](t, out, "skipped.Postpartum Mood") != 1 {
 			t.Errorf("summary %v", out)
 		}
-		if naraJSON[float64](t, out, "duplicate_pumping.count") != 0 || len(naraJSON[[]any](t, out, "duplicate_pumping.children")) != 0 ||
-			naraJSON[bool](t, out, "duplicate_pumping.included") {
+		if importJSON[float64](t, out, "duplicate_pumping.count") != 0 || len(importJSON[[]any](t, out, "duplicate_pumping.children")) != 0 ||
+			importJSON[bool](t, out, "duplicate_pumping.included") {
 			t.Errorf("duplicate_pumping %v", out["duplicate_pumping"])
 		}
 	}
@@ -1266,12 +1177,12 @@ func TestNaraHandler(t *testing.T) {
 		if code != http.StatusOK || out["status"] != "preview" || countChildren(t) != 0 {
 			t.Fatalf("status %d body %v children %d", code, out, countChildren(t))
 		}
-		if naraJSON[string](t, out, "profile.name") != "Rosa" || naraJSON[string](t, out, "profile.birth_date") != "2026-08-09" ||
-			naraJSON[string](t, out, "profile.sex") != "female" {
+		if importJSON[string](t, out, "profile.name") != "Rosa" || importJSON[string](t, out, "profile.birth_date") != "2026-08-09" ||
+			importJSON[string](t, out, "profile.sex") != "female" {
 			t.Errorf("profile %v", out["profile"])
 		}
-		if naraJSON[string](t, out, "units.volume") != "oz" || naraJSON[string](t, out, "units.weight") != "lb" ||
-			naraJSON[string](t, out, "units.length") != "in" || naraJSON[string](t, out, "units.temperature") != "°F" {
+		if importJSON[string](t, out, "units.volume") != "oz" || importJSON[string](t, out, "units.weight") != "lb" ||
+			importJSON[string](t, out, "units.length") != "in" || importJSON[string](t, out, "units.temperature") != "°F" {
 			t.Errorf("units %v", out["units"])
 		}
 		checkSummary(t, out)
@@ -1311,7 +1222,7 @@ func TestNaraHandler(t *testing.T) {
 	t.Run("nothing importable creates no child", func(t *testing.T) {
 		csv := naraExport(t, naraHeader, row("Diaper", "[Diaper] Type", "Sparkly"), row("Diaper", "[Diaper] Type", "Sparkly"))
 		code, out := serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Rosa", "birth_date": "2026-08-09"})
-		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" || naraJSON[float64](t, out, "rejected_count") != 2 || countChildren(t) != 0 {
+		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" || importJSON[float64](t, out, "rejected_count") != 2 || countChildren(t) != 0 {
 			t.Errorf("status %d body %v children %d", code, out, countChildren(t))
 		}
 	})
@@ -1325,18 +1236,18 @@ func TestNaraHandler(t *testing.T) {
 			t.Fatalf("status %d body %v", code, out)
 		}
 		for _, k := range []string{"feedings", "sleep", "changes", "pumping", "weight", "height", "head_circumference", "temperature", "medications", "milestones", "notes"} {
-			naraJSON[float64](t, out, "stats."+k)
+			importJSON[float64](t, out, "stats."+k)
 		}
-		if naraJSON[float64](t, out, "stats.feedings") != 3 || naraJSON[float64](t, out, "stats.milestones") != 1 ||
-			naraJSON[float64](t, out, "stats.notes") != 1 || naraJSON[float64](t, out, "rejected_count") != 1 {
+		if importJSON[float64](t, out, "stats.feedings") != 3 || importJSON[float64](t, out, "stats.milestones") != 1 ||
+			importJSON[float64](t, out, "stats.notes") != 1 || importJSON[float64](t, out, "rejected_count") != 1 {
 			t.Errorf("body %v", out)
 		}
 		checkSummary(t, out)
-		if naraJSON[string](t, out, "rejected.0.code") != "unknown_diaper_type" || naraJSON[string](t, out, "rejected.0.value") != "Sparkly" ||
-			naraJSON[float64](t, out, "rejected.0.line") != 3 {
+		if importJSON[string](t, out, "rejected.0.code") != "unknown_diaper_type" || importJSON[string](t, out, "rejected.0.value") != "Sparkly" ||
+			importJSON[float64](t, out, "rejected.0.line") != 3 {
 			t.Errorf("rejection %v", out["rejected"])
 		}
-		childID := naraJSON[float64](t, out, "child_id")
+		childID := importJSON[float64](t, out, "child_id")
 		// The baby's details are the form's, trimmed.
 		var child string
 		if err := db.Get(&child, `SELECT first_name||'/'||last_name||'/'||birth_date::text||'/'||coalesce(sex, '') FROM children WHERE id=$1`, childID); err != nil ||
@@ -1361,7 +1272,7 @@ func TestNaraHandler(t *testing.T) {
 			t.Fatalf("status %d body %v", code, out)
 		}
 		var date string
-		if err := db.Get(&date, `SELECT date::text FROM weight WHERE child_id=$1`, naraJSON[float64](t, out, "child_id")); err != nil || date != "2026-09-17" {
+		if err := db.Get(&date, `SELECT date::text FROM weight WHERE child_id=$1`, importJSON[float64](t, out, "child_id")); err != nil || date != "2026-09-17" {
 			t.Errorf("weight date %q (%v), want the UTC date", date, err)
 		}
 	})
@@ -1373,38 +1284,38 @@ func TestNaraHandler(t *testing.T) {
 		}
 		// By default the session is reported and left out.
 		code, out := serve(t, "/api/import/nara/preview", csv, nil)
-		if code != http.StatusOK || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
-			naraJSON[string](t, out, "duplicate_pumping.children.0") != "Ana" || naraJSON[bool](t, out, "duplicate_pumping.included") ||
-			naraJSON[float64](t, out, "stats.pumping") != 0 {
+		if code != http.StatusOK || importJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
+			importJSON[string](t, out, "duplicate_pumping.children.0") != "Ana" || importJSON[bool](t, out, "duplicate_pumping.included") ||
+			importJSON[float64](t, out, "stats.pumping") != 0 {
 			t.Errorf("preview %d %v", code, out)
 		}
 		// Empty issue lists are [], not null.
-		if len(naraJSON[[]any](t, out, "rejected")) != 0 || len(naraJSON[[]any](t, out, "warnings")) != 0 {
+		if len(importJSON[[]any](t, out, "rejected")) != 0 || len(importJSON[[]any](t, out, "warnings")) != 0 {
 			t.Errorf("issues %v %v", out["rejected"], out["warnings"])
 		}
 		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09"})
 		if code != http.StatusUnprocessableEntity || out["code"] != "nothing_to_import" ||
-			naraJSON[float64](t, out, "duplicate_pumping.count") != 1 || !strings.Contains(naraJSON[string](t, out, "error"), "already saved for Ana (") {
+			importJSON[float64](t, out, "duplicate_pumping.count") != 1 || !strings.Contains(importJSON[string](t, out, "error"), "already saved for Ana (") {
 			t.Errorf("skipping the duplicate: %d %v", code, out)
 		}
 		// Asked to, the preview counts it and the import takes it.
 		code, out = serve(t, "/api/import/nara/preview", csv, map[string]string{"duplicate_pumping": "import"})
-		if code != http.StatusOK || !naraJSON[bool](t, out, "duplicate_pumping.included") || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
-			naraJSON[float64](t, out, "stats.pumping") != 1 {
+		if code != http.StatusOK || !importJSON[bool](t, out, "duplicate_pumping.included") || importJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
+			importJSON[float64](t, out, "stats.pumping") != 1 {
 			t.Errorf("preview with the duplicate: %d %v", code, out)
 		}
 		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Bo", "birth_date": "2026-08-09", "duplicate_pumping": "import"})
-		if code != http.StatusOK || !naraJSON[bool](t, out, "duplicate_pumping.included") || naraJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
-			naraJSON[float64](t, out, "stats.pumping") != 1 {
+		if code != http.StatusOK || !importJSON[bool](t, out, "duplicate_pumping.included") || importJSON[float64](t, out, "duplicate_pumping.count") != 1 ||
+			importJSON[float64](t, out, "stats.pumping") != 1 {
 			t.Errorf("importing the duplicate: %d %v", code, out)
 		}
 		// Both children hold it now, and both are named.
 		code, out = serve(t, "/api/import/nara/preview", csv, nil)
-		if children := naraJSON[[]any](t, out, "duplicate_pumping.children"); code != http.StatusOK || len(children) != 2 || children[0] != "Ana" || children[1] != "Bo" {
+		if children := importJSON[[]any](t, out, "duplicate_pumping.children"); code != http.StatusOK || len(children) != 2 || children[0] != "Ana" || children[1] != "Bo" {
 			t.Errorf("holders: %d %v", code, out["duplicate_pumping"])
 		}
 		code, out = serve(t, "/api/import/nara", csv, map[string]string{"first_name": "Cy", "birth_date": "2026-08-09"})
-		if code != http.StatusUnprocessableEntity || !strings.Contains(naraJSON[string](t, out, "error"), "already saved for Ana and Bo (") {
+		if code != http.StatusUnprocessableEntity || !strings.Contains(importJSON[string](t, out, "error"), "already saved for Ana and Bo (") {
 			t.Errorf("third baby: %d %v", code, out)
 		}
 	})
@@ -1415,9 +1326,9 @@ func TestNaraHandler(t *testing.T) {
 			rows = append(rows, row("Diaper", "[Diaper] Type", "Sparkly"), row("Bottle Feed", "[Bottle Feed] Volume", "60", "[Bottle Feed] Volume Unit", "ML"))
 		}
 		code, out := serve(t, "/api/import/nara/preview", naraExport(t, naraHeader, rows...), nil)
-		rejected, warnings := naraJSON[[]any](t, out, "rejected"), naraJSON[[]any](t, out, "warnings")
-		if code != http.StatusOK || len(rejected) != naraIssueCap || naraJSON[float64](t, out, "rejected_count") != 60 ||
-			len(warnings) != naraIssueCap || naraJSON[float64](t, out, "warning_count") != 60 {
+		rejected, warnings := importJSON[[]any](t, out, "rejected"), importJSON[[]any](t, out, "warnings")
+		if code != http.StatusOK || len(rejected) != importIssueCap || importJSON[float64](t, out, "rejected_count") != 60 ||
+			len(warnings) != importIssueCap || importJSON[float64](t, out, "warning_count") != 60 {
 			t.Errorf("status %d: rejected %d of %v, warnings %d of %v", code, len(rejected), out["rejected_count"], len(warnings), out["warning_count"])
 		}
 	})
@@ -1452,7 +1363,7 @@ func TestNaraHandlerDatabaseErrors(t *testing.T) {
 
 func TestNaraHandlerRejectsOversizedUploads(t *testing.T) {
 	h := NewNaraImportHandler(nil, &config.Config{UnitSystem: "metric"})
-	req := naraMultipart(t, "/api/import/nara/preview", strings.Repeat("x", naraMaxUpload+1), nil)
+	req := naraMultipart(t, "/api/import/nara/preview", strings.Repeat("x", importMaxUpload+1), nil)
 	req = req.WithContext(context.WithValue(req.Context(), middleware.IsAdminKey, true))
 	rec := httptest.NewRecorder()
 	h.Preview(rec, req)

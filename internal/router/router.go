@@ -61,6 +61,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	backupH := handlers.NewBackupHandler(cfg, db)
 	bbImportH := handlers.NewBBImportHandler(db)
 	naraImportH := handlers.NewNaraImportHandler(db, cfg)
+	nighpImportH := handlers.NewNighpImportHandler(db, cfg)
 	domainH := handlers.NewDomainHandler(db)
 	systemH := handlers.NewSystemHandler()
 
@@ -358,6 +359,10 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			// than behind the 1 MB JSON body limit.
 			r.Post("/api/import/nara/preview", naraImportH.Preview)
 			r.Post("/api/import/nara", naraImportH.Import)
+
+			// Nighp Baby Tracker import: a zip or CSV upload, as above.
+			r.Post("/api/import/nighp-babytracker/preview", nighpImportH.Preview)
+			r.Post("/api/import/nighp-babytracker", nighpImportH.Import)
 		})
 	})
 

@@ -3,11 +3,11 @@ import { render, screen, cleanup, fireEvent, waitFor, act } from "@testing-libra
 import { I18nProvider } from "../utils/i18n";
 
 vi.mock("../api", () => ({
-  api: { previewNaraImport: vi.fn(), importFromNara: vi.fn() },
+  api: { previewNaraImport: vi.fn(), importFromNara: vi.fn(), previewNighpImport: vi.fn(), importFromNighp: vi.fn() },
 }));
 
 const { api } = await import("../api");
-const { default: NaraImport } = await import("./NaraImport");
+const { default: DataImport } = await import("./DataImport");
 
 const stats = (over = {}) => ({
   feedings: 0, sleep: 0, changes: 0, pumping: 0, weight: 0, height: 0, head_circumference: 0,
@@ -45,7 +45,7 @@ afterEach(() => {
 function renderImport(props = {}) {
   return render(
     <I18nProvider>
-      <NaraImport unitSystem="metric" onBack={() => {}} {...props} />
+      <DataImport unitSystem="metric" onBack={() => {}} {...props} />
     </I18nProvider>,
   );
 }
@@ -55,7 +55,7 @@ function pick(name) {
   fireEvent.change(input, { target: { files: [new File(["x"], name, { type: "text/csv" })] } });
 }
 
-describe("NaraImport", () => {
+describe("DataImport", () => {
   it("prefills the baby from the export and follows a newly picked export", async () => {
     api.previewNaraImport
       .mockResolvedValueOnce(summary({ profile: { name: "Rosa", birth_date: "2026-08-09", sex: "female" } }))
@@ -395,5 +395,38 @@ describe("NaraImport", () => {
     await screen.findByText("Registrazioni non leggibili: 2");
     expect(screen.getByText("Riga 3 (Diaper): la riga ha 1 invece di 42 colonne")).toBeTruthy();
     expect(screen.getByText("…e un'altra")).toBeTruthy();
+  });
+
+  it("imports a Nighp Baby Tracker export from several files", async () => {
+    api.previewNighpImport.mockResolvedValue(summary({ stats: stats({ sleep: 2 }), profile: { name: "Rosa" }, date_order_assumed: true }));
+    api.importFromNighp.mockResolvedValue(summary({ stats: stats({ sleep: 2 }) }));
+    renderImport({ source: "nighp" });
+
+    expect(screen.getByRole("heading", { name: "Import from Baby Tracker (Nighp)" })).toBeTruthy();
+    const input = document.querySelector('input[type="file"]');
+    expect(input.multiple).toBe(true);
+    expect(input.accept).toContain(".zip");
+    const files = [new File(["x"], "Rosa_sleep.csv", { type: "text/csv" }), new File(["y"], "pump.csv", { type: "text/csv" })];
+    fireEvent.change(input, { target: { files } });
+
+    await waitFor(() => expect(screen.getByLabelText("First Name").value).toBe("Rosa"));
+    expect(api.previewNighpImport).toHaveBeenCalledWith(files, "metric");
+    expect(api.previewNaraImport).not.toHaveBeenCalled();
+    expect(screen.getByText("Rosa_sleep.csv, pump.csv")).toBeTruthy();
+    // Its own nap note, and the warning that the date order was a guess.
+    expect(screen.getByText(/^Baby Tracker doesn't mark naps/)).toBeTruthy();
+    expect(screen.getByText(/dates were read as month\/day\/year/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Birth Date"), { target: { value: "2026-06-16" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start Import" }));
+    await screen.findByText("Import Complete!");
+    expect(api.importFromNighp).toHaveBeenCalledWith(files, expect.objectContaining({ firstName: "Rosa", birthDate: "2026-06-16", unitSystem: "metric" }));
+  });
+
+  it("explains an export that holds more than one baby", async () => {
+    api.previewNighpImport.mockRejectedValue(Object.assign(new Error("multiple"), { status: 400, code: "multiple_babies", detail: "Leo, Rosa" }));
+    renderImport({ source: "nighp" });
+    pick("export.zip");
+    expect((await screen.findByRole("alert")).textContent).toBe("This export holds more than one baby (Leo, Rosa). Upload one baby's files at a time.");
   });
 });

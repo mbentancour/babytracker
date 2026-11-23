@@ -1066,6 +1066,49 @@ The preview's `profile` is `{"name": "Emma", "birth_date": "2026-08-09", "sex": 
 
   401 and 403 come from the auth middleware, as `{"error": "..."}` without a code.
 
+
+---
+
+## Baby Tracker (Nighp) Import (admin only)
+
+Import an export from the Baby Tracker app by Nighp Software into a new child. The app exports a zip with one CSV per activity; upload the zip, or any of the CSVs inside it, as one or more `file` fields. Limits and timeouts are as for the Nara import, and an upload may hold at most 100 files and 50 MB of CSV once unzipped (20 MB per file).
+
+```
+POST /api/import/nighp-babytracker/preview
+POST /api/import/nighp-babytracker
+Authorization: Bearer <admin_token>
+Content-Type: multipart/form-data
+
+file=<export.zip>         (repeatable: a zip and/or .csv files)
+first_name=Emma           (import only; last_name, birth_date and sex as for Nara)
+birth_date=2026-08-09
+unit_system=metric        (optional, as for Nara)
+timezone=Europe/Madrid    (optional IANA name; omitted or unknown means UTC)
+baby=Emma                 (only when the upload holds several babies; see below)
+date_order=mdy            (optional: mdy or dmy; see below)
+duplicate_pumping=import  (optional, as for Nara)
+```
+
+- **Files.** Each file's activity is recognised from its header, so renamed files still import. Expressed-milk and formula bottles share a header and are told apart by `expressed` or `formula` in the file name. Files that aren't recognised are not imported and are counted in `skipped` under their file name.
+- **Units.** The export names its units in the headers (`Amount (oz.)`, `Weight (lbs.)`, `Length (inches)`), and values are converted from those to `unit_system`. A value whose header names no unit is rejected rather than guessed.
+- **Times.** The export writes local times with no time zone (`6/17/2026 17:15`, `7/7/26 11:04 PM`), so they are read in `timezone`.
+- **Day or month first.** The export doesn't say whether dates are month/day or day/month; it depends on the phone's region. Any date with a number over 12 settles it. If none does, month first is assumed and the response has `"date_order_assumed": true`. If dates point both ways the upload is refused with `mixed_date_formats`. Send `date_order` to decide it yourself.
+- **One baby at a time.** A baby's rows carry its name. If the upload holds more than one baby it is refused with `multiple_babies` (the names are in `detail`) unless `baby` names the one to import. Pumping is logged for the family and has no baby, so it is imported with every baby and handled like Nara's family pumping (`duplicate_pumping`).
+
+What is imported:
+
+| File | Imported as |
+|---|---|
+| `<Baby>_nursing.csv` | Breast milk feeding lasting left + right minutes (else the total); the method is left, right or both breasts from the timed sides, else from Start side |
+| `<Baby>_expressed.csv`, `<Baby>_formula.csv` | Bottle feeding of breast milk or formula with its amount |
+| `<Baby>_sleep.csv` | Sleep. Naps aren't marked, so sleeps starting 07:00–19:00 local time and shorter than 4 hours are saved as naps |
+| `<Baby>_diaper.csv` | Diaper change: Wet, Dirty (solid) or Mixed (both). A Dry status becomes a note |
+| `<Baby>_growth.csv` | Weight, height and head circumference, dated in `timezone`, rounded to 0.01 (weight) and 0.1 (lengths) |
+| `pump.csv` | Pumping session lasting the total minutes (else left + right), with the total amount (else left + right). Its note becomes a separate note |
+
+The formats were worked out from one sample export; the app publishes no specification. Only the files above are imported.
+
+The response has the Nara import's shape, plus `babies` (the names found), `date_order` (`mdy` or `dmy`) and `date_order_assumed`. In `rejected` and `warnings`, `type` is the file name and `line` is the line in that file. Errors are as for Nara, plus `not_nighp_export`, `multiple_babies`, `unknown_baby`, `mixed_date_formats` and `bad_zip`.
 ---
 
 ## Password Management

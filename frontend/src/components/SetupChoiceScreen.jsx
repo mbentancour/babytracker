@@ -9,6 +9,7 @@ import { useI18n } from "../utils/i18n";
 //   - "fresh"   → create admin, then add a first baby
 //   - "import"  → create admin, then run the Baby Buddy import wizard
 //   - "nara"    → create admin, then upload a Nara Baby CSV export
+//   - "nighp"   → create admin, then upload a Baby Tracker (Nighp) export
 //   - "restore" → upload backup (no account creation — credentials come from
 //                 the archive's users table)
 // The parent stores the non-restore intent and forwards it to the post-auth
@@ -61,6 +62,13 @@ export default function SetupChoiceScreen({ onCreateAccount, onImport, onRestore
             description={t("onboarding.importNaraDesc")}
             color="#e17055"
             onClick={() => onImport("nara")}
+          />
+          <SetupOption
+            icon={<Icons.Download />}
+            title={t("onboarding.importNighp")}
+            description={t("onboarding.importNighpDesc")}
+            color="#0984e3"
+            onClick={() => onImport("nighp")}
           />
         </div>
       </div>
