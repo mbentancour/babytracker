@@ -269,7 +269,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
       >
         {/* Feeding Timeline */}
         {isFeatureEnabled("feeding") && <div className="fade-in fade-in-3">
-          <SectionCard title={t("overview.recentFeedings")} icon={<Icons.Bottle />} color={colors.feeding}>
+          <SectionCard fill title={t("overview.recentFeedings")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingTimeline.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.feedings ? feedingTimeline : feedingTimeline.slice(0, COLLAPSED_COUNT)).map((f, i, arr) => (
@@ -297,7 +297,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {weeklyFeedings.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "feeding", weeklyFeedings, "amount")} onClick={blockSyntheticChartClick}>
+                <div style={{ marginTop: "auto", paddingTop: 16, height: 136, boxSizing: "border-box" }} onTouchEnd={(event) => handleBarTouchEnd(event, "feeding", weeklyFeedings, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={weeklyFeedings} barSize={18} onClick={(data) => handleChartClick(data, "feeding", weeklyFeedings, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -326,6 +326,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         {/* Sleep */}
         {isFeatureEnabled("sleep") && <div className="fade-in fade-in-4">
           <SectionCard
+            fill
             title={t("overview.sleepPattern")}
             icon={<Icons.Moon />}
             color={colors.sleep}
@@ -362,7 +363,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {sleepByDay.some((d) => d.hours > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "sleep", sleepByDay, "hours")} onClick={blockSyntheticChartClick}>
+                <div style={{ marginTop: "auto", paddingTop: 16, height: 136, boxSizing: "border-box" }} onTouchEnd={(event) => handleBarTouchEnd(event, "sleep", sleepByDay, "hours")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={sleepByDay} barSize={18} onClick={(data) => handleChartClick(data, "sleep", sleepByDay, "hours")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -391,6 +392,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         {/* Diapers */}
         {isFeatureEnabled("diaper") && <div className="fade-in fade-in-5">
           <SectionCard
+            fill
             title={t("overview.diaperChanges")}
             icon={<Icons.Droplet />}
             color={colors.diaper}
@@ -467,7 +469,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {diapersByDay.some((d) => d.count > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "diaper", diapersByDay, "count")} onClick={blockSyntheticChartClick}>
+                <div style={{ marginTop: "auto", paddingTop: 16, height: 136, boxSizing: "border-box" }} onTouchEnd={(event) => handleBarTouchEnd(event, "diaper", diapersByDay, "count")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={diapersByDay} barSize={18} onClick={(data) => handleChartClick(data, "diaper", diapersByDay, "count")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
@@ -548,7 +550,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
         {/* Pumping — data-gated like temperature/medications so families who
             don't pump (but leave the feature on) don't carry an empty card */}
         {isFeatureEnabled("pumping") && (pumpingTimeline.length > 0 || pumpingByDay.some((d) => d.amount > 0)) && <div className="fade-in fade-in-6">
-          <SectionCard title={t("overview.recentPumping")} icon={<Icons.Bottle />} color={colors.pumping}>
+          <SectionCard fill title={t("overview.recentPumping")} icon={<Icons.Bottle />} color={colors.pumping}>
             {pumpingTimeline.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {(expanded.pumping ? pumpingTimeline : pumpingTimeline.slice(0, COLLAPSED_COUNT)).map((p, i, arr) => (
@@ -576,7 +578,7 @@ export default function OverviewTab({ feedings, weeklyFeedings: weeklyFeedingsRa
             )}
             {pumpingByDay.some((d) => d.amount > 0) && (
               <>
-                <div style={{ marginTop: 16, height: 120 }} onTouchEnd={(event) => handleBarTouchEnd(event, "pumping", pumpingByDay, "amount")} onClick={blockSyntheticChartClick}>
+                <div style={{ marginTop: "auto", paddingTop: 16, height: 136, boxSizing: "border-box" }} onTouchEnd={(event) => handleBarTouchEnd(event, "pumping", pumpingByDay, "amount")} onClick={blockSyntheticChartClick}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={pumpingByDay} barSize={18} onClick={(data) => handleChartClick(data, "pumping", pumpingByDay, "amount")}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
