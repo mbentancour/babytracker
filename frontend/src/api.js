@@ -78,7 +78,9 @@ export function setOnAuthRequired(callback) {
 // same promise.
 let refreshPromise = null;
 
-function refreshAccessToken() {
+// Exported for the live-update stream (hooks/useBabyData.js), which makes its
+// own request and has to renew an expired access token the same way.
+export function refreshAccessToken() {
   if (!refreshPromise) {
     refreshPromise = doRefresh().finally(() => {
       refreshPromise = null;

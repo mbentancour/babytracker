@@ -8,6 +8,7 @@ import (
 
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jmoiron/sqlx"
+	"github.com/mbentancour/babytracker/internal/config"
 	"github.com/mbentancour/babytracker/internal/crypto"
 	"github.com/mbentancour/babytracker/internal/middleware"
 	"github.com/mbentancour/babytracker/internal/models"
@@ -29,15 +30,16 @@ const liveHeartbeat = 25 * time.Second
 // keep polling as well, so a missed message or a dropped stream costs at most
 // one poll interval.
 type LiveHandler struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	cfg *config.Config
 
 	mu     sync.Mutex
 	subs   map[chan struct{}]int // each open stream, and the user it belongs to
 	closed bool
 }
 
-func NewLiveHandler(db *sqlx.DB) *LiveHandler {
-	return &LiveHandler{db: db, subs: make(map[chan struct{}]int)}
+func NewLiveHandler(db *sqlx.DB, cfg *config.Config) *LiveHandler {
+	return &LiveHandler{db: db, cfg: cfg, subs: make(map[chan struct{}]int)}
 }
 
 // Notify wakes every connected screen.
@@ -166,18 +168,33 @@ func (h *LiveHandler) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// viewer says whose screen is asking for the stream, which decides what it is
+// woken for, or 0 when the request is not signed in.
+//
+// The refresh_token cookie comes first, as for /api/display/events. A browser
+// that has no cookie that still counts (inside the Home Assistant panel it is
+// often dropped, or a stale one is kept) signs in with its access token
+// instead, checked the way every other request's is. `until` is then when
+// that token expires and the stream has to end; it is zero for a cookie,
+// whose session outlasts any one stream.
+func (h *LiveHandler) viewer(r *http.Request) (userID int, until time.Time) {
+	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
+		if token, err := models.GetRefreshTokenByHash(h.db, crypto.HashRefreshToken(cookie.Value)); err == nil {
+			return token.UserID, time.Time{}
+		}
+	}
+	// A token with no expiry is never issued; one would make a stream that
+	// never has to sign in again, so it is not taken here.
+	if claims, err := middleware.BearerClaims(h.cfg.JWTSecret, r); err == nil && claims.ExpiresAt != nil {
+		return claims.UserID, claims.ExpiresAt.Time
+	}
+	return 0, time.Time{}
+}
+
 // Events is the stream itself (server-sent events).
 // GET /api/events
 func (h *LiveHandler) Events(w http.ResponseWriter, r *http.Request) {
-	// Authenticated by the refresh_token cookie, like /api/display/events:
-	// EventSource cannot send an Authorization header. The token also says
-	// whose screen this is, which decides what it is woken for.
-	userID := 0
-	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
-		if token, err := models.GetRefreshTokenByHash(h.db, crypto.HashRefreshToken(cookie.Value)); err == nil {
-			userID = token.UserID
-		}
-	}
+	userID, until := h.viewer(r)
 	if userID == 0 {
 		pagination.WriteError(w, http.StatusUnauthorized, "authentication required")
 		return
@@ -217,6 +234,16 @@ func (h *LiveHandler) Events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A stream signed in by access token lasts as long as the token does, so
+	// it cannot outlive the sign-in it was opened with. The client opens the
+	// next one with its next token. (A nil channel is never ready.)
+	var expired <-chan time.Time
+	if !until.IsZero() {
+		timer := time.NewTimer(time.Until(until))
+		defer timer.Stop()
+		expired = timer.C
+	}
+
 	heartbeat := time.NewTicker(liveHeartbeat)
 	defer heartbeat.Stop()
 	for {
@@ -229,6 +256,8 @@ func (h *LiveHandler) Events(w http.ResponseWriter, r *http.Request) {
 			if !send(": keep-alive\n\n") {
 				return
 			}
+		case <-expired:
+			return
 		case <-r.Context().Done():
 			return
 		}

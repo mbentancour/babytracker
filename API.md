@@ -249,7 +249,18 @@ The web app keeps one event stream open, so a change made on one device shows on
 GET /api/events
 ```
 
-This is a Server-Sent Events stream. It is authenticated by the `refresh_token` cookie set at login (an `EventSource` cannot send an `Authorization` header), so it is for browser sessions; an API token is not accepted. The messages carry no data:
+This is a Server-Sent Events stream for browser sessions. It is signed in by either of:
+
+- the `refresh_token` cookie set at login, or
+- the access token, as `Authorization: Bearer <access_token>`, for a browser that has no cookie that still counts. Inside the Home Assistant ingress panel the cookie is often missing.
+
+The cookie is looked at first. An API token (`Authorization: Token`) is not accepted, and a request with neither gets `401`.
+
+A stream signed in by access token ends when that token expires. The client then renews the token as for any other request and opens the stream again. A stream signed in by the cookie stays open.
+
+An `EventSource` cannot send an `Authorization` header, so a client that signs in by token reads the stream with `fetch` instead, as the web app does, and reconnects by itself.
+
+The messages carry no data:
 
 ```
 data: {"connected":true}
@@ -257,11 +268,11 @@ data: {"connected":true}
 data: {"changed":true}
 ```
 
-`connected` is sent once when the stream opens. `changed` follows a successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup.
+`connected` is sent once each time a stream opens. `changed` follows a successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup.
 
 Who receives it depends on what was written. A change to one child's data goes to the screens of the users who can see that child, admins included. A change that is not tied to one child (settings, users, tags, gallery photos, the list of children) goes to everyone. The message does not say what changed: the client refetches through the normal endpoints, which apply its permissions as usual. Writes in quick succession may arrive as one message, and a comment line (`: keep-alive`) is sent every 25 seconds.
 
-The stream is an addition to polling, not a replacement. A client that cannot open it (the Home Assistant ingress panel, where the cookie is often missing) or that loses it is as fresh as its poll interval.
+The stream is an addition to polling, not a replacement. A client that cannot open it or that loses it is as fresh as its poll interval. After a stream has been reopened, a client should refetch once, because changes made in between were not announced to it.
 
 ---
 

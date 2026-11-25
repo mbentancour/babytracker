@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { api } from "../api";
+import { api, getAccessToken, refreshAccessToken } from "../api";
 import { getMockData } from "../utils/mockData";
 import { localInputToUTC } from "../utils/datetime";
 
@@ -40,40 +40,156 @@ const emptyPage = { results: [], count: 0 };
 // recent a fetch has to be for that refetch to be skipped.
 const LIVE_DELAY_MS = 300;
 const LIVE_FRESH_MS = 1500;
+// How long to wait before opening the stream again, by how many times in a
+// row it has failed or ended.
+const LIVE_RETRY_MS = [1000, 2000, 5000, 10000, 30000];
+// A stream that stayed open this long was a working one, and the next failure
+// starts those waits from the top. Starting over as soon as a stream opens
+// would let a server or proxy that accepts it and drops it at once have this
+// screen reconnect, and refetch, every second.
+const LIVE_SETTLED_MS = 10000;
+// The server sends a line every 25 seconds even when nothing happens. A
+// stream that has said nothing for this long is dead without having been
+// closed (a proxy can do that), so it is dropped and opened again.
+const LIVE_SILENCE_MS = 70000;
 
-// listenForChanges opens the server's live-update stream (/api/events) and
-// refetches when it says something changed, so a feed logged on one phone
+// listenForChanges keeps the server's live-update stream (/api/events) open
+// and refetches when it says something changed, so a feed logged on one phone
 // shows on the other within a moment instead of at its next poll.
 //
-// The poll keeps running underneath: where the stream can't connect (it is
-// authenticated by cookie, which the Home Assistant panel doesn't have) or
-// drops, the screen is simply as fresh as it was before this existed.
+// The stream is read with fetch, not EventSource, because the request has to
+// carry the access token: inside the Home Assistant panel the browser often
+// has no session cookie to sign in with, and EventSource cannot send a
+// header. Sent like every other request (see request() in api.js), it is
+// accepted with either.
 //
-// Returns a function that closes the stream.
-export function listenForChanges(refetch, lastFetchRef, EventSourceImpl = globalThis.EventSource) {
-  if (typeof EventSourceImpl !== "function") return () => {};
-  let timer = null;
+// fetch does not reconnect, so this does: after the stream ends or fails it
+// is opened again, a little later each time. The server ends a stream signed
+// in by token when that token expires. The next request is then refused, the
+// token is renewed the way any request renews it, and the stream is reopened.
+// Refused even with a fresh token, or answered with something that is not a
+// stream, it is left alone until the app is loaded again.
+//
+// The poll keeps running underneath, so wherever the stream cannot be had the
+// screen is simply as fresh as it was before this existed.
+//
+// Returns a function that closes the stream. The third argument is for tests.
+export function listenForChanges(refetch, lastFetchRef, {
+  fetch: fetchImpl = globalThis.fetch,
+  getToken = getAccessToken,
+  refresh = refreshAccessToken,
+} = {}) {
+  if (typeof fetchImpl !== "function" || typeof AbortController !== "function" || typeof TextDecoder !== "function") {
+    return () => {};
+  }
+
+  let stopped = false;
   let first = true;
-  const source = new EventSourceImpl("./api/events");
-  source.onmessage = () => {
-    // The first message only says the stream is open; the initial fetch has
-    // just run. Later "connected" messages follow a reconnect, when changes
-    // may have been missed, so those refetch like any other.
+  let failures = 0;
+  let controller = null;
+  let refetchTimer = null;
+  let retryTimer = null;
+  let silenceTimer = null;
+
+  const onMessage = () => {
+    // The first message of the first stream only says it is open; the initial
+    // fetch has just run. A later "connected" follows a reconnect, when
+    // changes may have been missed, so it refetches like any other message.
     if (first) {
       first = false;
       return;
     }
-    clearTimeout(timer);
-    timer = setTimeout(() => {
+    clearTimeout(refetchTimer);
+    refetchTimer = setTimeout(() => {
       // The screen that made the change has already refetched after its own
       // save; fetching again a moment later would only repeat the work.
       if (Date.now() - lastFetchRef.current < LIVE_FRESH_MS) return;
       refetch();
     }, LIVE_DELAY_MS);
   };
+
+  const open = (signal) => {
+    const token = getToken();
+    return fetchImpl("./api/events", {
+      headers: { Accept: "text/event-stream", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      credentials: "include",
+      cache: "no-store",
+      signal,
+    });
+  };
+
+  // Reads a stream to its end. Messages are separated by a blank line, and a
+  // message is a block with a data line; the rest are keep-alive comments.
+  const read = async (reader, drop) => {
+    const decoder = new TextDecoder();
+    let pending = "";
+    for (;;) {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(drop, LIVE_SILENCE_MS);
+      const { done, value } = await reader.read();
+      if (done) return;
+      const blocks = (pending + decoder.decode(value, { stream: true })).split("\n\n");
+      pending = blocks.pop();
+      for (const block of blocks) {
+        if (block.split("\n").some((line) => line.startsWith("data:"))) onMessage();
+      }
+    }
+  };
+
+  const connect = async () => {
+    retryTimer = null;
+    const request = new AbortController();
+    controller = request;
+    // Whether to try again once this attempt is over. Only an answer that
+    // says there is no stream to be had here turns it off.
+    let again = true;
+    let openedAt = 0;
+    try {
+      let response = await open(request.signal);
+      if (response.status === 401) {
+        // The access token has run out. Renew it once, as any request would.
+        // If the session itself is gone there is nothing to listen with; the
+        // next ordinary request will send the user to sign in.
+        again = (await refresh()) === "ok";
+        if (!again || stopped) return;
+        response = await open(request.signal);
+      }
+      const isStream = response.ok
+        && (response.headers?.get("content-type") || "").includes("text/event-stream")
+        && typeof response.body?.getReader === "function";
+      if (!isStream) {
+        // A server that is restarting or busy is worth another try. Anything
+        // else (refused with a fresh token, an older server, a proxy's own
+        // page) would be the same answer next time.
+        again = response.status >= 500 || response.status === 429 || response.status === 408;
+        request.abort();
+        return;
+      }
+      openedAt = Date.now();
+      await read(response.body.getReader(), () => request.abort());
+    } catch {
+      // The connection dropped, the request could not be made, the token
+      // could not be renewed just now, or the stream went silent and was
+      // cut. All the same from here: try again in a while.
+    } finally {
+      clearTimeout(silenceTimer);
+      if (again && !stopped) {
+        // Whatever the next stream says first comes after a gap.
+        first = false;
+        if (openedAt && Date.now() - openedAt >= LIVE_SETTLED_MS) failures = 0;
+        retryTimer = setTimeout(connect, LIVE_RETRY_MS[Math.min(failures, LIVE_RETRY_MS.length - 1)]);
+        failures += 1;
+      }
+    }
+  };
+  connect();
+
   return () => {
-    clearTimeout(timer);
-    source.close();
+    stopped = true;
+    clearTimeout(refetchTimer);
+    clearTimeout(retryTimer);
+    clearTimeout(silenceTimer);
+    controller?.abort();
   };
 }
 

@@ -25,7 +25,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	r.Use(middleware.Logging)
 
 	// Live updates: any successful write wakes the open screens.
-	liveH := handlers.NewLiveHandler(db)
+	liveH := handlers.NewLiveHandler(db, cfg)
 	cfg.LiveSubs = liveH // main.go will call CloseAll() at shutdown
 	r.Use(liveH.Middleware)
 
@@ -135,7 +135,8 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 	// SSE for display state changes (uses cookie auth, EventSource can't send headers)
 	r.Get("/api/display/events", displayH.Events)
 
-	// SSE telling open screens to refetch after a change (same cookie auth)
+	// SSE telling open screens to refetch after a change (the same cookie, or
+	// the access token for a browser that has no cookie)
 	r.Get("/api/events", liveH.Events)
 
 	// Protected API routes (with 1MB body limit for JSON endpoints)

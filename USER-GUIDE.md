@@ -29,9 +29,8 @@ Your baby's dashboard is organized into tabs. Four are always there; **Day** and
 Settings → Preferences → Views.
 
 The screen keeps itself up to date: an entry logged on another phone or tablet
-shows up within a second or two, in every interface. Inside the Home Assistant
-panel that live connection is often unavailable; there it can take up to 30
-seconds.
+shows up within a second or two, in every interface. Where that live connection
+cannot be made, it can take up to 30 seconds.
 
 - **Overview** -- Today's summary at a glance: last feeding, last sleep, last diaper change, and any active timers.
 
