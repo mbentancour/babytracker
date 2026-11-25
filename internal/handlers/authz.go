@@ -16,9 +16,14 @@ import (
 //
 // This closes the IDOR where RBAC middleware trusts a caller-supplied
 // ?child=N while the record itself belongs to a different child.
+//
+// It also tells the live-update stream whose record is about to change (see
+// middleware.ChangeScope): an update or a delete names its record, not its
+// child, so this is where the child becomes known.
 func ensureWritable(w http.ResponseWriter, r *http.Request, db *sqlx.DB, table string, id int) bool {
 	userID := middleware.GetUserID(r.Context())
-	if err := models.EnsureRecordWritable(db, userID, table, id); err != nil {
+	childID, err := models.WritableRecordChild(db, userID, table, id)
+	if err != nil {
 		switch {
 		case errors.Is(err, models.ErrRecordNotFound):
 			pagination.WriteError(w, http.StatusNotFound, "not found")
@@ -29,6 +34,7 @@ func ensureWritable(w http.ResponseWriter, r *http.Request, db *sqlx.DB, table s
 		}
 		return false
 	}
+	middleware.NoteChangedChild(r.Context(), childID)
 	return true
 }
 

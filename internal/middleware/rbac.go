@@ -68,13 +68,35 @@ var timerActionPath = regexp.MustCompile(`^/api/timers/\d+/(pause|resume)/$`)
 func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+
+			// The child this request names, read at most once: peeking at
+			// the body means reading it whole.
+			var named requestChild
+			namedRead := false
+			namedChild := func() requestChild {
+				if !namedRead {
+					named, namedRead = childFromRequest(r), true
+				}
+				return named
+			}
+
+			// Tell the live-update stream which child a write to a
+			// child-owned resource is about (see ChangeScope), so it can
+			// wake only the people who can see that child. This comes
+			// before the admin bypass because an admin's change matters to
+			// the same people as anyone else's. A child can be named in the
+			// query string and in the body; both are noted.
+			if r.Method != http.MethodGet && featureForPath(path) != "" {
+				NoteChangedChild(r.Context(), namedChild().query)
+				NoteChangedChild(r.Context(), namedChild().body)
+			}
+
 			// Admins bypass all checks
 			if isAdmin, ok := r.Context().Value(IsAdminKey).(bool); ok && isAdmin {
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			path := r.URL.Path
 
 			// Check if this path bypasses RBAC entirely
 			for bp := range bypassPaths {
@@ -128,13 +150,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			}
 
 			// Determine which feature this request is for
-			feature := ""
-			for prefix, f := range pathFeatureMap {
-				if strings.HasPrefix(path, prefix) {
-					feature = f
-					break
-				}
-			}
+			feature := featureForPath(path)
 			if feature == "" {
 				// Unknown path — deny by default for non-admins
 				pagination.WriteError(w, http.StatusForbidden, "access denied")
@@ -144,7 +160,7 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 			userID := GetUserID(r.Context())
 
 			// Determine child ID from query param or request body
-			childID := getChildIDFromRequest(r)
+			childID := namedChild().id()
 			if childID == 0 && r.Method == http.MethodPost && timerActionPath.MatchString(path) {
 				next.ServeHTTP(w, r)
 				return
@@ -217,12 +233,45 @@ func RequireFreshAdmin(db *sqlx.DB) func(http.Handler) http.Handler {
 	}
 }
 
+// featureForPath is the feature whose permission guards a path, or "" for a
+// path that is not a child-owned resource.
+func featureForPath(path string) string {
+	for prefix, f := range pathFeatureMap {
+		if strings.HasPrefix(path, prefix) {
+			return f
+		}
+	}
+	return ""
+}
+
+// requestChild is the child a request names: in its query string, and for a
+// POST or PATCH with a JSON body in that body's "child" field. Either is 0
+// when absent or unreadable.
+type requestChild struct {
+	query, body int
+}
+
+// id is the child the access check goes by: the query's, failing that the
+// body's.
+func (c requestChild) id() int {
+	if c.query != 0 {
+		return c.query
+	}
+	return c.body
+}
+
 // getChildIDFromRequest extracts the child ID from query params or JSON body.
 func getChildIDFromRequest(r *http.Request) int {
-	// Try query parameter first
+	return childFromRequest(r).id()
+}
+
+// childFromRequest reads both places a request can name its child. Peeking
+// at the body leaves it readable for the handler.
+func childFromRequest(r *http.Request) requestChild {
+	var named requestChild
 	if c := r.URL.Query().Get("child"); c != "" {
 		if id, err := strconv.Atoi(c); err == nil {
-			return id
+			named.query = id
 		}
 	}
 
@@ -231,7 +280,7 @@ func getChildIDFromRequest(r *http.Request) int {
 		strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			return 0
+			return named
 		}
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 
@@ -239,9 +288,9 @@ func getChildIDFromRequest(r *http.Request) int {
 			Child int `json:"child"`
 		}
 		if json.Unmarshal(body, &parsed) == nil && parsed.Child > 0 {
-			return parsed.Child
+			named.body = parsed.Child
 		}
 	}
 
-	return 0
+	return named
 }

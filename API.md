@@ -257,7 +257,9 @@ data: {"connected":true}
 data: {"changed":true}
 ```
 
-`connected` is sent once when the stream opens. `changed` follows any successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup. It does not say what changed or for which child: the client refetches through the normal endpoints, which apply its permissions as usual. Writes in quick succession may arrive as one message, and a comment line (`: keep-alive`) is sent every 25 seconds.
+`connected` is sent once when the stream opens. `changed` follows a successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup.
+
+Who receives it depends on what was written. A change to one child's data goes to the screens of the users who can see that child, admins included. A change that is not tied to one child (settings, users, tags, gallery photos, the list of children) goes to everyone. The message does not say what changed: the client refetches through the normal endpoints, which apply its permissions as usual. Writes in quick succession may arrive as one message, and a comment line (`: keep-alive`) is sent every 25 seconds.
 
 The stream is an addition to polling, not a replacement. A client that cannot open it (the Home Assistant ingress panel, where the cookie is often missing) or that loses it is as fresh as its poll interval.
 

@@ -208,6 +208,25 @@ func GetAccessibleChildIDs(db *sqlx.DB, userID int) ([]int, error) {
 	return ids, err
 }
 
+// GetChildViewerIDs returns the users who can see at least one of these
+// children: the other way round from GetAccessibleChildIDs. Admins see every
+// child, so they are always among them.
+func GetChildViewerIDs(db *sqlx.DB, childIDs []int) ([]int, error) {
+	ids := []int{}
+	if len(childIDs) == 0 {
+		return ids, nil
+	}
+	query, args, err := sqlx.In(`
+		SELECT id FROM users WHERE is_admin
+		UNION
+		SELECT user_id FROM user_children WHERE child_id IN (?)`, childIDs)
+	if err != nil {
+		return nil, err
+	}
+	err = db.Select(&ids, db.Rebind(query), args...)
+	return ids, err
+}
+
 func ListUsers(db *sqlx.DB) ([]User, error) {
 	var users []User
 	err := db.Select(&users, `SELECT * FROM users ORDER BY id`)
