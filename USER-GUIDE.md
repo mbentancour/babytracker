@@ -63,6 +63,10 @@ Settings → Preferences → Views.
 
 BabyTracker has a second, simpler interface for people who only want to log the everyday things. It shows one row per activity (feeding, sleep, diaper, tummy time, pumping) with when it last happened, and a button to log the next one.
 
+| Home | Logging a feeding |
+|---|---|
+| ![Simple interface: one row per activity with when it last happened](docs/screenshots/Simple-Home.png) | ![Simple interface: the feeding sheet with what, how, amount and when](docs/screenshots/Simple-Feeding.png) |
+
 - **Feeding:** what (breast milk, formula, fortified breast milk or solid food), how, the amount for a bottle, and when. It opens on what was fed last time.
 - **Diaper:** one tap on Wet, Solid or Wet + solid saves it.
 - **Sleep and tummy time:** start a timer and tap **Wake up** or **Finish** later, or log one that already happened.
