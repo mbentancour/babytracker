@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
+import { UIS, isKnownUi } from "../uis";
 import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
 import { useI18n } from "../utils/i18n";
 
@@ -9,7 +10,7 @@ const FEATURES = [
   "medication", "milestone", "note", "photo",
 ];
 
-export default function UserManagement({ children }) {
+export default function UserManagement({ children, onOwnUiChange }) {
   const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -58,6 +59,7 @@ export default function UserManagement({ children }) {
             roles={roles}
             children={children}
             isSelf={user.id === currentUserId}
+            onOwnUiChange={onOwnUiChange}
             onRefresh={refresh}
           />
         ))}
@@ -126,7 +128,7 @@ function AddUserForm({ onDone }) {
   );
 }
 
-function UserCard({ user, roles, children, isSelf, onRefresh }) {
+function UserCard({ user, roles, children, isSelf, onOwnUiChange, onRefresh }) {
   const { t } = useI18n();
   const [showGrant, setShowGrant] = useState(false);
   const [grantChild, setGrantChild] = useState("");
@@ -172,6 +174,32 @@ function UserCard({ user, roles, children, isSelf, onRefresh }) {
           </button>
         )}
       </div>
+
+      {/* Which UI this user gets by default. On your own card the change goes
+          through the session, so the screen follows without a reload. */}
+      {(
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-dim)", marginBottom: 8 }}>
+          {t("users.interface")}
+          <select
+            value={isKnownUi(user.ui) ? user.ui : ""}
+            onChange={async (e) => {
+              try {
+                if (isSelf && onOwnUiChange) await onOwnUiChange(e.target.value);
+                else await api.setUserUi(user.id, e.target.value);
+                onRefresh();
+              } catch (err) {
+                alert(err?.error || err?.message || "Failed to save");
+              }
+            }}
+            style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontFamily: "inherit" }}
+          >
+            <option value="">{t("users.interfaceDefault")}</option>
+            {Object.entries(UIS).map(([id, ui]) => (
+              <option key={id} value={id}>{t(ui.labelKey)}</option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {!user.is_admin && (
         <>

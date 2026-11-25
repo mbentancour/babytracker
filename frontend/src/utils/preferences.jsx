@@ -6,6 +6,10 @@ const DEFAULT_PREFERENCES = {
   // Theme: "system", "light", "dark"
   theme: "system",
 
+  // This device's UI override: an id from uis/index.js, or "" to use the
+  // choice saved on the signed-in account. Unknown ids are ignored there.
+  ui: "",
+
   // Feature toggles - all enabled by default
   features: {
     feeding: true,
@@ -111,6 +115,7 @@ function loadPreferences() {
         features: { ...DEFAULT_PREFERENCES.features, ...parsed.features },
         views: { ...DEFAULT_PREFERENCES.views, ...parsed.views },
         theme: parsed.theme ?? DEFAULT_PREFERENCES.theme,
+        ui: typeof parsed.ui === "string" ? parsed.ui : DEFAULT_PREFERENCES.ui,
         routineDays: parsed.routineDays ?? DEFAULT_PREFERENCES.routineDays,
         routineHidden: parsed.routineHidden ?? DEFAULT_PREFERENCES.routineHidden,
         dayHidden: parsed.dayHidden ?? DEFAULT_PREFERENCES.dayHidden,

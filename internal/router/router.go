@@ -306,6 +306,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 			r.Post("/api/users/{id}/access", usersH.GrantAccess)
 			r.Delete("/api/users/{userId}/access/{childId}", usersH.RevokeAccess)
 			r.Put("/api/users/{id}/password", usersH.ResetPassword)
+			r.Put("/api/users/{id}/ui", usersH.SetUserUI)
 
 			// Roles
 			r.Get("/api/roles/", usersH.ListRoles)
@@ -325,6 +326,7 @@ func New(db *sqlx.DB, cfg *config.Config) *chi.Mux {
 		r.Get("/api/users/me", usersH.GetCurrentUserAccess)
 		r.Post("/api/auth/oidc/link", oidcH.Link)
 		r.Put("/api/users/me/password", usersH.ChangeOwnPassword)
+		r.Put("/api/users/me/ui", usersH.SetOwnUI)
 
 		r.Delete("/api/{entityType}/{id}/photo", mediaH.DeleteEntryPhoto)
 

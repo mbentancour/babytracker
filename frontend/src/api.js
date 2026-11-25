@@ -685,6 +685,10 @@ export const api = {
   getCurrentUserAccess: () => request("users/me"),
   changePassword: (currentPassword, newPassword) =>
     request("users/me/password", { method: "PUT", body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }) }),
+  // Which UI the signed-in user gets by default ("" = the default UI).
+  setMyUi: (ui) => request("users/me/ui", { method: "PUT", body: JSON.stringify({ ui }) }),
+  // The same for another user (admin).
+  setUserUi: (userId, ui) => request(`users/${userId}/ui`, { method: "PUT", body: JSON.stringify({ ui }) }),
   resetUserPassword: (userId, newPassword) =>
     request(`users/${userId}/password`, { method: "PUT", body: JSON.stringify({ new_password: newPassword }) }),
   // Starts linking the signed-in account to the OIDC provider. Returns
