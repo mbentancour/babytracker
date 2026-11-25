@@ -87,6 +87,14 @@ Measurements, notes, medications and charts are not in the simple interface; the
 
 A third interface tells the day as a list you add to. Entries run from oldest to newest and end at "Now", right above the buttons that log the next one.
 
+| Home | Logging a feeding | A new entry |
+|---|---|---|
+| ![Timeline interface: how things stand at the top, then today's entries in order, ending at Now above the buttons](docs/screenshots/Timeline-Home.png) | ![Timeline interface: the feeding tray offers the usual feeds, each saved with one tap](docs/screenshots/Timeline-Feeding.png) | ![Timeline interface: a bottle just logged, with buttons to move it, change the amount or undo it](docs/screenshots/Timeline-Entry.png) |
+
+On a wide screen the list sits beside today so far and the week's sleep:
+
+![Timeline interface on a wide screen](docs/screenshots/Timeline-Desktop.png)
+
 - **The top of the screen** is drawn as the sky at the current time of day, so it is dark at night. It says whether the baby is asleep or awake and for how long, and when the last feed and the last diaper were. When the past week holds enough to go by, it also says about when the next sleep and the next feed usually come. A narrow strip in it shows the last 24 hours, with sleep and feeds marked.
 - **Feeding** offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. A feed logged this way is recorded as 15 minutes long, ending at the time given, as in the simple interface. **Diaper** is one tap on Wet, Solid or Wet + solid.
 - **Sleep, feeding and tummy time** can run as timers. A timed feed asks how it was given when it ends.
