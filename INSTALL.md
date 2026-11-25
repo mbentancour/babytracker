@@ -31,12 +31,14 @@ Two modes are available: **Local** and **External**.
 
 Runs BabyTracker and PostgreSQL inside a single Home Assistant add-on container.
 
-1. In Home Assistant, go to **Settings > Add-ons > Add-on Store**.
-2. Click the three-dot menu and select **Repositories**.
-3. Add: `https://github.com/mbentancour/babytracker`
-4. Find and install the **BabyTracker** add-on.
-5. Start the add-on. PostgreSQL runs inside the container automatically.
-6. Access BabyTracker via the HA sidebar (ingress).
+1. Add the BabyTracker repository to your Home Assistant instance by clicking this button and confirming:
+
+   [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmbentancour%2Fbabytracker)
+
+   Or add it manually: go to **Settings > Add-ons > Add-on Store**, click the three-dot menu, select **Repositories**, and add `https://github.com/mbentancour/babytracker`.
+2. Find and install the **BabyTracker** add-on in the Add-on Store.
+3. Start the add-on. PostgreSQL runs inside the container automatically.
+4. Access BabyTracker via the HA sidebar (ingress).
 
 Data is persisted in the `/data/` volume managed by Home Assistant.
 

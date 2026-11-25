@@ -64,7 +64,9 @@ and later (support for nested variable interpolation).
 Six installation options are available (see [INSTALL.md](INSTALL.md) for details):
 
 1. **Raspberry Pi appliance** -- flash the image, plug in, done
-2. **Home Assistant add-on**
+2. **Home Assistant add-on** -- one click to add the repository:
+
+   [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fmbentancour%2Fbabytracker)
 3. **Proxmox** -- one-command LXC install or Packer VM template
 4. **Kubernetes** -- Helm chart in `deploy/helm/babytracker/`
 5. **Docker Compose/Podman Compose**
