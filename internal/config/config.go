@@ -53,6 +53,9 @@ type Config struct {
 	// from blocking on long-lived connections).
 	DisplaySubs any // *handlers.DisplayHandler, closer via CloseAll()
 
+	// LiveSubs is the same for the live-update stream (/api/events).
+	LiveSubs any // *handlers.LiveHandler, closer via CloseAll()
+
 
 	// BackupLocalRoots is the allow-list of filesystem prefixes a Local backup
 	// destination's path may resolve into. Defaults to {DataDir}/backups plus

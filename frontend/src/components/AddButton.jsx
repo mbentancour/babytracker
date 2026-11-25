@@ -9,6 +9,7 @@ export default function AddButton({ onClick, color, label, size = 28 }) {
       onClick={onClick}
       title={label || "Add"}
       aria-label={label || "Add"}
+      className="add-button"
       style={{
         width: size,
         height: size,

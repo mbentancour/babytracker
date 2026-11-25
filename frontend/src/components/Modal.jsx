@@ -28,6 +28,9 @@ export function trapTab(e, el) {
   }
 }
 
+// The class names on the dialog and on the form controls below (and --tone,
+// a button's colour) are hooks for a UI that wants to restyle them; their own
+// look is the inline styles.
 export default function Modal({ title, children, onClose, headerAction }) {
   const { t } = useI18n();
   const dialogRef = useRef(null);
@@ -76,6 +79,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
 
   return (
     <div
+      className="modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -91,6 +95,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
     >
       <div
         ref={dialogRef}
+        className="modal-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : undefined}
@@ -113,6 +118,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div
+          className="modal-head"
           style={{
             display: "flex",
             alignItems: "center",
@@ -123,12 +129,13 @@ export default function Modal({ title, children, onClose, headerAction }) {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span className="modal-title" style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {title}
             </span>
             {headerAction}
           </div>
           <button
+            className="modal-close"
             onClick={onClose}
             aria-label={t("general.close")}
             style={{
@@ -142,7 +149,7 @@ export default function Modal({ title, children, onClose, headerAction }) {
             <Icons.X />
           </button>
         </div>
-        <div ref={contentRef} style={{ padding: "20px", overflowY: "auto", overscrollBehavior: "contain" }}>{children}</div>
+        <div ref={contentRef} className="modal-content" style={{ padding: "20px", overflowY: "auto", overscrollBehavior: "contain" }}>{children}</div>
       </div>
     </div>
   );
@@ -150,8 +157,9 @@ export default function Modal({ title, children, onClose, headerAction }) {
 
 export function FormField({ label, children }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div className="form-field" style={{ marginBottom: 14 }}>
       <label
+        className="form-field-label"
         style={{
           display: "block",
           fontSize: 12,
@@ -174,6 +182,7 @@ export function FormInput({ type = "text", ...props }) {
     <input
       type={type}
       {...props}
+      className={props.className ? `form-input ${props.className}` : "form-input"}
       style={{
         width: "100%",
         padding: "10px 12px",
@@ -194,6 +203,7 @@ export function FormSelect({ options, ...props }) {
   return (
     <select
       {...props}
+      className={props.className ? `form-input ${props.className}` : "form-input"}
       style={{
         width: "100%",
         padding: "10px 12px",
@@ -220,7 +230,9 @@ export function FormButton({ children, color, ...props }) {
   return (
     <button
       {...props}
+      className={props.className ? `form-button ${props.className}` : "form-button"}
       style={{
+        "--tone": color || "#F59E0B",
         width: "100%",
         padding: "12px 20px",
         borderRadius: 12,

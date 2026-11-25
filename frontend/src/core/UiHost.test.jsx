@@ -53,6 +53,24 @@ describe("UiHost", () => {
     expect(await screen.findByText("full ui")).toBeTruthy();
   });
 
+  it("uses the installation's default for an account with no choice of its own", async () => {
+    session.value = { userUi: "", defaultUi: "other", accountLoaded: true };
+    renderHost();
+    expect(await screen.findByText("other ui")).toBeTruthy();
+  });
+
+  it("puts the account's own choice before the installation's default", async () => {
+    session.value = { userUi: "full", defaultUi: "other", accountLoaded: true };
+    renderHost();
+    expect(await screen.findByText("full ui")).toBeTruthy();
+  });
+
+  it("ignores an installation default this build does not have", async () => {
+    session.value = { userUi: "", defaultUi: "removed", accountLoaded: true };
+    renderHost();
+    expect(await screen.findByText("full ui")).toBeTruthy();
+  });
+
   it("lets this device override the account, without waiting for it", async () => {
     localStorage.setItem("babytracker_preferences", JSON.stringify({ ui: "other" }));
     session.value = { userUi: "full", accountLoaded: false };

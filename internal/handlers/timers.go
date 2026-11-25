@@ -45,6 +45,9 @@ func (h *TimersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "timers", input.Child) {
+		return
+	}
 
 	t := models.Timer{
 		ChildID: input.Child,

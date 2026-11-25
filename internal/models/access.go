@@ -85,13 +85,39 @@ func GetRecordChildID(db *sqlx.DB, table string, id int) (int, error) {
 // Returns ErrRecordNotFound if the row doesn't exist, ErrForbidden if it does
 // but the user can't write it, or a wrapped error for infrastructure failures.
 func EnsureRecordWritable(db *sqlx.DB, userID int, table string, id int) error {
+	_, err := WritableRecordChild(db, userID, table, id)
+	return err
+}
+
+// WritableRecordChild is EnsureRecordWritable for a caller that also wants to
+// know whose record it is: on success it returns the child the row belongs
+// to. The errors are the same.
+func WritableRecordChild(db *sqlx.DB, userID int, table string, id int) (int, error) {
 	feature, ok := childOwnedTables[table]
 	if !ok {
-		return fmt.Errorf("table %q is not child-owned", table)
+		return 0, fmt.Errorf("table %q is not child-owned", table)
 	}
 	childID, err := GetRecordChildID(db, table, id)
 	if err != nil {
-		return err
+		return 0, err
+	}
+	if CheckAccess(db, userID, childID, feature) != "write" {
+		return 0, ErrForbidden
+	}
+	return childID, nil
+}
+
+// EnsureChildWritable authorises creating a row in a child-scoped table under
+// childID: the user needs "write" access to that child for the table's
+// feature. It is the create-side counterpart of EnsureRecordWritable, which
+// has an existing row to look the child up from.
+//
+// Returns ErrForbidden when the user may not, or an error for a table that is
+// not child-owned.
+func EnsureChildWritable(db *sqlx.DB, userID int, table string, childID int) error {
+	feature, ok := childOwnedTables[table]
+	if !ok {
+		return fmt.Errorf("table %q is not child-owned", table)
 	}
 	if CheckAccess(db, userID, childID, feature) != "write" {
 		return ErrForbidden

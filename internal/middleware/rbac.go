@@ -159,7 +159,12 @@ func RBAC(db *sqlx.DB) func(http.Handler) http.Handler {
 				//            the handler enforces ownership.
 				//   POST   — create handlers take child from the body and
 				//            have no existing row to look up; require the
-				//            body to include child so we can check it here.
+				//            request to name a child so we can check it here.
+				//            That check is a first gate only: what it reads
+				//            (the query string first, the body only when it
+				//            is declared as JSON) need not be what the
+				//            handler decodes. Create handlers MUST call
+				//            ensureCreatable with the child they decoded.
 				accessible, _ := models.GetAccessibleChildIDs(db, userID)
 				if len(accessible) == 0 {
 					pagination.WriteError(w, http.StatusForbidden, "you don't have access to any children")

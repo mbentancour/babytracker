@@ -6,6 +6,15 @@ export function toUTC(date) {
   return date.toISOString().slice(0, 19);
 }
 
+// A feed or a pumping session logged after the fact, when all that is known is
+// when, is recorded as a quarter of an hour ending then: the length the full
+// form starts from. Every quick-log uses this, so the UIs write the same thing.
+const QUICK_MINUTES = 15;
+
+export function quickSpan(end) {
+  return { start: toUTC(new Date(end.getTime() - QUICK_MINUTES * 60000)), end: toUTC(end) };
+}
+
 // "HH:MM" for a time input.
 export function clock(date) {
   const pad = (n) => String(n).padStart(2, "0");

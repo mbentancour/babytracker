@@ -104,6 +104,92 @@ func TestUserUIChoice(t *testing.T) {
 	}
 }
 
+// An admin sets one default UI for the whole installation; every account sees
+// it next to its own choice, and only an admin can change it.
+func TestDefaultUI(t *testing.T) {
+	db := routerTestDB(t)
+	cfg, adminToken := importTestAdmin(t, db)
+	var userID int
+	if err := db.Get(&userID, `INSERT INTO users (username, password_hash, is_admin, ui) VALUES ('sitter', 'x', false, 'full') RETURNING id`); err != nil {
+		t.Fatal(err)
+	}
+	userToken, err := crypto.GenerateAccessToken(cfg.JWTSecret, userID, "sitter", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(db, cfg)
+
+	do := func(method, path, token, body string) (int, map[string]any) {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	seen := func(token string) (any, any) {
+		t.Helper()
+		code, me := do(http.MethodGet, "/api/users/me", token, "")
+		if code != http.StatusOK {
+			t.Fatalf("GET /api/users/me = %d, want 200", code)
+		}
+		return me["default_ui"], me["ui"]
+	}
+
+	// Nothing set yet: an empty default, which the frontend reads as its own.
+	if def, _ := seen(adminToken); def != "" {
+		t.Fatalf("default_ui before any is set = %v, want \"\"", def)
+	}
+
+	// A non-admin cannot set it.
+	if code, _ := do(http.MethodPut, "/api/settings/ui", userToken, `{"ui":"simple"}`); code != http.StatusForbidden {
+		t.Fatalf("non-admin PUT /api/settings/ui = %d, want 403", code)
+	}
+	if def, _ := seen(userToken); def != "" {
+		t.Fatalf("default_ui changed to %v by a non-admin", def)
+	}
+
+	// An admin can, and everyone sees it — beside, not instead of, their own.
+	if code, out := do(http.MethodPut, "/api/settings/ui", adminToken, `{"ui":"simple"}`); code != http.StatusOK || out["ui"] != "simple" {
+		t.Fatalf("admin PUT /api/settings/ui = %d %v, want 200 simple", code, out)
+	}
+	if def, own := seen(adminToken); def != "simple" || own != "" {
+		t.Fatalf("admin sees default %v, own %v; want simple and \"\"", def, own)
+	}
+	if def, own := seen(userToken); def != "simple" || own != "full" {
+		t.Fatalf("user sees default %v, own %v; want simple and full", def, own)
+	}
+
+	// Setting it again replaces it; "" clears it.
+	if code, _ := do(http.MethodPut, "/api/settings/ui", adminToken, `{"ui":"timeline"}`); code != http.StatusOK {
+		t.Fatalf("second PUT = %d, want 200", code)
+	}
+	if def, _ := seen(userToken); def != "timeline" {
+		t.Fatalf("default_ui after a second PUT = %v, want timeline", def)
+	}
+	if code, _ := do(http.MethodPut, "/api/settings/ui", adminToken, `{"ui":""}`); code != http.StatusOK {
+		t.Fatalf("clearing PUT = %d, want 200", code)
+	}
+	if def, _ := seen(userToken); def != "" {
+		t.Fatalf("default_ui after clearing = %v, want \"\"", def)
+	}
+
+	// Malformed ids are refused and change nothing.
+	for _, bad := range []string{`{"ui":"Has Spaces"}`, `{"ui":"<script>"}`, `not json`} {
+		if code, _ := do(http.MethodPut, "/api/settings/ui", adminToken, bad); code != http.StatusBadRequest {
+			t.Errorf("PUT /api/settings/ui %s = %d, want 400", bad, code)
+		}
+	}
+	if def, _ := seen(userToken); def != "" {
+		t.Fatalf("a refused request stored %v", def)
+	}
+}
+
 func itoa(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)

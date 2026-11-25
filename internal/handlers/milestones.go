@@ -50,6 +50,9 @@ func (h *MilestonesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "milestones", input.Child) {
+		return
+	}
 	if input.Title == "" {
 		pagination.WriteError(w, http.StatusBadRequest, "title is required")
 		return

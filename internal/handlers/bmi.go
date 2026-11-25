@@ -50,6 +50,9 @@ func (h *BMIHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "bmi", input.Child) {
+		return
+	}
 
 	b := models.BMI{
 		ChildID: input.Child,

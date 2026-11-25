@@ -162,10 +162,16 @@ func pausedUntil(pauses []models.TimerPause, end time.Time) time.Duration {
 // the timer is consumed; otherwise the caller's startStr/endStr are parsed as
 // the API's tz-naive "2006-01-02T15:04:05" UTC layout. On any error it writes
 // the response itself and returns ok=false; the caller should just `return`.
-func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, timerID *int, startStr, endStr string) (start, end time.Time, pausedSeconds int, resolvedTimer *int, ok bool) {
+//
+// childID is the child the entry is for. The timer has to be that child's:
+// the caller has shown it may write to childID, which says nothing about a
+// timer running for someone else.
+func resolveEntryTimes(w http.ResponseWriter, db *sqlx.DB, childID int, timerID *int, startStr, endStr string) (start, end time.Time, pausedSeconds int, resolvedTimer *int, ok bool) {
 	if timerID != nil {
 		timer, err := models.GetTimer(db, *timerID)
-		if err != nil {
+		// Another child's timer is answered like one that does not exist,
+		// so that ids cannot be probed.
+		if err != nil || timer.ChildID != childID {
 			pagination.WriteError(w, http.StatusBadRequest, "timer not found")
 			return
 		}

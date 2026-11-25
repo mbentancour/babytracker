@@ -1,6 +1,8 @@
 package models
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -67,4 +69,27 @@ func SetUserUI(db *sqlx.DB, id int, ui string) (bool, error) {
 	}
 	n, err := res.RowsAffected()
 	return n > 0, err
+}
+
+// defaultUIKey is the settings row that holds the UI for every account that
+// has not chosen one of its own.
+const defaultUIKey = "default_ui"
+
+// GetDefaultUI returns the installation-wide default UI, or "" when none has
+// been set (the frontend then uses its built-in default).
+func GetDefaultUI(db *sqlx.DB) (string, error) {
+	var ui string
+	err := db.Get(&ui, `SELECT value FROM settings WHERE key = $1`, defaultUIKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return ui, err
+}
+
+// SetDefaultUI stores the installation-wide default UI. "" clears it.
+func SetDefaultUI(db *sqlx.DB, ui string) error {
+	_, err := db.Exec(
+		`INSERT INTO settings (key, value) VALUES ($1, $2)
+		 ON CONFLICT (key) DO UPDATE SET value = $2`, defaultUIKey, ui)
+	return err
 }

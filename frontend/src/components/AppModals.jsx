@@ -45,7 +45,7 @@ export function useAppModal() {
 // entry forms this way, including one that has simpler forms of its own for
 // the common cases.
 export default function AppModals({ modal, setModal, closeModal, handleFormDone }) {
-  const { data, isAdmin, demoMode, applianceMode, onLogout, deleteEntry: handleDeleteEntry, userUi, setUserUi } = useSession();
+  const { data, isAdmin, demoMode, applianceMode, onLogout, deleteEntry: handleDeleteEntry, userUi, setUserUi, defaultUi, setDefaultUi } = useSession();
   const { getFormDefault } = usePreferences();
 
   return (
@@ -211,6 +211,8 @@ export default function AppModals({ modal, setModal, closeModal, handleFormDone 
           onRefetch={data.refetch}
           userUi={userUi}
           onUserUiChange={demoMode ? undefined : setUserUi}
+          defaultUi={defaultUi}
+          onDefaultUiChange={demoMode ? undefined : setDefaultUi}
         />
         </Suspense>
       )}

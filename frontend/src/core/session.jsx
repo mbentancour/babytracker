@@ -35,6 +35,9 @@ export default function Session({ demoMode, applianceMode, onLogout, setupIntent
   const [modal, setModal] = useState(null);
   // The UI saved on the account ("" = default). A device can override it.
   const [userUi, setUserUiState] = useState("");
+  // The UI an admin set for every account without a choice of its own ("" =
+  // none set; the build's own default applies).
+  const [defaultUi, setDefaultUiState] = useState("");
   const [selectedChildId, setSelectedChildId] = useState(null);
 
   const [permissionsLoaded, setPermissionsLoaded] = useState(demoMode);
@@ -45,6 +48,7 @@ export default function Session({ demoMode, applianceMode, onLogout, setupIntent
         setIsAdmin(res.is_admin);
         setUserAccess(res.access || []);
         setUserUiState(res.ui || "");
+        setDefaultUiState(res.default_ui || "");
         setPermissionsLoaded(true);
       })
       .catch(() => setPermissionsLoaded(true));
@@ -131,13 +135,19 @@ export default function Session({ demoMode, applianceMode, onLogout, setupIntent
     setUserUiState(ui);
   }, []);
 
+  // Saves the installation-wide default (admins only; the server checks).
+  const setDefaultUi = useCallback(async (ui) => {
+    await api.setDefaultUi(ui);
+    setDefaultUiState(ui);
+  }, []);
+
   const session = useMemo(
     () => ({
       demoMode, applianceMode, onLogout, isAdmin, canRead, canWrite, hasAnyWriteAccess, data, timer, deleteEntry,
-      userUi, setUserUi, accountLoaded: permissionsLoaded, modal, setModal,
+      userUi, setUserUi, defaultUi, setDefaultUi, accountLoaded: permissionsLoaded, modal, setModal,
     }),
     [demoMode, applianceMode, onLogout, isAdmin, canRead, canWrite, hasAnyWriteAccess, data, timer, deleteEntry,
-      userUi, setUserUi, permissionsLoaded, modal],
+      userUi, setUserUi, defaultUi, setDefaultUi, permissionsLoaded, modal],
   );
 
   if (data.loading) {

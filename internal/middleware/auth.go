@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 			switch parts[0] {
 			case "Bearer":
 				// JWT token auth
-				claims, err := crypto.ValidateAccessToken(jwtSecret, parts[1])
+				claims, err := BearerClaims(jwtSecret, r)
 				if err != nil {
 					pagination.WriteError(w, http.StatusUnauthorized, "invalid or expired token")
 					return
@@ -89,6 +90,21 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+var errNoBearerToken = errors.New("no bearer token")
+
+// BearerClaims returns the claims of the JWT access token in the request's
+// "Authorization: Bearer <token>" header, or an error when there is none or
+// it is not valid any more. It is the check Auth makes for a signed-in
+// browser, on its own for the few endpoints that sit outside Auth because
+// they also accept the session cookie (the live-update stream).
+func BearerClaims(jwtSecret string, r *http.Request) (*crypto.Claims, error) {
+	parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return nil, errNoBearerToken
+	}
+	return crypto.ValidateAccessToken(jwtSecret, parts[1])
 }
 
 func GetUserID(ctx context.Context) int {

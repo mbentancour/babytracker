@@ -1,10 +1,14 @@
 import AddButton from "./AddButton";
 
+// The class names (and --tone, the card's colour) are hooks for a UI that
+// wants to restyle the card; the card's own look is the inline styles below.
+//
 // keepFoot holds the space for the `foot` line even when there is nothing to
 // put in it, so a card with no entries yet is as tall as its neighbours.
 export default function StatCard({ icon, label, value, sub, foot, keepFoot, color, accent, onAdd, addLabel }) {
   return (
     <div
+      className="stat-card"
       style={{
         background: "var(--card-bg)",
         borderRadius: 16,
@@ -22,6 +26,7 @@ export default function StatCard({ icon, label, value, sub, foot, keepFoot, colo
       }}
     >
       <div
+        className="stat-card-glow"
         style={{
           position: "absolute",
           top: -20,
@@ -40,7 +45,9 @@ export default function StatCard({ icon, label, value, sub, foot, keepFoot, colo
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
+          className="stat-card-icon"
           style={{
+            "--tone": color,
             width: 36,
             height: 36,
             borderRadius: 10,
@@ -54,6 +61,7 @@ export default function StatCard({ icon, label, value, sub, foot, keepFoot, colo
           {icon}
         </div>
         <span
+          className="stat-card-label"
           style={{
             fontSize: 12,
             color: "var(--text-dim)",
@@ -77,9 +85,11 @@ export default function StatCard({ icon, label, value, sub, foot, keepFoot, colo
         {value}
       </div>
       {sub && (
-        // A fixed-height row: `sub` is a line of text on most cards but a pair
+        // A minimum height: `sub` is a line of text on most cards but a pair
         // of buttons on the sleep card, and the two would otherwise differ.
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -2, minHeight: 26, display: "flex", alignItems: "center" }}>
+        // A column, so that a `sub` made of several lines (the Growth
+        // averages) keeps them as lines instead of running them together.
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: -2, minHeight: 26, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-start", gap: 2 }}>
           {sub}
         </div>
       )}

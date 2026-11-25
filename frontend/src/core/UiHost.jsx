@@ -14,11 +14,12 @@ function uiComponent(id) {
 
 // UiHost renders the UI for this user on this device: the device's own
 // override (the `ui` preference) if it has one, otherwise the choice saved on
-// the account, otherwise the default.
+// the account, otherwise the default an admin set for the installation,
+// otherwise the build's own default.
 export default function UiHost() {
   const { t } = useI18n();
   const { prefs } = usePreferences();
-  const { userUi, accountLoaded } = useSession();
+  const { userUi, defaultUi, accountLoaded } = useSession();
   const loading = (
     <div className="app-loading">
       <div className="loading-spinner" />
@@ -28,7 +29,7 @@ export default function UiHost() {
   // Without a device override the account decides, so wait for it instead of
   // drawing the default UI and then swapping to another one.
   if (!isKnownUi(prefs.ui) && !accountLoaded) return loading;
-  const Ui = uiComponent(resolveUi(prefs.ui, userUi));
+  const Ui = uiComponent(resolveUi(prefs.ui, userUi, defaultUi));
   return (
     <Suspense fallback={loading}>
       <Ui />

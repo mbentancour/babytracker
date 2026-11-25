@@ -78,7 +78,9 @@ export function setOnAuthRequired(callback) {
 // same promise.
 let refreshPromise = null;
 
-function refreshAccessToken() {
+// Exported for the live-update stream (hooks/useBabyData.js), which makes its
+// own request and has to renew an expired access token the same way.
+export function refreshAccessToken() {
   if (!refreshPromise) {
     refreshPromise = doRefresh().finally(() => {
       refreshPromise = null;
@@ -689,6 +691,8 @@ export const api = {
   setMyUi: (ui) => request("users/me/ui", { method: "PUT", body: JSON.stringify({ ui }) }),
   // The same for another user (admin).
   setUserUi: (userId, ui) => request(`users/${userId}/ui`, { method: "PUT", body: JSON.stringify({ ui }) }),
+  // The UI for every account that has not chosen one (admin). "" = built-in.
+  setDefaultUi: (ui) => request("settings/ui", { method: "PUT", body: JSON.stringify({ ui }) }),
   resetUserPassword: (userId, newPassword) =>
     request(`users/${userId}/password`, { method: "PUT", body: JSON.stringify({ new_password: newPassword }) }),
   // Starts linking the signed-in account to the OIDC provider. Returns

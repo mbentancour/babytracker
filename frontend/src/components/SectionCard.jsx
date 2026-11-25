@@ -1,9 +1,13 @@
+// The class names (and --tone, the card's colour) are hooks for a UI that
+// wants to restyle the card; the card's own look is the inline styles below.
+//
 // The card fills its grid cell, so cards sharing a row end level. With `fill`
 // the body is a column too, which lets a child push itself to the bottom of
 // the card with `marginTop: "auto"` (the Overview pins its weekly charts so).
 export default function SectionCard({ title, icon, children, color, action, fill }) {
   return (
     <div
+      className="section-card"
       style={{
         background: "var(--card-bg)",
         borderRadius: 16,
@@ -16,6 +20,7 @@ export default function SectionCard({ title, icon, children, color, action, fill
       }}
     >
       <div
+        className="section-card-head"
         style={{
           padding: "16px 20px",
           display: "flex",
@@ -25,7 +30,9 @@ export default function SectionCard({ title, icon, children, color, action, fill
         }}
       >
         <div
+          className="section-card-icon"
           style={{
+            "--tone": color,
             width: 30,
             height: 30,
             borderRadius: 8,
@@ -40,6 +47,7 @@ export default function SectionCard({ title, icon, children, color, action, fill
           {icon}
         </div>
         <span
+          className="section-card-title"
           style={{
             fontSize: 14,
             fontWeight: 600,
@@ -52,7 +60,7 @@ export default function SectionCard({ title, icon, children, color, action, fill
         </span>
         {action && <div>{action}</div>}
       </div>
-      <div style={{ padding: "16px 20px", flex: 1, ...(fill ? { display: "flex", flexDirection: "column" } : null) }}>{children}</div>
+      <div className="section-card-body" style={{ padding: "16px 20px", flex: 1, ...(fill ? { display: "flex", flexDirection: "column" } : null) }}>{children}</div>
     </div>
   );
 }

@@ -50,6 +50,9 @@ func (h *WeightHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "weight", input.Child) {
+		return
+	}
 
 	wt := models.Weight{
 		ChildID: input.Child,

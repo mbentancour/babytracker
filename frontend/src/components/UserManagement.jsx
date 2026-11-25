@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
-import { UIS, isKnownUi } from "../uis";
+import { UIS, isKnownUi, resolveUi } from "../uis";
 import { FormField, FormInput, FormSelect, FormButton } from "./Modal";
 import { useI18n } from "../utils/i18n";
 
@@ -10,7 +10,7 @@ const FEATURES = [
   "medication", "milestone", "note", "photo",
 ];
 
-export default function UserManagement({ children, onOwnUiChange }) {
+export default function UserManagement({ children, onOwnUiChange, defaultUi }) {
   const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -60,6 +60,7 @@ export default function UserManagement({ children, onOwnUiChange }) {
             children={children}
             isSelf={user.id === currentUserId}
             onOwnUiChange={onOwnUiChange}
+            defaultUi={defaultUi}
             onRefresh={refresh}
           />
         ))}
@@ -128,7 +129,7 @@ function AddUserForm({ onDone }) {
   );
 }
 
-function UserCard({ user, roles, children, isSelf, onOwnUiChange, onRefresh }) {
+function UserCard({ user, roles, children, isSelf, onOwnUiChange, defaultUi, onRefresh }) {
   const { t } = useI18n();
   const [showGrant, setShowGrant] = useState(false);
   const [grantChild, setGrantChild] = useState("");
@@ -193,7 +194,7 @@ function UserCard({ user, roles, children, isSelf, onOwnUiChange, onRefresh }) {
             }}
             style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--card-bg)", color: "var(--text)", fontFamily: "inherit" }}
           >
-            <option value="">{t("users.interfaceDefault")}</option>
+            <option value="">{t("settings.interfaceDefault", { name: t(UIS[resolveUi(defaultUi)].labelKey) })}</option>
             {Object.entries(UIS).map(([id, ui]) => (
               <option key={id} value={id}>{t(ui.labelKey)}</option>
             ))}

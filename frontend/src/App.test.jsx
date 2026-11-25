@@ -46,7 +46,9 @@ describe("App in demo mode", () => {
   it("opens an entry form from the UI through the shared modal host", async () => {
     renderApp();
     await screen.findByRole("heading", { name: "Emma" }, { timeout: 5000 });
-    const feedingCard = (await screen.findAllByRole("button", { name: "Feeding" }))[0];
+    // The tab with the cards is its own lazily loaded chunk, so it can arrive
+    // well after the header does: give it the same time the header gets.
+    const feedingCard = (await screen.findAllByRole("button", { name: "Feeding" }, { timeout: 5000 }))[0];
     fireEvent.click(feedingCard);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Log Feeding")).toBeTruthy();

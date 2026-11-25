@@ -7,6 +7,7 @@
 export const UIS = {
   full: { labelKey: "ui.full", load: () => import("./full/FullUI") },
   simple: { labelKey: "ui.simple", load: () => import("./simple/SimpleUI") },
+  timeline: { labelKey: "ui.timeline", load: () => import("./timeline/TimelineUI") },
 };
 
 export const DEFAULT_UI = "full";
@@ -16,9 +17,10 @@ export function isKnownUi(id) {
 }
 
 // resolveUi picks the UI to show from choices in priority order — this
-// device's override first, then the account's setting — skipping any that are
-// empty or unknown (a UI removed in a later version, a hand-edited value), and
-// falls back to the default instead of leaving a blank screen.
+// device's override first, then the account's setting, then the default an
+// admin set for the installation — skipping any that are empty or unknown (a
+// UI removed in a later version, a hand-edited value), and falls back to the
+// default instead of leaving a blank screen.
 export function resolveUi(...choices) {
   return choices.find(isKnownUi) || DEFAULT_UI;
 }

@@ -241,6 +241,41 @@ automation:
 
 ---
 
+## Live Updates
+
+The web app keeps one event stream open, so a change made on one device shows on the others without waiting for the next poll.
+
+```
+GET /api/events
+```
+
+This is a Server-Sent Events stream for browser sessions. It is signed in by either of:
+
+- the `refresh_token` cookie set at login, or
+- the access token, as `Authorization: Bearer <access_token>`, for a browser that has no cookie that still counts. Inside the Home Assistant ingress panel the cookie is often missing.
+
+The cookie is looked at first. An API token (`Authorization: Token`) is not accepted, and a request with neither gets `401`.
+
+A stream signed in by access token ends when that token expires. The client then renews the token as for any other request and opens the stream again. A stream signed in by the cookie stays open.
+
+An `EventSource` cannot send an `Authorization` header, so a client that signs in by token reads the stream with `fetch` instead, as the web app does, and reconnects by itself.
+
+The messages carry no data:
+
+```
+data: {"connected":true}
+
+data: {"changed":true}
+```
+
+`connected` is sent once each time a stream opens. `changed` follows a successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup.
+
+Who receives it depends on what was written. A change to one child's data goes to the screens of the users who can see that child, admins included. A change that is not tied to one child (settings, users, tags, gallery photos, the list of children) goes to everyone. The message does not say what changed: the client refetches through the normal endpoints, which apply its permissions as usual. Writes in quick succession may arrive as one message, and a comment line (`: keep-alive`) is sent every 25 seconds.
+
+The stream is an addition to polling, not a replacement. A client that cannot open it or that loses it is as fresh as its poll interval. After a stream has been reopened, a client should refetch once, because changes made in between were not announced to it.
+
+---
+
 ## Data Endpoints
 
 All data endpoints follow the same pattern and return paginated responses:
@@ -316,7 +351,7 @@ Body (create):
 Types: `breast milk`, `formula`, `fortified breast milk`, `solid food`
 Methods: `bottle`, `left breast`, `right breast`, `both breasts`, `parent fed`, `self fed`
 
-With timer: send `{"child": 1, "type": "...", "method": "...", "timer": 5}` — the timer's start time is used, current time is the end, and the timer is deleted.
+With timer: send `{"child": 1, "type": "...", "method": "...", "timer": 5}` — the timer's start time is used, current time is the end, and the timer is deleted. The timer has to be the same child's; another child's is answered like one that does not exist (400). The same holds for sleep and tummy time.
 
 ### Sleep
 
@@ -618,6 +653,8 @@ DELETE /api/roles/{id}/                Delete custom role
 Predefined roles: `parent` (full write), `caregiver` (write daily, read measurements), `viewer` (read only)
 
 Permission levels: `none`, `read`, `write`
+
+A user who is not an admin needs `write` on a feature, for the child concerned, to create, change or delete its entries. For a create that is the child in the request body, whatever else the request names; for a change or a delete it is the child the entry belongs to. A request without that access is answered with 403.
 
 Features: `feeding`, `sleep`, `diaper`, `tummy`, `temp`, `weight`, `height`, `headcirc`, `pumping`, `bmi`, `medication`, `milestone`, `note`, `photo`
 
@@ -1133,7 +1170,7 @@ Content-Type: application/json
 
 ## Interface choice
 
-Each user can have a preferred UI, stored on their account. The value is the id of a UI the web app ships (currently only `full`); an empty string means the default. The server stores any well-formed id (lowercase letters, digits and hyphens, at most 32 characters) and the web app falls back to its default for an id it does not have. A device can override the account's choice locally; that override is kept in the browser and never sent to the server.
+Each user can have a preferred UI, stored on their account. The value is the id of a UI the web app ships (such as `full` or `simple`); an empty string means the default. The server stores any well-formed id (lowercase letters, digits and hyphens, at most 32 characters) and the web app falls back to its default for an id it does not have. A device can override the account's choice locally; that override is kept in the browser and never sent to the server.
 
 `GET /api/users/me` and `GET /api/users/` include the value as `ui`.
 
@@ -1154,6 +1191,16 @@ Content-Type: application/json
 ```
 
 Both return `{"ui": "..."}`. A malformed id is a 400; an unknown user is a 404.
+
+An admin can also set one default for the whole installation. It applies to every account whose own `ui` is empty, so everyone can be moved to another UI without changing each user:
+```
+PUT /api/settings/ui
+Content-Type: application/json
+
+{"ui": "simple"}
+```
+
+It returns `{"ui": "..."}`; an empty string clears it. `GET /api/users/me` includes the current value as `default_ui` (empty when none is set). The web app picks, in order: the device's own override, the account's `ui`, `default_ui`, then the default it was built with.
 
 ---
 
