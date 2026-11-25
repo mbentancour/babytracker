@@ -5,7 +5,7 @@ import { ACTION_GROUPS, entryFeature, timerNameToType } from "../../core/activit
 import AppModals, { useAppModal } from "../../components/AppModals";
 import { Icons } from "../../components/Icons";
 import { agoAnchor } from "../../utils/overlayTime";
-import { getAge, elapsedSince, formatElapsed, formatHoursMinutes, feedingMethodLabel, overlapHours } from "../../utils/formatters";
+import { getAge, elapsedSince, formatElapsed, formatHoursMinutes, feedingMethodLabel, feedingTypeLabel, overlapHours } from "../../utils/formatters";
 import { usePreferences } from "../../utils/preferences";
 import { useI18n } from "../../utils/i18n";
 import { useUnits } from "../../utils/units";
@@ -120,7 +120,8 @@ export default function SimpleUI() {
 
   const detail = (kind, entry) => {
     if (kind === "feeding") {
-      const how = feedingMethodLabel(entry.method, t);
+      // "Parent fed" alone doesn't say it was solids; name the food instead.
+      const how = entry.type === "solid food" ? feedingTypeLabel(entry.type, t) : feedingMethodLabel(entry.method, t);
       return Number(entry.amount) > 0 ? `${Number(entry.amount)} ${units.volume} · ${how}` : how;
     }
     if (kind === "diaper") {

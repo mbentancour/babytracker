@@ -432,6 +432,7 @@ export default {
   "simple.minAgo": "{{count}} min siden",
   "simple.otherTime": "Andet tidspunkt",
   "simple.when": "Hvornår",
+  "simple.what": "Hvad",
   "simple.how": "Hvordan",
   "simple.oneTap": "Ét tryk gemmer",
   "simple.rightNow": "Lige nu",

@@ -5,7 +5,7 @@ import { useSession } from "../../core/session";
 import { colors } from "../../utils/colors";
 import { formatElapsed } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
-import { methodsForType, usePreferences } from "../../utils/preferences";
+import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
 import { toUTC, clock, lastClock, isNapSleep } from "./time";
 
@@ -116,7 +116,24 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
   const childId = data.child?.id;
   const color = colors[kind];
 
-  const [method, setMethod] = useState(feeding.method);
+  // The feeding sheet opens on what was fed last time: a family on formula
+  // or solids shouldn't have to switch away from breast milk on every entry.
+  // With nothing logged yet it opens on the device's default.
+  const lastFed = (data.weeklyFeedings || [])[0];
+  const [type, setType] = useState(() =>
+    FEEDING_TYPES.some((ft) => ft.value === lastFed?.type) ? lastFed.type : feeding.type
+  );
+  const methods = methodsForType(type);
+  const [method, setMethod] = useState(() => {
+    const known = (m) => methodsForType(type).some((x) => x.value === m);
+    if (known(lastFed?.method)) return lastFed.method;
+    return known(feeding.method) ? feeding.method : methodsForType(type)[0].value;
+  });
+  const pickType = (next) => {
+    setType(next);
+    const allowed = methodsForType(next);
+    if (!allowed.some((m) => m.value === method)) setMethod(allowed[0].value);
+  };
   const [amount, setAmount] = useState(() =>
     kind === "pumping"
       ? lastAmount(data.weeklyPumping, volume.pumping)
@@ -160,7 +177,7 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
     const end = pickedTime();
     const body = {
       child: childId,
-      type: feeding.type,
+      type,
       method,
       start: toUTC(new Date(end.getTime() - 15 * MINUTE)),
       end: toUTC(end),
@@ -223,9 +240,24 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
         <>
           {kind === "feeding" && (
             <>
+              <div className="simple-label">{t("simple.what")}</div>
+              <div className="simple-chips" data-count={FEEDING_TYPES.length} role="group" aria-label={t("simple.what")}>
+                {FEEDING_TYPES.map((ft) => (
+                  <button
+                    key={ft.value}
+                    type="button"
+                    className="simple-chip"
+                    aria-pressed={type === ft.value}
+                    style={type === ft.value ? { borderColor: color, borderWidth: 2, color } : undefined}
+                    onClick={() => pickType(ft.value)}
+                  >
+                    {t(ft.labelKey)}
+                  </button>
+                ))}
+              </div>
               <div className="simple-label">{t("simple.how")}</div>
-              <div className="simple-chips" data-count={feeding.methods.length} role="group" aria-label={t("simple.how")}>
-                {feeding.methods.map((m) => (
+              <div className="simple-chips" data-count={methods.length} role="group" aria-label={t("simple.how")}>
+                {methods.map((m) => (
                   <button
                     key={m.value}
                     type="button"

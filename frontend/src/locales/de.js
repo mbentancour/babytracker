@@ -440,6 +440,7 @@ export default {
   "simple.minAgo": "vor {{count}} Min.",
   "simple.otherTime": "Andere Zeit",
   "simple.when": "Wann",
+  "simple.what": "Was",
   "simple.how": "Wie",
   "simple.oneTap": "Ein Tippen speichert",
   "simple.rightNow": "Jetzt gerade",

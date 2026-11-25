@@ -442,6 +442,7 @@ export default {
   "simple.minAgo": "{{count}} min ago",
   "simple.otherTime": "Other time",
   "simple.when": "When",
+  "simple.what": "What",
   "simple.how": "How",
   "simple.oneTap": "One tap saves it",
   "simple.rightNow": "Right now",

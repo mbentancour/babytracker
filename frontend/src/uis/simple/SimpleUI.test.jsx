@@ -106,6 +106,15 @@ describe("SimpleUI", () => {
     expect(screen.getByText("2 feedings today · 1h 30m sleep · 1 diaper")).toBeTruthy();
   });
 
+  it("names solid food on the feeding row instead of who held the spoon", () => {
+    session.value = makeSession();
+    session.value.data.weeklyFeedings = [
+      { id: 9, start: minsAgo(20), end: minsAgo(10), type: "solid food", method: "parent fed" },
+    ];
+    renderUi();
+    expect(within(row("Feeding")).getByText("10m ago · Solid Food")).toBeTruthy();
+  });
+
   it("hides what the user may not read and offers no logging without write access", () => {
     session.value = makeSession({
       canRead: (f) => f !== "pumping",
@@ -174,6 +183,39 @@ describe("SimpleUI", () => {
     await waitFor(() => expect(api.createFeeding).toHaveBeenCalledTimes(1));
     expect(api.createFeeding.mock.calls[0][0]).not.toHaveProperty("amount");
     expect(api.createFeeding.mock.calls[0][0].method).toBe("left breast");
+  });
+
+  it("logs solid food, which has no bottle amount", async () => {
+    api.createFeeding.mockResolvedValue({ id: 52 });
+    renderUi();
+    fireEvent.click(within(row("Feeding")).getByRole("button", { name: "Log Feeding" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Solid Food" }));
+    // The ways of feeding follow the type, and bottle is not one of them.
+    expect(within(dialog).queryByRole("button", { name: "Bottle" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Parent Fed" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).queryByText("120 mL")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Self Fed" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledTimes(1));
+    const sent = api.createFeeding.mock.calls[0][0];
+    expect(sent.type).toBe("solid food");
+    expect(sent.method).toBe("self fed");
+    expect(sent).not.toHaveProperty("amount");
+  });
+
+  it("opens the feeding sheet on what was fed last time", () => {
+    session.value = makeSession();
+    session.value.data.weeklyFeedings = [
+      { id: 9, start: minsAgo(40), end: minsAgo(30), type: "formula", method: "bottle", amount: 150 },
+      ...session.value.data.weeklyFeedings,
+    ];
+    renderUi();
+    fireEvent.click(within(row("Feeding")).getByRole("button", { name: "Log Feeding" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Formula" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByRole("button", { name: "Bottle" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByText("150 mL")).toBeTruthy();
   });
 
   it("keeps the sheet open with a message when saving fails", async () => {

@@ -744,6 +744,7 @@ export default {
   "simple.minAgo": "hace {{count}} min",
   "simple.otherTime": "Otra hora",
   "simple.when": "Cuándo",
+  "simple.what": "Qué",
   "simple.how": "Cómo",
   "simple.oneTap": "Un toque lo guarda",
   "simple.rightNow": "Ahora mismo",
