@@ -43,8 +43,8 @@ function ConfirmChip({ label, confirm, icon, onConfirm }) {
 }
 
 // One line of the story. Tapping it opens a strip of things to do with it:
-// move it five minutes, edit it, delete it. The row just logged opens by
-// itself, with Undo in place of Delete.
+// move it five minutes, change how much was drunk, edit it, delete it. The
+// row just logged opens by itself, with Undo in place of Delete.
 const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, elapsed, tags, volume, actions }) {
   const { t } = useI18n();
   const Icon = iconOf(row.kind, row);
@@ -110,16 +110,20 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
 
       {open && editable && (
         <div className="tl-strip" role="group" aria-label={text.title}>
-          <button
-            type="button"
-            className="tl-chip"
-            disabled={!nudged(row, -NUDGE, now)}
-            aria-label={t("timeline.earlier", { count: NUDGE })}
-            onClick={() => actions.nudge(row, -NUDGE)}
-          >
-            −{NUDGE} {minutes}
-          </button>
-          {!fresh && (
+          {/* Each pair is one control, with its unit said once at the end:
+              "−5 | +5 min" moves the entry, "−10 | +10 mL" changes the amount.
+              The amount can be put right at any time: what a bottle held is
+              known when it is given, what was drunk only afterwards. */}
+          <span className="tl-pair">
+            <button
+              type="button"
+              className="tl-chip"
+              disabled={!nudged(row, -NUDGE, now)}
+              aria-label={t("timeline.earlier", { count: NUDGE })}
+              onClick={() => actions.nudge(row, -NUDGE)}
+            >
+              −{NUDGE}
+            </button>
             <button
               type="button"
               className="tl-chip"
@@ -129,14 +133,14 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
             >
               +{NUDGE} {minutes}
             </button>
-          )}
-          {fresh && !row.live && amount > 0 && KINDS[row.kind].span && (
-            <>
+          </span>
+          {!row.live && amount > 0 && KINDS[row.kind].span && (
+            <span className="tl-pair">
               <button
                 type="button"
                 className="tl-chip"
                 disabled={amount - volume.step <= 0}
-                aria-label={t("simple.less")}
+                aria-label={`${t("simple.less")} (${volume.step} ${volume.unit})`}
                 onClick={() => actions.amount(row, +(amount - volume.step).toFixed(2))}
               >
                 −{volume.step}
@@ -144,12 +148,12 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
               <button
                 type="button"
                 className="tl-chip"
-                aria-label={t("simple.more")}
+                aria-label={`${t("simple.more")} (${volume.step} ${volume.unit})`}
                 onClick={() => actions.amount(row, +(amount + volume.step).toFixed(2))}
               >
                 +{volume.step} {volume.unit}
               </button>
-            </>
+            </span>
           )}
           {fresh ? (
             <button type="button" className="tl-chip tl-chip-strong" onClick={actions.undo}>
@@ -202,7 +206,7 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
 // top, with no "now" at the end and nothing to keep up with.
 export default function Stream({
   days, todayStart, now, asleepNow, describe, summaryOf, fresh, open, actions, canEdit, tagMaps, volume, earlier,
-  follow = true, emptyText,
+  follow = true, emptyText, onDay,
 }) {
   const { t } = useI18n();
   const scroller = useRef(null);
@@ -278,14 +282,21 @@ export default function Stream({
         {days.map((day) => {
           const title = dayTitle(day.start, todayStart, t);
           const summary = summaryOf(day);
+          // The date is the way to any other day, where there is one.
+          const date = (text, className) => (onDay ? (
+            <button type="button" className={`${className} tl-day-pick`} title={t("timeline.otherDay")} onClick={() => onDay(day.start)}>
+              {text}
+              <Glyph.Calendar />
+            </button>
+          ) : <span className={className}>{text}</span>);
           const isLast = day === lastDay;
           let previous = null;
           return (
             <section key={day.key} className="tl-day" aria-label={title.date || title.name}>
               <header className="tl-day-head">
                 <h2>
-                  <span className="tl-day-name">{title.name}</span>
-                  {title.date && <span className="tl-day-date">{title.date}</span>}
+                  {title.date ? <span className="tl-day-name">{title.name}</span> : date(title.name, "tl-day-name")}
+                  {title.date && date(title.date, "tl-day-date")}
                 </h2>
                 {summary && <p className="tl-day-sum">{summary}</p>}
               </header>

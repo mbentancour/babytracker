@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mix, nightness, skyAt, skyStops, gradient, hourMarks, stars, span } from "./daylight";
+import {
+  mix, nightness, skyAt, skyStops, skyDown, gradient, hourMarks, stars, span, luminance, contrast, inkOn, INK_LIGHT, INK_DARK, SKY_HOLD,
+} from "./daylight";
 
 const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime();
 
@@ -11,7 +13,7 @@ describe("sky colours", () => {
 
   it("is dark at night and blue at noon, high up and at the horizon", () => {
     expect(skyAt(at(22, 0))).toEqual({ high: "#0b1033", horizon: "#1b2356", strip: "#141c4e" });
-    expect(skyAt(at(22, 12))).toEqual({ high: "#1e66c8", horizon: "#4c9ae6", strip: "#4897e7" });
+    expect(skyAt(at(22, 12))).toEqual({ high: "#1553b8", horizon: "#4c9ae6", strip: "#4897e7" });
     expect(skyAt(at(22, 2)).high).toBe(mix("#0B1033", "#101845", 0.4));
   });
 
@@ -26,6 +28,50 @@ describe("sky colours", () => {
     expect(nightness(at(22, 23))).toBe(1);
     expect(nightness(at(22, 6, 45))).toBeGreaterThan(0);
     expect(nightness(at(22, 6, 45))).toBeLessThan(1);
+  });
+});
+
+// The header is read at a glance, outdoors, at arm's length: whatever is
+// written on the sky has to stand out from it. 4.5 to 1 is what WCAG asks of
+// small text.
+describe("writing on the sky", () => {
+  const everyFiveMinutes = Array.from({ length: 288 }, (_, i) => at(22, 0, i * 5));
+  const worst = (heights, ink) => Math.min(...everyFiveMinutes.flatMap((ms) => heights.map((y) => {
+    const sky = skyDown(skyAt(ms), y);
+    return contrast(ink(sky), sky);
+  })));
+
+  it("measures lightness and contrast as WCAG does", () => {
+    expect(luminance("#000000")).toBe(0);
+    expect(luminance("#ffffff")).toBeCloseTo(1);
+    expect(contrast("#000000", "#ffffff")).toBeCloseTo(21);
+    expect(contrast("#777777", "#ffffff")).toBeCloseTo(4.48, 2);
+    expect(contrast("#ffffff", "#777777")).toBe(contrast("#777777", "#ffffff"));
+  });
+
+  it("keeps the sky its high colour down to where the white text ends", () => {
+    const noon = skyAt(at(22, 12));
+    expect(skyDown(noon, 0)).toBe(noon.high);
+    expect(skyDown(noon, SKY_HOLD)).toBe(noon.high);
+    expect(skyDown(noon, 1)).toBe(noon.horizon);
+  });
+
+  it("is dark enough for small white text all day, as far down as the header writes in white", () => {
+    // Name, labels and figures sit in the top half. The line under a figure
+    // ends at 0.57 of the height, 0.62 when it wraps, 0.67 when it wraps twice.
+    expect(worst([0, 0.3, SKY_HOLD, 0.57, 0.62, 0.67], () => INK_LIGHT)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("has an ink that reads on the sky at any hour, lower down where it may be bright", () => {
+    // The icons beside the strip, and the hours under it.
+    expect(worst([0.74, 0.78, 0.85, 0.92, 1], inkOn)).toBeGreaterThan(4.45);
+  });
+
+  it("picks the dark ink on a bright sky and white on a dark one", () => {
+    expect(inkOn(skyAt(at(22, 12)).horizon)).toBe(INK_DARK);
+    expect(inkOn(skyAt(at(22, 7)).horizon)).toBe(INK_DARK);
+    expect(inkOn(skyAt(at(22, 23)).horizon)).toBe(INK_LIGHT);
+    expect(inkOn("#808080")).toBe(INK_DARK);
   });
 });
 

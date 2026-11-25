@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatElapsed } from "../../utils/formatters";
+import { formatElapsed, timeAgo } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
+import { agoAnchor } from "../../utils/overlayTime";
 import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
 import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "../simple/time";
 import { Glyph } from "./icons";
 import { KINDS, toneOf, iconOf, feedingIcon } from "./kinds";
 import { usualFeeds } from "./insights";
-import { describeRow, timerElapsed } from "./story";
+import { describeRow, newest, timerElapsed } from "./story";
 
 const MINUTE = 60000;
 const SOLID_TONE = "#A1622B";
@@ -150,6 +151,9 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
   };
 
   const words = (feed) => describeRow({ kind: "feeding", entry: feed }, { t, units });
+  // What was fed last and how long ago: with nursing, which side it was. The
+  // tray lies over the end of the list, where that would otherwise be read.
+  const last = useMemo(() => newest(feedings), [feedings]);
   const body = (feed) => (Number(feed.amount) > 0 ? { type: feed.type, method: feed.method, amount: feed.amount } : { type: feed.type, method: feed.method });
 
   if (running) {
@@ -221,6 +225,11 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
 
   return (
     <>
+      {last && (
+        <p className="tl-lead tl-lead-fact">
+          {t("timeline.lastFeedWas", { what: words(last).title, ago: timeAgo(agoAnchor(last), t) })}
+        </p>
+      )}
       <p className="tl-lead">{t("simple.oneTap")}</p>
       <div className="tl-options">
         {usual.map((feed) => {
@@ -254,6 +263,18 @@ function SleepTray({ log, busy, run, onForm }) {
   const [asleep, setAsleep] = useState(() => clock(new Date(Date.now() - 60 * MINUTE)));
   const [woke, setWoke] = useState(() => clock(new Date()));
   const [bad, setBad] = useState(false);
+  // Asleep already, and for a while: the time it began, once "Other time" is
+  // picked. Null while that choice is closed.
+  const [since, setSince] = useState(null);
+  const [badSince, setBadSince] = useState(false);
+
+  const start = (at) => run(() => log.startTimer("sleep", at));
+  const startSince = () => {
+    const at = lastClock(since, new Date());
+    if (!at) return setBadSince(true);
+    setBadSince(false);
+    return start(at);
+  };
 
   const savePast = () => {
     const end = lastClock(woke, new Date());
@@ -265,10 +286,45 @@ function SleepTray({ log, busy, run, onForm }) {
 
   return (
     <>
-      <button type="button" className="tl-primary" style={{ background: toneOf("sleep") }} disabled={busy} onClick={() => run(() => log.startTimer("sleep"))}>
+      <button type="button" className="tl-primary" style={{ background: toneOf("sleep") }} disabled={busy} onClick={() => start()}>
         <Glyph.Moon />
         {t("simple.startSleep")}
       </button>
+      {/* Sleep is the entry most often logged late: the baby goes down, and
+          the phone comes out a while after. */}
+      <div className="tl-label">{t("timeline.asleepEarlier")}</div>
+      <div className="tl-seg tl-seg-fit">
+        {[15, 30].map((minutes) => (
+          <button
+            key={minutes}
+            type="button"
+            className="tl-seg-btn"
+            disabled={busy}
+            aria-label={t("simple.minAgo", { count: minutes })}
+            onClick={() => start(new Date(Date.now() - minutes * MINUTE))}
+          >
+            {minutes} {t("simple.minUnit")}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="tl-seg-btn"
+          aria-pressed={since !== null}
+          onClick={() => setSince(since === null ? clock(new Date(Date.now() - 45 * MINUTE)) : null)}
+        >
+          {t("simple.otherTime")}
+        </button>
+      </div>
+      {since !== null && (
+        <div className="tl-times tl-times-one">
+          <label>
+            {t("simple.fellAsleep")}
+            <input type="time" className="tl-time-input" value={since} onChange={(e) => setSince(e.target.value)} />
+          </label>
+          <button type="button" className="tl-secondary" disabled={busy} onClick={startSince}>{t("timeline.startThen")}</button>
+        </div>
+      )}
+      {badSince && <p className="tl-error" role="alert">{t("simple.badTime")}</p>}
       <div className="tl-label">{t("simple.pastSleep")}</div>
       <div className="tl-times">
         <label>

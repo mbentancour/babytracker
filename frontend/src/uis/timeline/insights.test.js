@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { median, feedRhythm, awakeWindow, lastWoke, sleepBetween, byNow, countBetween, ribbonMarks, usualFeeds, nextSleepAt } from "./insights";
+import {
+  median, feedRhythm, feedStarts, awakeWindow, lastWoke, sleepBetween, byNow, countBetween, amountBetween, usualFeeds, nextSleepAt,
+} from "./insights";
 
 const at = (d, h, m = 0) => new Date(2026, 9, d, h, m);
 const iso = (d, h, m = 0) => at(d, h, m).toISOString();
@@ -39,6 +41,37 @@ describe("feedRhythm", () => {
   it("ignores holes in the log", () => {
     const holed = [{ start: iso(18, 8) }, ...every3h];
     expect(feedRhythm(holed).gapMs).toBe(3 * HOUR);
+  });
+
+  // One tap on "Left breast" and one on "Right breast" a quarter of an hour
+  // later: two entries, one feed.
+  const span = (d, h, m, minutes = 15) => ({ start: iso(d, h, m), end: iso(d, h, m + minutes) });
+  const bothSides = [6, 9, 12, 15, 18].flatMap((h) => [span(22, h, 0), span(22, h, 15)]);
+
+  it("takes both sides of one feed as one feed", () => {
+    const r = feedRhythm(bothSides);
+    expect(r.gapMs).toBe(3 * HOUR);
+    // Counted from when the feed began, not from its second side.
+    expect(r.last).toBe(at(22, 18).getTime());
+    expect(r.nextAt).toBe(at(22, 21).getTime());
+    expect(feedStarts(bothSides)).toHaveLength(5);
+  });
+
+  it("joins a bottle given to finish a feed, up to half an hour after it", () => {
+    // Nursed 09:00-09:20, then a bottle begun at 09:45: the same feed.
+    expect(feedStarts([span(22, 9, 0, 20), span(22, 9, 45)])).toEqual([at(22, 9).getTime()]);
+    // Begun at 09:55, more than half an hour after the nursing ended: another.
+    expect(feedStarts([span(22, 9, 0, 20), span(22, 9, 55)])).toHaveLength(2);
+  });
+
+  it("keeps feeds an hour apart as separate feeds", () => {
+    const cluster = [17, 18, 19, 20, 21].map((h) => span(22, h, 0));
+    expect(feedRhythm(cluster).gapMs).toBe(HOUR);
+  });
+
+  it("does not let an entry with a mistyped end swallow the feeds after it", () => {
+    const wrongEnd = { start: iso(22, 6), end: iso(23, 6) };
+    expect(feedStarts([wrongEnd, ...[9, 12, 15, 18].map((h) => span(22, h, 0))])).toHaveLength(5);
   });
 });
 
@@ -114,46 +147,19 @@ describe("byNow", () => {
   });
 });
 
-describe("ribbonMarks", () => {
-  const now = at(22, 14).getTime();
+describe("amountBetween", () => {
+  const feeds = [
+    { start: iso(22, 7), amount: 120 },
+    { start: iso(22, 10) }, // nursing: no amount
+    { start: iso(22, 13), amount: "90" },
+    { start: iso(21, 19), amount: 150 },
+  ];
 
-  it("places sleeps and events on a 0..1 scale of the last 24 hours", () => {
-    const marks = ribbonMarks(
-      {
-        sleeps: [{ start: iso(22, 2), end: iso(22, 8), nap: false }],
-        feedings: [{ id: 1, start: iso(22, 8) }],
-        changes: [{ id: 2, time: iso(22, 11) }],
-      },
-      now
-    );
-    expect(marks.sleep).toEqual([{ from: 0.5, to: 0.75, nap: false }]);
-    expect(marks.feeds[0].x).toBe(0.75);
-    expect(marks.diapers[0].x).toBe(0.875);
-  });
-
-  it("clips a sleep that began before the window and drops what is outside it", () => {
-    const marks = ribbonMarks(
-      {
-        sleeps: [{ start: iso(21, 12), end: iso(21, 16) }, { start: iso(20, 1), end: iso(20, 5) }],
-        feedings: [{ start: iso(21, 9) }],
-      },
-      now
-    );
-    expect(marks.sleep).toHaveLength(1);
-    expect(marks.sleep[0].from).toBe(0);
-    expect(marks.sleep[0].to).toBeCloseTo(2 / 24);
-    expect(marks.feeds).toHaveLength(0);
-  });
-
-  it("runs an ongoing sleep to now", () => {
-    const marks = ribbonMarks({ asleepSince: at(22, 13).getTime() }, now);
-    expect(marks.sleep).toEqual([{ from: 23 / 24, to: 1, ongoing: true }]);
-  });
-
-  it("puts ticks on every third whole hour", () => {
-    const { ticks } = ribbonMarks({}, now);
-    expect(ticks.map((t) => t.hour)).toEqual([15, 18, 21, 0, 3, 6, 9, 12]);
-    expect(ticks[0].x).toBeCloseTo(1 / 24);
+  it("adds up what the feeds in the window say was drunk", () => {
+    const drunk = amountBetween(feeds, "start");
+    expect(drunk(at(22, 0).getTime(), at(23, 0).getTime())).toBe(210);
+    expect(drunk(at(22, 0).getTime(), at(22, 12).getTime())).toBe(120);
+    expect(drunk(at(20, 0).getTime(), at(21, 0).getTime())).toBe(0);
   });
 });
 

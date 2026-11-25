@@ -20,6 +20,36 @@ export function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// One feed is often more than one entry: the other breast, or a bottle to
+// finish. An entry that begins within half an hour of the one before ending
+// belongs to the same feed.
+const SAME_FEED = HOUR / 2;
+// No feed lasts longer than this. An entry that says it did has a mistyped
+// end, and must not swallow the feeds that came after it.
+const LONGEST_FEED = 2 * HOUR;
+
+// feedStarts lists when each feed began, oldest first, with the entries that
+// make up one feed counted once. Tapping "Left breast" and then "Right
+// breast" writes two entries a quarter of an hour apart; taken as two feeds,
+// the usual gap between feeds would come out as that quarter of an hour.
+export function feedStarts(feedings = []) {
+  const spans = [];
+  for (const f of feedings) {
+    const start = time(f.start);
+    if (start === null) continue;
+    const end = time(f.end);
+    spans.push({ start, end: end !== null && end > start ? Math.min(end, start + LONGEST_FEED) : start });
+  }
+  spans.sort((a, b) => a.start - b.start);
+  const starts = [];
+  let until = -Infinity;
+  for (const s of spans) {
+    if (s.start - until > SAME_FEED) starts.push(s.start);
+    until = Math.max(until, s.end);
+  }
+  return starts;
+}
+
 // feedRhythm describes how feeds are usually spaced: the median gap between
 // the starts of consecutive feeds, and from that when the next one would
 // usually come. The median, not the mean: one long night stretch among
@@ -27,12 +57,12 @@ export function median(values) {
 //
 // Needs four gaps. Gaps over twelve hours are holes in the log, not rhythm.
 export function feedRhythm(feedings = []) {
-  const starts = feedings.map((f) => time(f.start)).filter((ms) => ms !== null).sort((a, b) => a - b);
+  const starts = feedStarts(feedings);
   if (!starts.length) return null;
   const gaps = [];
   for (let i = 1; i < starts.length; i++) {
     const gap = starts[i] - starts[i - 1];
-    if (gap > 0 && gap <= 12 * HOUR) gaps.push(gap);
+    if (gap <= 12 * HOUR) gaps.push(gap);
   }
   const last = starts[starts.length - 1];
   if (gaps.length < 4) return { last, gapMs: null, nextAt: null };
@@ -124,39 +154,15 @@ export const countBetween = (entries = [], field) => (from, to) =>
     return at !== null && at >= from && at < to ? n + 1 : n;
   }, 0);
 
-// ribbonMarks lays the last `hours` out on a 0..1 scale for the day ribbon:
-// sleep as [from, to] spans (clipped to the window, an ongoing sleep running
-// to "now"), everything else as points.
-export function ribbonMarks({ sleeps = [], feedings = [], changes = [], asleepSince = null }, now, hours = 24) {
-  const from = now - hours * HOUR;
-  const x = (ms) => (ms - from) / (now - from);
-  const inside = (ms) => ms !== null && ms >= from && ms <= now;
-
-  const spans = [];
-  for (const s of sleeps) {
-    const start = time(s.start);
-    const end = time(s.end);
-    if (start === null || end === null || end <= from || start >= now) continue;
-    spans.push({ from: x(Math.max(start, from)), to: x(Math.min(end, now)), nap: !!s.nap });
-  }
-  if (asleepSince !== null && asleepSince < now) {
-    spans.push({ from: x(Math.max(asleepSince, from)), to: 1, ongoing: true });
-  }
-
-  const points = (entries, field) =>
-    entries.map((e) => ({ at: time(e[field]), entry: e })).filter((p) => inside(p.at)).map((p) => ({ x: x(p.at), entry: p.entry }));
-
-  // Hour ticks on whole local hours, every three hours.
-  const ticks = [];
-  const first = new Date(from);
-  first.setMinutes(0, 0, 0);
-  for (let t = first.getTime(); t <= now; t += HOUR) {
-    const hour = new Date(t).getHours();
-    if (t >= from && hour % 3 === 0) ticks.push({ x: x(t), hour });
-  }
-
-  return { sleep: spans, feeds: points(feedings, "start"), diapers: points(changes, "time"), ticks };
-}
+// amountBetween adds up the amounts of the entries whose `field` falls in
+// [from, to): how much was drunk, going by the feeds that say how much.
+// Nursing has no amount and adds nothing.
+export const amountBetween = (entries = [], field) => (from, to) =>
+  entries.reduce((sum, e) => {
+    const at = time(e[field]);
+    const amount = Number(e.amount);
+    return at !== null && at >= from && at < to && amount > 0 ? sum + amount : sum;
+  }, 0);
 
 // usualFeeds picks the feeds worth a one-tap button: the kinds logged most in
 // the set (type + method), each carrying the amount it had last time. A

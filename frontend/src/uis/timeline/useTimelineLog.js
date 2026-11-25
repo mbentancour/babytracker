@@ -9,7 +9,6 @@ import {
   EMPTY_OVERLAY, withAdded, withoutAdded, withRemoved, withoutRemoved, withPatched, withoutPatched, applyOverlay, pruneOverlay,
 } from "./overlay";
 
-const MINUTE = 60000;
 // How long a just-logged row keeps its "undo / adjust" strip open.
 const FRESH_MS = 12000;
 const ERROR_MS = 6000;
@@ -189,11 +188,11 @@ export function useTimelineLog() {
     return guard(() => dropTimer(running));
   }, [guard, dropTimer]);
 
-  // Starts a timer, now or a few minutes back ("she fell asleep ten minutes
-  // ago").
-  const startTimer = useCallback((kind, minutesAgo = 0) => guard(async () => {
+  // Starts a timer, now or from an earlier moment ("she fell asleep half an
+  // hour ago"): `since` is that moment as a Date.
+  const startTimer = useCallback((kind, since = null) => guard(async () => {
     const body = { child: childId, name: kind };
-    if (minutesAgo > 0) body.start = toUTC(new Date(Date.now() - minutesAgo * MINUTE));
+    if (since && since.getTime() < Date.now()) body.start = toUTC(since);
     const created = await api.createTimer(body);
     setOverlay((o) => withAdded(o, "timers", created));
     setFresh({ key: `timer-${created.id}`, undo: () => guard(() => dropTimer(created)) });

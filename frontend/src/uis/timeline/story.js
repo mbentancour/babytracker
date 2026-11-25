@@ -47,6 +47,21 @@ export function startOfDay(ms) {
   return d.getTime();
 }
 
+// newest is the entry that happened last, going by the moment "… ago" counts
+// from (its end, if it has one), or null for an empty list.
+export function newest(entries = []) {
+  let best = null;
+  let bestAt = -Infinity;
+  for (const entry of entries) {
+    const at = time(agoAnchor(entry));
+    if (at !== null && at > bestAt) {
+      best = entry;
+      bestAt = at;
+    }
+  }
+  return best;
+}
+
 // Entries told as one line, and the field that holds their time (their start,
 // for those that also have an end).
 const MOMENTS = [

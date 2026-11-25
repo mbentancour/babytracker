@@ -94,13 +94,15 @@ On a wide screen the list sits beside today so far and the week's sleep:
 
 ![Timeline interface on a wide screen](docs/screenshots/Timeline-Desktop.png)
 
-- **The top of the screen** is drawn as the sky at the current time of day, so it is dark at night. It says whether the baby is asleep or awake and for how long, and when the last feed and the last diaper were. When the past week holds enough to go by, it also says about when the next sleep and the next feed usually come. A narrow strip in it shows the last 24 hours, with sleep and feeds marked.
-- **Feeding** offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. A feed logged this way is recorded as 15 minutes long, ending at the time given, as in the simple interface. **Diaper** is one tap on Wet, Solid or Wet + solid.
+- **The top of the screen** is drawn as the sky at the current time of day, so it is dark at night. It says whether the baby is asleep or awake and for how long, and when the last feed and the last diaper were. When the past week holds enough to go by, it also says about when the next sleep and the next feed usually come. A narrow strip in it shows the last 24 hours, with sleep and feeds marked. With several children, their names stand at the top; tap one to switch.
+- **Feeding** says what was fed last and how long ago, and offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. A feed logged this way is recorded as 15 minutes long, ending at the time given, as in the simple interface. **Diaper** is one tap on Wet, Solid or Wet + solid.
+- **Sleep** starts now, or from 15 or 30 minutes ago or another time when the baby went down a while back. A sleep that is already over can be entered with both its times.
 - **Sleep, feeding and tummy time** can run as timers. A timed feed asks how it was given when it ends.
 - **More** has tummy time and pumping, and opens the full form for everything else (temperature, measurements, notes, medications, milestones).
-- **A new entry** appears at once, with a strip to move it five minutes earlier or later, change its amount, or **Undo** it. Tapping any entry opens the same strip, with **Edit** for the full form and **Delete**, which asks for a second tap.
-- **Earlier days:** the list starts with today and yesterday. **Show earlier days** goes back through the week, and **Older days** opens any day before that.
-- **Overview** sits beside the list on a wide screen and behind the chart button on a phone. It compares today so far with a usual day, shows the week's sleep, and leads to Growth, Routine, Journal and Photos.
+- **A new entry** appears at once, with a strip to move it five minutes earlier or later, change its amount, or **Undo** it. Tapping any entry opens the same strip, with **Edit** for the full form and **Delete**, which asks for a second tap. The amount of a bottle can be put right there at any time, for when less was drunk than was poured.
+- **Under each day's name** are the day's feeds and how much they came to, the sleep and the diapers.
+- **Other days:** the list starts with today and yesterday. **Show earlier days** goes back through the week, and **Older days** opens any day before that. Tapping a day's date opens that day on its own, from where any other day is a step or a date away.
+- **Overview** sits beside the list on a wide screen and behind the chart button on a phone. It compares today so far with a usual day (feeds, how much was drunk, sleep, diapers), shows the week's sleep, and leads to Growth, Routine, Journal and Photos.
 
 ## Choosing the Interface
 

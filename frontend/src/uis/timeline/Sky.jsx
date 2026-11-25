@@ -1,12 +1,17 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { getAge, formatTime, getDisplayLocale } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
 import { Glyph } from "./icons";
-import { skyAt, skyStops, gradient, hourMarks, nightness, stars, span } from "./daylight";
+import { skyAt, skyStops, skyDown, inkOn, gradient, hourMarks, nightness, stars, span, SKY_HOLD } from "./daylight";
 import { time } from "./story";
 
 const DAY = 24 * 3600000;
 const STARS = stars(44);
+// How far down the header the strip's two icons and the hours under it sit,
+// 0 at the top and 1 at the bottom. That low the sky may be bright, so they
+// are written in whichever ink reads on it (see inkOn).
+const STRIP_AT = 0.78;
+const HOURS_AT = 0.92;
 
 function hourLabel(ms) {
   return new Date(ms).toLocaleTimeString(getDisplayLocale(), { hour: "numeric" });
@@ -21,7 +26,7 @@ export function SkyPaint({ at }) {
   const paint = useMemo(() => {
     const here = skyAt(at);
     return {
-      image: `linear-gradient(to bottom, ${here.high} 0%, ${here.high} 24%, ${here.horizon} 100%)`,
+      image: `linear-gradient(to bottom, ${here.high} 0%, ${here.high} ${SKY_HOLD * 100}%, ${here.horizon} 100%)`,
       night: nightness(at),
     };
   }, [at]);
@@ -51,10 +56,23 @@ export default function Sky({
   const to = Math.floor(now / 60000) * 60000;
   const from = to - DAY;
 
-  const sky = useMemo(() => ({
-    strip: gradient(skyStops(from, to), "strip"),
-    hours: hourMarks(from, to, 3).filter((m) => m.pos > 0.035 && m.pos < 0.87),
-  }), [from, to]);
+  const sky = useMemo(() => {
+    const here = skyAt(to);
+    return {
+      strip: gradient(skyStops(from, to), "strip"),
+      hours: hourMarks(from, to, 3).filter((m) => m.pos > 0.035 && m.pos < 0.87),
+      ink: { "--tl-ink-strip": inkOn(skyDown(here, STRIP_AT)), "--tl-ink-hours": inkOn(skyDown(here, HOURS_AT)) },
+    };
+  }, [from, to]);
+
+  // With several children the names are the switch, and the one whose log
+  // this is can have been scrolled out of sight on a phone.
+  const several = kids.length > 1;
+  const kidsRow = useRef(null);
+  useEffect(() => {
+    const current = kidsRow.current?.querySelector('[aria-pressed="true"]');
+    if (current?.scrollIntoView) current.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [child?.id, several]);
 
   const marks = useMemo(() => {
     const bars = [];
@@ -77,33 +95,41 @@ export default function Sky({
   }, [sleeps, feedings, asleepSince, from, to]);
 
   return (
-    <header className="tl-sky">
+    <header className={`tl-sky${several ? " has-kids" : ""}`}>
       <SkyPaint at={to} />
 
       <div className="tl-sky-top">
-        <button type="button" className="tl-id" onClick={onEditChild} title={t("general.tapToEdit")}>
+        {/* One child: the name and age stand here. Several: the row of names
+            beside it says whose log this is, so the name is not said twice. */}
+        <button
+          type="button"
+          className="tl-id"
+          onClick={onEditChild}
+          title={t("general.tapToEdit")}
+          aria-label={several ? `${child?.first_name || t("general.baby")} – ${t("general.tapToEdit")}` : undefined}
+        >
           <span className="tl-avatar">
             {child?.picture ? <img src={child.picture} alt="" /> : <Glyph.Head />}
           </span>
-          <span className="tl-id-text">
-            <span className="tl-name">{child?.first_name || t("general.baby")}</span>
-            {child?.birth_date && <span className="tl-age">{getAge(child.birth_date, t)}</span>}
-          </span>
+          {!several && (
+            <span className="tl-id-text">
+              <span className="tl-name">{child?.first_name || t("general.baby")}</span>
+              {child?.birth_date && <span className="tl-age">{getAge(child.birth_date, t)}</span>}
+            </span>
+          )}
         </button>
 
-        {kids.length > 1 && (
-          <div className="tl-kids" role="group" aria-label={t("timeline.children")}>
-            {kids.map((kid) => (
-              <button
-                key={kid.id}
-                type="button"
-                className="tl-kid"
-                aria-pressed={kid.id === child?.id}
-                onClick={() => onSelectChild(kid.id)}
-              >
-                {kid.first_name}
-              </button>
-            ))}
+        {several && (
+          <div className="tl-kids" role="group" aria-label={t("timeline.children")} ref={kidsRow}>
+            {kids.map((kid) => {
+              const current = kid.id === child?.id;
+              return (
+                <button key={kid.id} type="button" className="tl-kid" aria-pressed={current} onClick={() => onSelectChild(kid.id)}>
+                  {kid.first_name}
+                  {current && kid.birth_date && <span className="tl-kid-age">{getAge(kid.birth_date, t)}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -135,14 +161,20 @@ export default function Sky({
           {kpis.map((kpi) => (
             <div key={kpi.key} className="tl-kpi">
               <dt>{kpi.label}</dt>
-              <dd className="tl-kpi-value">{kpi.value}</dd>
+              {/* The words around a figure ("ago") are set small: the figure
+                  has to fit a third of a phone's width in every language. */}
+              <dd className={`tl-kpi-value${kpi.word ? " is-word" : ""}`}>
+                {kpi.before && <small>{kpi.before} </small>}
+                {kpi.value}
+                {kpi.after && <small> {kpi.after}</small>}
+              </dd>
               {kpi.sub && <dd className="tl-kpi-sub">{kpi.sub}</dd>}
             </div>
           ))}
         </dl>
       )}
 
-      <div className="tl-strip24" role="img" aria-label={t("timeline.last24")}>
+      <div className="tl-strip24" role="img" aria-label={t("timeline.last24")} style={sky.ink}>
         <div className="tl-strip-icons" aria-hidden="true">
           <Glyph.Moon />
           <Glyph.Bottle />
@@ -159,7 +191,13 @@ export default function Sky({
         </div>
         <div className="tl-hours" aria-hidden="true">
           {sky.hours.map((m) => (
-            <span key={m.ms} className={`tl-hour${m.hour % 6 === 0 ? "" : " is-minor"}`} style={{ left: pct(m.pos) }}>
+            // On a phone the time at the right-hand end takes a fifth of the
+            // strip: a sun right beside "04:29 PM" would read as one label.
+            <span
+              key={m.ms}
+              className={`tl-hour${m.hour % 6 === 0 ? "" : " is-minor"}${m.pos > 0.74 ? " is-late" : ""}`}
+              style={{ left: pct(m.pos) }}
+            >
               {m.kind === "noon" ? <Glyph.Sun /> : m.kind === "midnight" ? <Glyph.Moon /> : hourLabel(m.ms)}
             </span>
           ))}

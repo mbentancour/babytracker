@@ -18,8 +18,10 @@ export default function Overview({ today, week, links, onPage }) {
             {today.map((item) => {
               const Icon = iconOf(item.kind);
               return (
-                <li key={item.kind} style={{ "--tone": toneOf(item.kind) }}>
-                  <span className="tl-badge"><Icon /></span>
+                // A second figure about the same thing (how much, after how
+                // often) carries on under the first, without its own badge.
+                <li key={item.id || item.kind} className={item.more ? "is-more" : undefined} style={{ "--tone": toneOf(item.kind) }}>
+                  {!item.more && <span className="tl-badge"><Icon /></span>}
                   <span className="tl-today-text">
                     <span className="tl-today-value">{item.value}</span>
                     {item.usual && <span className="tl-today-usual">{item.usual}</span>}

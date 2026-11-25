@@ -123,7 +123,8 @@ describe("TimelineUI", () => {
     expect(story()).toEqual(["Left Breast · 10m", "Fell asleep", "Woke up", "Bottle · 120 mL", "Diaper · Wet", "Now"]);
     expect(within(rowOf("Woke up")).getByText("slept 1h 30m · Nap")).toBeTruthy();
     expect(within(rowOf("Bottle · 120 mL")).getByText(formatTime(minsAgo(60)))).toBeTruthy();
-    expect(screen.getByText("2 feeds · 1h 30m sleep · 1 diaper")).toBeTruthy();
+    // How much the feeds that say so add up to stands beside how many there were.
+    expect(screen.getByText("2 feeds · 120 mL · 1h 30m sleep · 1 diaper")).toBeTruthy();
     // The stretch from falling asleep to waking is drawn as one block.
     expect(rowOf("Fell asleep").className).toContain("sleep-after");
     expect(rowOf("Woke up").className).toContain("sleep-before");
@@ -139,6 +140,34 @@ describe("TimelineUI", () => {
     expect(figure("Last diaper")).toContain("30m ago");
     expect(figure("Last diaper")).toContain("Wet");
     expect(screen.getByText("Rosa")).toBeTruthy();
+    // The figure stands apart from the word "ago", which is set small so
+    // that the figure fits a narrow column in every language.
+    const value = screen.getByText("Last feed", { selector: "dt" }).parentElement.querySelector(".tl-kpi-value");
+    expect(value.querySelector("small").textContent.trim()).toBe("ago");
+    expect(value.firstChild.textContent).toBe("1h");
+  });
+
+  it("says just now in words for something logged this minute", () => {
+    session.value = makeSession({ weeklyChanges: [{ id: 5, time: NOW.toISOString(), wet: true, solid: false }] });
+    renderUi();
+    const value = screen.getByText("Last diaper", { selector: "dt" }).parentElement.querySelector(".tl-kpi-value");
+    expect(value.textContent).toBe("just now");
+    expect(value.className).toContain("is-word");
+  });
+
+  it("makes the names the switch when there are several children", () => {
+    session.value = makeSession({ children: [{ id: 7, first_name: "Rosa", birth_date: "2026-08-01" }, { id: 8, first_name: "Milo", birth_date: "2024-01-15" }] });
+    renderUi();
+    const switcher = screen.getByRole("group", { name: "Children" });
+    // Rosa's name is said once, on the button that is pressed, with her age.
+    expect(screen.getAllByText("Rosa")).toHaveLength(1);
+    const rosa = within(switcher).getByRole("button", { name: /Rosa/ });
+    expect(rosa.getAttribute("aria-pressed")).toBe("true");
+    expect(rosa.querySelector(".tl-kid-age")).toBeTruthy();
+    const milo = within(switcher).getByRole("button", { name: "Milo" });
+    expect(milo.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(milo);
+    expect(session.value.data.selectChild).toHaveBeenCalledWith(8);
   });
 
   it("logs a usual feed in one tap and shows it without waiting for a refresh", async () => {
@@ -157,7 +186,7 @@ describe("TimelineUI", () => {
 
     // The new row opens with a way to correct it and a way to take it back.
     // ("More" is also the name of a button on the bar, so ask the strip.)
-    fireEvent.click(within(document.querySelector(".tl-strip")).getByRole("button", { name: "More" }));
+    fireEvent.click(within(document.querySelector(".tl-strip")).getByRole("button", { name: "More (10 mL)" }));
     await waitFor(() => expect(api.updateFeeding).toHaveBeenCalledWith(9, { amount: 130 }));
     expect(story().slice(-2)).toEqual(["Bottle · 130 mL", "Now"]);
 
@@ -177,6 +206,23 @@ describe("TimelineUI", () => {
     expect(within(rowOf("Diaper · Wet")).getByText(formatTime(minsAgo(5)))).toBeTruthy();
     // The time beside it is when it ended, which is when it was logged.
     expect(within(document.querySelector(".tl-strip").closest(".tl-row")).getByText(formatTime(NOW))).toBeTruthy();
+  });
+
+  it("puts right how much was drunk, long after the bottle was logged", async () => {
+    renderUi();
+    // The bottle from an hour ago: no longer new, and still correctable.
+    fireEvent.click(within(rowOf("Bottle · 120 mL")).getByRole("button", { name: /Bottle · 120 mL/ }));
+    const strip = document.querySelector(".tl-strip");
+    // The unit is said once, at the end of the pair it belongs to.
+    expect([...strip.querySelectorAll(".tl-pair")].map((pair) => pair.textContent)).toEqual(["−5+5 min", "−10+10 mL"]);
+    fireEvent.click(within(strip).getByRole("button", { name: "Less (10 mL)" }));
+    await waitFor(() => expect(api.updateFeeding).toHaveBeenCalledWith(2, { amount: 110 }));
+    expect(story()).toContain("Bottle · 110 mL");
+    expect(within(strip).getByRole("button", { name: "Edit" })).toBeTruthy();
+
+    // Nursing has no amount to change.
+    fireEvent.click(within(rowOf("Left Breast · 10m")).getByRole("button", { name: /Left Breast/ }));
+    expect([...document.querySelectorAll(".tl-strip .tl-pair")].map((pair) => pair.textContent)).toEqual(["−5+5 min"]);
   });
 
   it("moves an entry five minutes at a tap", async () => {
@@ -231,6 +277,42 @@ describe("TimelineUI", () => {
     await waitFor(() => expect(api.createTimer).toHaveBeenLastCalledWith({ child: 7, name: "sleep", start: utc(NOW) }));
     expect(api.deleteSleep).toHaveBeenCalledWith(11);
     await waitFor(() => expect(within(dock()).getByRole("button", { name: "Wake up" })).toBeTruthy());
+  });
+
+  it("starts a sleep that began a while ago", async () => {
+    api.createTimer.mockResolvedValue({ id: 4, child: 7, name: "sleep", start: iso(15), pauses: [], is_paused: false });
+    renderUi();
+    press("Sleep");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Log Sleep" })).getByRole("button", { name: "15 min ago" }));
+    await waitFor(() => expect(api.createTimer).toHaveBeenCalledWith({ child: 7, name: "sleep", start: utc(minsAgo(15)) }));
+    // It is told where it began, a quarter of an hour back, and is still going.
+    await waitFor(() => expect(story().slice(-2)).toEqual(["Fell asleep", "Now"]));
+    const asleep = document.querySelector(".tl-row.is-live");
+    expect(within(asleep).getByText(formatTime(minsAgo(15)))).toBeTruthy();
+    expect(within(asleep).getByText("Asleep for 15:00")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("starts a sleep from a time on the clock", async () => {
+    api.createTimer.mockResolvedValue({ id: 4, child: 7, name: "sleep", start: new Date(2026, 9, 22, 12, 40).toISOString(), pauses: [], is_paused: false });
+    renderUi();
+    press("Sleep");
+    const tray = screen.getByRole("dialog", { name: "Log Sleep" });
+    expect(within(tray).queryByRole("button", { name: "Start from then" })).toBeNull();
+    fireEvent.click(within(tray).getByRole("button", { name: "Other time" }));
+    // The first of the tray's time fields is the one that just appeared.
+    const field = tray.querySelector(".tl-times-one input");
+    expect(field.value).toBe("13:15");
+    fireEvent.change(field, { target: { value: "12:40" } });
+    fireEvent.click(within(tray).getByRole("button", { name: "Start from then" }));
+    await waitFor(() => expect(api.createTimer).toHaveBeenCalledWith({ child: 7, name: "sleep", start: utc(new Date(2026, 9, 22, 12, 40)) }));
+  });
+
+  it("says what was fed last where the feed is chosen", () => {
+    renderUi();
+    press("Feeding");
+    const tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    expect(within(tray).getByText("Last feed: Bottle · 120 mL · 1h ago")).toBeTruthy();
   });
 
   it("asks how a timed feed was given before saving it", async () => {
@@ -338,7 +420,7 @@ describe("TimelineUI", () => {
     expect(story()).not.toContain("Diaper · Wet");
     expect(screen.queryByText("Last diaper")).toBeNull();
     expect(within(dock()).queryByRole("button", { name: "Diaper" })).toBeNull();
-    expect(screen.getByText("2 feeds · 1h 30m sleep")).toBeTruthy();
+    expect(screen.getByText("2 feeds · 120 mL · 1h 30m sleep")).toBeTruthy();
   });
 
   it("starts with two days and rolls back to earlier ones", () => {
@@ -356,6 +438,8 @@ describe("TimelineUI", () => {
     const page = () => screen.getByRole("dialog", { name: "Overview" });
     expect(within(page()).getByText("Today so far")).toBeTruthy();
     expect(within(page()).getByText("2 feeds")).toBeTruthy();
+    // How much, beside how often; then sleep and diapers, each on its own row.
+    expect([...page().querySelectorAll(".tl-today-value")].map((el) => el.textContent)).toEqual(["2 feeds", "120 mL", "1h 30m sleep", "1 diaper"]);
     expect(within(page()).getByText("Sleep this week")).toBeTruthy();
 
     fireEvent.click(within(page().querySelector(".tl-links")).getByRole("button", { name: "Growth" }));
@@ -376,7 +460,7 @@ describe("TimelineUI", () => {
     // It opens on the day before the week the home screen already shows.
     expect(within(page).getByLabelText("Date").value).toBe("2026-10-15");
     expect(told()).toEqual(["Woke up", "Bottle · 90 mL"]);
-    expect(within(page).getByText("1 feed · 6h 30m sleep")).toBeTruthy();
+    expect(within(page).getByText("1 feed · 90 mL · 6h 30m sleep")).toBeTruthy();
     // The night began the evening before: the rail arrives already asleep.
     expect(within(page).getByText("Woke up", { selector: ".tl-title" }).closest(".tl-row").className).toContain("sleep-before");
 
@@ -395,6 +479,27 @@ describe("TimelineUI", () => {
 
     fireEvent.click(within(page).getByRole("button", { name: "Edit" }));
     expect(screen.getByText("full form: feeding")).toBeTruthy();
+  });
+
+  it("opens any day from a day's date", () => {
+    renderUi();
+    // Today's own date: the page opens on that day, and any other is a step
+    // or a date away from there.
+    fireEvent.click(screen.getByRole("button", { name: "Thursday, October 22" }));
+    const page = screen.getByRole("dialog", { name: "Older days" });
+    expect(within(page).getByLabelText("Date").value).toBe("2026-10-22");
+    fireEvent.click(within(page).getByRole("button", { name: "Previous" }));
+    expect(within(page).getByLabelText("Date").value).toBe("2026-10-21");
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("leaves the amount out for a family that never writes one down", () => {
+    session.value = makeSession({ weeklyFeedings: [{ id: 1, start: iso(300), end: iso(290), method: "left breast", type: "breast milk" }] });
+    renderUi();
+    expect(screen.getByText("1 feed · 1h 30m sleep · 1 diaper")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(within(screen.getByRole("dialog", { name: "Overview" })).queryByText(/mL/)).toBeNull();
   });
 
   it("goes from one page straight to another, and Back still leads home", async () => {

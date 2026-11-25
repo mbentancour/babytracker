@@ -80,19 +80,21 @@ export default function DayPage({ firstDay, sees, can, describe, tagMaps, volume
     // rest of the rail either way.
     const rows = markSleep(buildRows(lists, { from }).filter((row) => row.at < to));
     const dated = buildDated(lists, { from }).filter((item) => item.day === dayKey(from));
-    const feeds = rows.filter((row) => row.kind === "feeding").length;
+    const fed = rows.filter((row) => row.kind === "feeding");
+    const drunk = fed.reduce((sum, row) => sum + (Number(row.entry.amount) > 0 ? Number(row.entry.amount) : 0), 0);
     const diapers = rows.filter((row) => row.kind === "diaper").length;
     const slept = sleepBetween(lists.sleeps || [], from, Math.min(to, Date.now()));
     const plural = (key, count) => t(`${key}_${count === 1 ? "one" : "other"}`, { count });
     return {
       days: groupDays(rows, dated, from),
       summary: [
-        feeds > 0 && plural("timeline.feeds", feeds),
+        fed.length > 0 && plural("timeline.feeds", fed.length),
+        drunk > 0 && `${+drunk.toFixed(volume.unit === "mL" ? 0 : 1)} ${volume.unit}`,
         slept >= 60000 && t("simple.sleepToday", { value: formatHoursMinutes(slept / HOUR) }),
         diapers > 0 && plural("simple.diapersToday", diapers),
       ].filter(Boolean).join(" · ") || null,
     };
-  }, [shown, sees, t]);
+  }, [shown, sees, volume.unit, t]);
 
   const act = useCallback(async (work) => {
     try {
@@ -119,8 +121,9 @@ export default function DayPage({ firstDay, sees, can, describe, tagMaps, volume
       setOpen(null);
       act(() => KINDS[kind].remove(id));
     },
+    amount: (row, amount) => act(() => KINDS[row.kind].update(row.entry.id, { amount })),
     // Nothing on a past day is new or still running.
-    amount: none, undo: none, finish: none, discard: none, pause: none, elapsed: () => 0,
+    undo: none, finish: none, discard: none, pause: none, elapsed: () => 0,
   }), [act, onEdit, none]);
 
   const go = (days) => {

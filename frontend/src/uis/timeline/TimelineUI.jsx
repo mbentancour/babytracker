@@ -10,13 +10,13 @@ import { useUnits } from "../../utils/units";
 import Composer from "./Composer";
 import DayPage from "./DayPage";
 import { Glyph } from "./icons";
-import { byNow, countBetween, feedRhythm, lastWoke, nextSleepAt, sleepBetween } from "./insights";
+import { amountBetween, byNow, countBetween, feedRhythm, lastWoke, nextSleepAt, sleepBetween } from "./insights";
 import { KINDS } from "./kinds";
 import Overview from "./Overview";
 import Sky, { SkyPaint } from "./Sky";
 import { skyAt, span } from "./daylight";
 import Stream from "./Stream";
-import { buildDated, buildRows, describeRow, groupDays, markSleep, nextMinuteIn, startOfDay, time, timerElapsed } from "./story";
+import { buildDated, buildRows, describeRow, groupDays, markSleep, newest, nextMinuteIn, startOfDay, time, timerElapsed } from "./story";
 import { useTimelineLog } from "./useTimelineLog";
 import "./timeline.css";
 
@@ -53,19 +53,6 @@ function daysBefore(start, days) {
   const date = new Date(start);
   date.setDate(date.getDate() - days);
   return date.getTime();
-}
-
-function newest(entries) {
-  let best = null;
-  let bestAt = -Infinity;
-  for (const entry of entries) {
-    const at = time(agoAnchor(entry));
-    if (at !== null && at > bestAt) {
-      best = entry;
-      bestAt = at;
-    }
-  }
-  return best;
 }
 
 // The clock, read again every `every` ms and also as each minute begins. On
@@ -105,6 +92,8 @@ export default function TimelineUI() {
   // The pages opened on top of the story, innermost last: on a phone Growth
   // is reached through Overview, and Back should return there.
   const [pages, setPages] = useState([]);
+  // The day the "day" page opens on, when a day's date was what opened it.
+  const [pickedDay, setPickedDay] = useState(null);
   const page = pages[pages.length - 1] || null;
   const openPage = useCallback((id) => setPages((open) => [...open, id]), []);
   const closePage = useCallback(() => setPages((open) => open.slice(0, -1)), []);
@@ -162,30 +151,41 @@ export default function TimelineUI() {
 
   const plural = useCallback((key, count) => t(`${key}_${count === 1 ? "one" : "other"}`, { count }), [t]);
   const length = (ms) => formatHoursMinutes(ms / HOUR);
+  const volume = useMemo(() => ({ unit: units.volume, ...(VOLUME[units.volume] || VOLUME.mL) }), [units.volume]);
+  // "540 mL": whole millilitres, ounces to one decimal.
+  const amountText = useCallback((value) => `${+value.toFixed(volume.unit === "mL" ? 0 : 1)} ${volume.unit}`, [volume.unit]);
 
-  // "5 feeds · 9h 20m sleep · 4 diapers" under each day's name.
+  // "5 feeds · 540 mL · 9h 20m sleep · 4 diapers" under each day's name. The
+  // amount is what the feeds that say how much add up to; a day of nursing
+  // has none to show.
   const summaries = useMemo(() => {
     const out = new Map();
     for (const day of days) {
-      const feeds = day.rows.filter((r) => r.kind === "feeding" && !r.live).length;
+      const fed = day.rows.filter((r) => r.kind === "feeding" && !r.live);
+      const drunk = fed.reduce((sum, r) => sum + (Number(r.entry.amount) > 0 ? Number(r.entry.amount) : 0), 0);
       const diapers = day.rows.filter((r) => r.kind === "diaper").length;
       const slept = sees("sleep") ? sleepBetween(sleeps, day.start, Math.min(daysBefore(day.start, -1), minute)) : 0;
       const parts = [
-        feeds > 0 && plural("timeline.feeds", feeds),
+        fed.length > 0 && plural("timeline.feeds", fed.length),
+        drunk > 0 && amountText(drunk),
         slept >= 60000 && t("simple.sleepToday", { value: length(slept) }),
         diapers > 0 && plural("simple.diapersToday", diapers),
       ].filter(Boolean);
       out.set(day.key, parts.join(" · ") || null);
     }
     return out;
-  }, [days, sleeps, minute, sees, plural, t]);
+  }, [days, sleeps, minute, sees, plural, amountText, t]);
 
   // How things stand right now, for the top of the screen.
   const kpis = useMemo(() => {
     const out = [];
+    // "2h 32m ago", with the figure kept apart from the words around it so
+    // the header can set those small. Under a minute it is "just now".
     const ago = (stamp) => {
       const value = elapsedSince(stamp);
-      return value === null ? t("time.justNow") : t("time.ago", { value });
+      if (value === null) return { value: t("time.justNow"), word: true };
+      const [before, after = ""] = t("timeline.ago", { value: "\u0000" }).split("\u0000");
+      return { value, before: before.trim(), after: after.trim() };
     };
     const since = (stamp) => t("timeline.since", { time: formatTime(stamp) });
     if (sees("sleep")) {
@@ -210,7 +210,7 @@ export default function TimelineUI() {
         const sub = next === null || minute - at > 12 * HOUR
           ? words({ kind: "feeding", entry: last }).title
           : next <= minute ? t("timeline.feedDue") : t("timeline.feedAround", { time: formatTime(next) });
-        out.push({ key: "feeding", label: t("timeline.lastFeed"), value: ago(agoAnchor(last)), sub });
+        out.push({ key: "feeding", label: t("timeline.lastFeed"), ...ago(agoAnchor(last)), sub });
       } else {
         out.push({ key: "feeding", label: t("timeline.lastFeed"), value: "—" });
       }
@@ -218,7 +218,7 @@ export default function TimelineUI() {
     if (sees("diaper")) {
       const last = newest(lists.changes);
       out.push(last
-        ? { key: "diaper", label: t("timeline.lastDiaper"), value: ago(last.time), sub: t(last.wet && last.solid ? "diaper.both" : last.solid ? "diaper.solid" : "diaper.wet") }
+        ? { key: "diaper", label: t("timeline.lastDiaper"), ...ago(last.time), sub: t(last.wet && last.solid ? "diaper.both" : last.solid ? "diaper.solid" : "diaper.wet") }
         : { key: "diaper", label: t("timeline.lastDiaper"), value: "—" });
     }
     return out;
@@ -227,31 +227,40 @@ export default function TimelineUI() {
   // Today so far against the same stretch of the days before.
   const today = useMemo(() => {
     const out = [];
-    const compare = (kind, measure, tracked, say, sayUsual) => {
+    const compare = (kind, measure, tracked, say, sayUsual, id = kind) => {
       const { today: value, usual } = byNow(measure, (from, to) => tracked(from, to) > 0, minute);
       const top = Math.max(value, usual || 0) * 1.12 || 1;
-      out.push({
+      const item = {
+        id,
         kind,
+        more: id !== kind,
         value: say(value),
         usual: usual === null ? null : t("timeline.usually", { value: sayUsual(usual) }),
         fill: Math.min(1, value / top),
         mark: usual === null ? null : usual / top,
-      });
+      };
+      return { item, value, usual };
     };
     if (sees("feeding")) {
       const count = countBetween(lists.feedings, "start");
-      compare("feeding", count, count, (n) => plural("timeline.feeds", n), (n) => Math.round(n));
+      out.push(compare("feeding", count, count, (n) => plural("timeline.feeds", n), (n) => Math.round(n)).item);
+      // How much, beside how often: the figure a bottle-fed day is judged
+      // by. Left out for a family that never writes an amount down.
+      const drunk = amountBetween(lists.feedings, "start");
+      const usualStep = (n) => amountText(Math.round(n / volume.step) * volume.step);
+      const intake = compare("feeding", drunk, drunk, amountText, usualStep, "intake");
+      if (intake.value > 0 || intake.usual > 0) out.push(intake.item);
     }
     if (sees("sleep")) {
       const slept = (from, to) => sleepBetween(sleeps, from, to);
-      compare("sleep", slept, slept, (ms) => t("simple.sleepToday", { value: ms >= 60000 ? length(ms) : "0m" }), (ms) => (ms >= 60000 ? length(ms) : "0m"));
+      out.push(compare("sleep", slept, slept, (ms) => t("simple.sleepToday", { value: ms >= 60000 ? length(ms) : "0m" }), (ms) => (ms >= 60000 ? length(ms) : "0m")).item);
     }
     if (sees("diaper")) {
       const count = countBetween(lists.changes, "time");
-      compare("diaper", count, count, (n) => plural("simple.diapersToday", n), (n) => Math.round(n));
+      out.push(compare("diaper", count, count, (n) => plural("simple.diapersToday", n), (n) => Math.round(n)).item);
     }
     return out;
-  }, [lists, sleeps, minute, sees, plural, t]);
+  }, [lists, sleeps, minute, sees, plural, amountText, volume.step, t]);
 
   // Each of the last seven days as a strip from midnight to midnight.
   const week = useMemo(() => {
@@ -332,12 +341,17 @@ export default function TimelineUI() {
     return () => document.removeEventListener("keydown", onKey);
   }, [tray, page, modal, closePage]);
 
-  const volume = useMemo(() => ({ unit: units.volume, ...(VOLUME[units.volume] || VOLUME.mL) }), [units.volume]);
   const summaryOf = useCallback((day) => summaries.get(day.key), [summaries]);
+  // A day's date opens that day on its own page, from where any other day
+  // is a step or a date away.
+  const openDay = useCallback((start) => {
+    setPickedDay(start);
+    openPage("day");
+  }, [openPage]);
 
   const earlier = shown < LOADED_DAYS
     ? { label: t("timeline.earlierDays"), onClick: () => setShown((n) => Math.min(LOADED_DAYS, n + 2)) }
-    : pageOpen("day") ? { older: true, label: t("timeline.olderDays"), onClick: () => openPage("day") } : null;
+    : pageOpen("day") ? { older: true, label: t("timeline.olderDays"), onClick: () => openDay(null) } : null;
 
   // The sky's colours right now, for the parts drawn by plain CSS (see
   // .settings-header in the stylesheet).
@@ -389,6 +403,7 @@ export default function TimelineUI() {
               tagMaps={data.tagMaps}
               volume={volume}
               earlier={earlier}
+              onDay={pageOpen("day") ? openDay : undefined}
             />
             <Composer
               log={log}
@@ -475,7 +490,7 @@ export default function TimelineUI() {
               {page === "photos" && <GalleryTab childId={data.child?.id} children={data.children} canWrite={canWrite("photo")} />}
               {page === "day" && (
                 <DayPage
-                  firstDay={daysBefore(todayStart, LOADED_DAYS)}
+                  firstDay={pickedDay ?? daysBefore(todayStart, LOADED_DAYS)}
                   sees={sees}
                   can={can}
                   describe={words}

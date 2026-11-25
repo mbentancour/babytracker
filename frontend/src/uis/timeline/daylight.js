@@ -15,15 +15,20 @@
 const HOUR = 3600000;
 
 // Hour of day, then three colours: high in the sky, at the horizon, and for
-// that hour on the 24-hour strip. Every one is dark enough for white text.
+// that hour on the 24-hour strip.
+//
+// The header's words are white and sit in the upper part, so "high" is kept
+// dark enough for small white text at every hour (4.5:1 and better; see the
+// test). The horizon is allowed to be bright: whatever is written that low
+// takes its colour from inkOn, dark on a bright sky and white on a dark one.
 const KEYS = [
   [0, "#0B1033", "#1B2356", "#141C4E"],
   [5, "#101845", "#2A2D6E", "#1B2259"],
   [6.25, "#2B2F7C", "#A9567F", "#6B4A9C"],
   [7, "#3A5DB8", "#EE9A69", "#F2A26C"],
-  [8.5, "#2470CE", "#58A5EA", "#58A4EA"],
-  [12, "#1E66C8", "#4C9AE6", "#4897E7"],
-  [16.5, "#2470CE", "#5BA7EB", "#58A4EA"],
+  [8.5, "#1A5CBD", "#58A5EA", "#58A4EA"],
+  [12, "#1553B8", "#4C9AE6", "#4897E7"],
+  [16.5, "#1A5CBD", "#5BA7EB", "#58A4EA"],
   [18.25, "#3F59BE", "#EE9F69", "#F4A46A"],
   [19, "#4B3E9C", "#E46E5E", "#EA7260"],
   [20, "#2A2874", "#7C4688", "#5B3D92"],
@@ -38,6 +43,41 @@ const hex = (parts) => `#${parts.map((v) => Math.round(v).toString(16).padStart(
 export function mix(a, b, amount) {
   const [x, y] = [rgb(a), rgb(b)];
   return hex(x.map((v, i) => v + (y[i] - v) * amount));
+}
+
+// How light a colour is, 0 (black) to 1 (white), and the contrast between
+// two colours, 1 to 21, both as WCAG defines them.
+export function luminance(colour) {
+  const [r, g, b] = rgb(colour).map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+export function contrast(a, b) {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
+}
+
+// The two inks the header writes in. The dark one is nearly black so that,
+// together with white, there is no colour of sky on which neither reads.
+export const INK_LIGHT = "#FFFFFF";
+export const INK_DARK = "#04061A";
+
+// inkOn picks the ink that reads better on a colour.
+export function inkOn(colour) {
+  return contrast(INK_LIGHT, colour) >= contrast(INK_DARK, colour) ? INK_LIGHT : INK_DARK;
+}
+
+// How far down the header the sky stays its "high" colour before it starts
+// turning into the horizon's, as a share of the header's height. Everything
+// written in white sits above the point where that makes it too bright.
+export const SKY_HOLD = 0.54;
+
+// The sky's colour at a height in the header, 0 at the top and 1 at the
+// bottom, for the colours skyAt gives.
+export function skyDown(sky, y) {
+  return mix(sky.high, sky.horizon, ramp(y, SKY_HOLD, 1));
 }
 
 const hourOf = (ms) => {
