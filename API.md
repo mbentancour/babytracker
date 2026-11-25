@@ -1131,6 +1131,32 @@ Content-Type: application/json
 
 ---
 
+## Interface choice
+
+Each user can have a preferred UI, stored on their account. The value is the id of a UI the web app ships (currently only `full`); an empty string means the default. The server stores any well-formed id (lowercase letters, digits and hyphens, at most 32 characters) and the web app falls back to its default for an id it does not have. A device can override the account's choice locally; that override is kept in the browser and never sent to the server.
+
+`GET /api/users/me` and `GET /api/users/` include the value as `ui`.
+
+Set your own:
+```
+PUT /api/users/me/ui
+Content-Type: application/json
+
+{"ui": "full"}
+```
+
+Set another user's (admin only):
+```
+PUT /api/users/{id}/ui
+Content-Type: application/json
+
+{"ui": ""}
+```
+
+Both return `{"ui": "..."}`. A malformed id is a 400; an unknown user is a 404.
+
+---
+
 ## Photo Gallery
 
 Aggregated view of all photos (standalone + entry-attached) for a child:

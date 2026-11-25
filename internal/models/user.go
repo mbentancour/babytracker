@@ -8,12 +8,14 @@ import (
 )
 
 type User struct {
-	ID           int       `db:"id" json:"id"`
-	Username     string    `db:"username" json:"username"`
-	PasswordHash string    `db:"password_hash" json:"-"`
-	IsAdmin      bool      `db:"is_admin" json:"is_admin"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
+	ID           int    `db:"id" json:"id"`
+	Username     string `db:"username" json:"username"`
+	PasswordHash string `db:"password_hash" json:"-"`
+	IsAdmin      bool   `db:"is_admin" json:"is_admin"`
+	// UI is the id of the UI this user gets by default; "" is the default UI.
+	UI        string    `db:"ui" json:"ui"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
 func CreateUser(db *sqlx.DB, username, passwordHash string, isAdmin bool) (*User, error) {
@@ -54,4 +56,15 @@ func CountUsers(db *sqlx.DB) (int, error) {
 	var count int
 	err := db.Get(&count, `SELECT COUNT(*) FROM users`)
 	return count, err
+}
+
+// SetUserUI stores which UI a user gets by default. It reports false when no
+// such user exists.
+func SetUserUI(db *sqlx.DB, id int, ui string) (bool, error) {
+	res, err := db.Exec(`UPDATE users SET ui = $1, updated_at = NOW() WHERE id = $2`, ui, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }

@@ -59,6 +59,27 @@ Settings → Preferences → Views.
 
 ---
 
+## The Simple Interface
+
+BabyTracker has a second, simpler interface for people who only want to log the everyday things. It shows one row per activity (feeding, sleep, diaper, tummy time, pumping) with when it last happened, and a button to log the next one.
+
+| Home | Logging a feeding |
+|---|---|
+| ![Simple interface: one row per activity with when it last happened](docs/screenshots/Simple-Home.png) | ![Simple interface: the feeding sheet with what, how, amount and when](docs/screenshots/Simple-Feeding.png) |
+
+- **Feeding:** what (breast milk, formula, fortified breast milk or solid food), how, the amount for a bottle, and when. It opens on what was fed last time.
+- **Diaper:** one tap on Wet, Solid or Wet + solid saves it.
+- **Sleep and tummy time:** start a timer and tap **Wake up** or **Finish** later, or log one that already happened.
+- **Pumping:** the amount and when.
+- **When** is Now, 15 or 30 minutes ago, or a clock time. A clock time means the last time the clock showed it, so "23:40" entered just after midnight is yesterday evening.
+- After saving, **Undo** removes the entry again.
+- **More options** on every sheet opens the full form (notes, tags, photos, another date).
+- **History** shows the day's timeline, where entries can be edited.
+
+Measurements, notes, medications and charts are only in the full interface.
+
+**Choosing the interface.** Each person picks theirs under **Settings → Account → Interface**; it follows them to every device. An admin can set it for others under **Settings → Users & Roles**. A single device can use a different one under **Settings → Preferences → Interface on this device**, for example a shared tablet that should always show the simple interface.
+
 ## Tracking Activities
 
 ### Feedings

@@ -13,6 +13,7 @@ import {
   FEEDING_TYPES,
   methodsForType,
 } from "../utils/preferences";
+import { UIS, isKnownUi, resolveUi } from "../uis";
 
 const UNIT_OPTIONS = [
   { value: "metric", label: "settings.metric" },
@@ -39,7 +40,7 @@ function formatBackupDate(raw) {
   return d.toLocaleString(getDisplayLocale());
 }
 
-export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch }) {
+export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch, userUi, onUserUiChange }) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
@@ -163,6 +164,19 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
                   </FormField>
                   <p className="settings-hint">
                     {t("settings.deviceNameHint")}
+                  </p>
+                  <FormField label={t("settings.interfaceDevice")}>
+                    <FormSelect
+                      options={[
+                        { value: "", label: t("settings.interfaceSameAsAccount") },
+                        ...Object.entries(UIS).map(([id, ui]) => ({ value: id, label: t(ui.labelKey) })),
+                      ]}
+                      value={isKnownUi(prefs.ui) ? prefs.ui : ""}
+                      onChange={(e) => setPref("ui", e.target.value)}
+                    />
+                  </FormField>
+                  <p className="settings-hint">
+                    {t("settings.interfaceDeviceHint")}
                   </p>
                   <FormField label={t("settings.photoQuality")}>
                     <FormSelect
@@ -540,6 +554,8 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.account")}</h3>
 
+                {onUserUiChange && <AccountInterfaceSection userUi={userUi} onChange={onUserUiChange} />}
+
                 {onLogout && authConfig?.oidc_enabled && (
                   <OIDCLinkSection providerName={authConfig.oidc_provider_name} />
                 )}
@@ -639,7 +655,7 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.users")}</h3>
                 {isAdmin ? (
-                  <UserManagement children={children || []} />
+                  <UserManagement children={children || []} onOwnUiChange={onUserUiChange} />
                 ) : (
                   <div className="settings-card" style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
                     {t("settings.adminOnly")}
@@ -2352,6 +2368,37 @@ function OIDCLinkSection({ providerName }) {
           {busy ? t("auth.pleaseWait") : t("settings.oidcLink", { provider })}
         </button>
       )}
+    </div>
+  );
+}
+
+// The UI saved on the account: what this user gets on any device that has no
+// override of its own (Preferences → Interface on this device).
+function AccountInterfaceSection({ userUi, onChange }) {
+  const { t } = useI18n();
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="settings-card" style={{ marginBottom: 16 }}>
+      <FormField label={t("settings.interface")}>
+        <FormSelect
+          options={Object.entries(UIS).map(([id, ui]) => ({ value: id, label: t(ui.labelKey) }))}
+          value={resolveUi(userUi)}
+          disabled={saving}
+          onChange={async (e) => {
+            setSaving(true);
+            setFailed(false);
+            try {
+              await onChange(e.target.value);
+            } catch {
+              setFailed(true);
+            }
+            setSaving(false);
+          }}
+        />
+      </FormField>
+      <p className="settings-hint">{t("settings.interfaceAccountHint")}</p>
+      {failed && <p className="settings-hint" role="alert" style={{ color: "#e74c3c" }}>{t("settings.interfaceSaveFailed")}</p>}
     </div>
   );
 }

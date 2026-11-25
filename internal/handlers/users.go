@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -218,6 +219,71 @@ func (h *UsersHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"status": "password reset"})
 }
 
+type setUIRequest struct {
+	UI string `json:"ui"`
+}
+
+// uiIDPattern is the shape of a UI id. The server stores the choice but does
+// not know which UIs a given frontend build ships, so it checks only the
+// shape; the frontend falls back to its default for an id it doesn't have.
+var uiIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// decodeUI reads {"ui": "..."} from the body. "" is valid and means "the
+// default UI". On a bad request it writes the error and returns false.
+func decodeUI(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var req setUIRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return "", false
+	}
+	if req.UI != "" && !uiIDPattern.MatchString(req.UI) {
+		pagination.WriteError(w, http.StatusBadRequest, "ui must be empty or a short lowercase id (letters, digits, hyphens)")
+		return "", false
+	}
+	return req.UI, true
+}
+
+// SetOwnUI lets the signed-in user choose which UI they get by default.
+func (h *UsersHandler) SetOwnUI(w http.ResponseWriter, r *http.Request) {
+	ui, ok := decodeUI(w, r)
+	if !ok {
+		return
+	}
+	found, err := models.SetUserUI(h.db, middleware.GetUserID(r.Context()), ui)
+	if err != nil || !found {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to save ui")
+		return
+	}
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{"ui": ui})
+}
+
+// SetUserUI lets an admin choose which UI another user gets by default.
+func (h *UsersHandler) SetUserUI(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(r) {
+		pagination.WriteError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		pagination.WriteError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	ui, ok := decodeUI(w, r)
+	if !ok {
+		return
+	}
+	found, err := models.SetUserUI(h.db, id, ui)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to save ui")
+		return
+	}
+	if !found {
+		pagination.WriteError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{"ui": ui})
+}
+
 type grantAccessRequest struct {
 	ChildID int `json:"child_id"`
 	RoleID  int `json:"role_id"`
@@ -409,6 +475,7 @@ func (h *UsersHandler) GetCurrentUserAccess(w http.ResponseWriter, r *http.Reque
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":        user,
 		"is_admin":    user.IsAdmin,
+		"ui":          user.UI,
 		"access":      access,
 		"oidc_linked": oidcLinked,
 	})
