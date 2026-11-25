@@ -7,7 +7,7 @@ import { formatElapsed } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
 import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
-import { toUTC, clock, lastClock, isNapSleep } from "./time";
+import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "./time";
 
 const TITLES = {
   feeding: "feeding.log",
@@ -179,8 +179,7 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
       child: childId,
       type,
       method,
-      start: toUTC(new Date(end.getTime() - 15 * MINUTE)),
-      end: toUTC(end),
+      ...quickSpan(end),
     };
     if (method === "bottle" && amount > 0) body.amount = amount;
     return api.createFeeding(body);
@@ -208,7 +207,7 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
 
   const savePumping = () => save(() => {
     const end = pickedTime();
-    const body = { child: childId, start: toUTC(new Date(end.getTime() - 15 * MINUTE)), end: toUTC(end) };
+    const body = { child: childId, ...quickSpan(end) };
     if (amount > 0) body.amount = amount;
     return api.createPumping(body);
   });

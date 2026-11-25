@@ -9,10 +9,17 @@
 // how it happened and it puts "woke up" where it belongs in the order — which
 // is also what the "awake for 1h 28m" at the top is counted from.
 //
+// Anything else that took a while (a feed, tummy time, pumping) is one line,
+// told when it ended: the moment every "… ago" in the app counts from. A feed
+// logged as "just now" is recorded as the quarter of an hour before that; told
+// by its start it would sit a quarter of an hour up the page, above a diaper
+// or a wake-up logged in between.
+//
 // Pure functions: no React, no API. Text is produced by describeRow, which
 // takes the translator and the unit labels as arguments.
 
 import { formatHoursMinutes, feedingMethodLabel, feedingTypeLabel } from "../../utils/formatters";
+import { agoAnchor } from "../../utils/overlayTime";
 
 const HOUR = 3600000;
 const pad = (n) => String(n).padStart(2, "0");
@@ -30,13 +37,18 @@ export function dayKey(ms) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// How long until the minute after `ms` begins, with a little to spare so a
+// timer set for it cannot fire a moment early and read the old minute again.
+export const nextMinuteIn = (ms) => 60000 - (ms % 60000) + 20;
+
 export function startOfDay(ms) {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
-// Entries that happen at a moment, and the field that says when.
+// Entries told as one line, and the field that holds their time (their start,
+// for those that also have an end).
 const MOMENTS = [
   ["feeding", "feedings", "start"],
   ["diaper", "changes", "time"],
@@ -64,9 +76,10 @@ const ORDER = ["sleep", "feeding", "diaper", "tummy", "pumping", "milkWaste", "t
 // running timers ({ id, kind, start }); each becomes a live row.
 export function buildRows(lists, { from = -Infinity, timers = [] } = {}) {
   const rows = [];
-  for (const [kind, list, field] of MOMENTS) {
+  for (const [kind, list] of MOMENTS) {
     for (const entry of lists[list] || []) {
-      const at = time(entry[field]);
+      // Its end if it has one, otherwise the one time it has.
+      const at = time(agoAnchor(entry));
       if (at === null || at < from) continue;
       rows.push({ key: `${kind}-${entry.id}`, id: `${kind}-${entry.id}`, kind, at, entry });
     }

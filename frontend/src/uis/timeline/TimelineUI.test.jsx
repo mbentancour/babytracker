@@ -142,14 +142,15 @@ describe("TimelineUI", () => {
   });
 
   it("logs a usual feed in one tap and shows it without waiting for a refresh", async () => {
-    api.createFeeding.mockResolvedValue({ id: 9, start: NOW.toISOString(), end: NOW.toISOString(), type: "breast milk", method: "bottle", amount: 120 });
+    api.createFeeding.mockResolvedValue({ id: 9, start: iso(15), end: iso(0), type: "breast milk", method: "bottle", amount: 120 });
     renderUi();
     press("Feeding");
     const tray = screen.getByRole("dialog", { name: "Log Feeding" });
     fireEvent.click(within(tray).getByRole("button", { name: /Bottle · 120 mL/ }));
 
     await waitFor(() => expect(story().filter((title) => title === "Bottle · 120 mL")).toHaveLength(2));
-    expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "breast milk", method: "bottle", amount: 120, start: utc(NOW), end: utc(NOW) });
+    // Recorded as the other UIs record it: a quarter of an hour, ending now.
+    expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "breast milk", method: "bottle", amount: 120, start: utc(minsAgo(15)), end: utc(NOW) });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(story().slice(-2)).toEqual(["Bottle · 120 mL", "Now"]);
     expect(session.value.data.refetch).toHaveBeenCalled();
@@ -163,6 +164,19 @@ describe("TimelineUI", () => {
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(api.deleteFeeding).toHaveBeenCalledWith(9));
     expect(story()).not.toContain("Bottle · 130 mL");
+  });
+
+  it("tells a feed logged just now last, after what happened while it was given", async () => {
+    // A diaper five minutes ago falls inside the quarter of an hour the feed covers.
+    session.value = makeSession({ weeklyChanges: [{ id: 5, time: iso(5), wet: true, solid: false }] });
+    api.createFeeding.mockResolvedValue({ id: 9, start: iso(15), end: iso(0), type: "breast milk", method: "bottle", amount: 120 });
+    renderUi();
+    press("Feeding");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Log Feeding" })).getByRole("button", { name: /Bottle · 120 mL/ }));
+    await waitFor(() => expect(story().slice(-3)).toEqual(["Diaper · Wet", "Bottle · 120 mL", "Now"]));
+    expect(within(rowOf("Diaper · Wet")).getByText(formatTime(minsAgo(5)))).toBeTruthy();
+    // The time beside it is when it ended, which is when it was logged.
+    expect(within(document.querySelector(".tl-strip").closest(".tl-row")).getByText(formatTime(NOW))).toBeTruthy();
   });
 
   it("moves an entry five minutes at a tap", async () => {
@@ -270,7 +284,7 @@ describe("TimelineUI", () => {
   });
 
   it("logs a feed that isn't one of the usual ones", async () => {
-    api.createFeeding.mockResolvedValue({ id: 9, start: iso(15), end: iso(15), type: "formula", method: "bottle", amount: 130 });
+    api.createFeeding.mockResolvedValue({ id: 9, start: iso(30), end: iso(15), type: "formula", method: "bottle", amount: 130 });
     renderUi();
     press("Feeding");
     const tray = screen.getByRole("dialog", { name: "Log Feeding" });
@@ -279,7 +293,7 @@ describe("TimelineUI", () => {
     fireEvent.click(within(tray).getByRole("button", { name: "More" }));
     fireEvent.click(within(tray).getByRole("button", { name: "15 min ago" }));
     fireEvent.click(within(tray).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "formula", method: "bottle", amount: 130, start: utc(minsAgo(15)), end: utc(minsAgo(15)) }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "formula", method: "bottle", amount: 130, start: utc(minsAgo(30)), end: utc(minsAgo(15)) }));
   });
 
   it("opens the full form for the things More doesn't log itself", () => {
@@ -298,6 +312,16 @@ describe("TimelineUI", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Log Tummy Time" })).getByRole("button", { name: "Start timer" }));
     await waitFor(() => expect(story().slice(-2)).toEqual(["Tummy Time", "Now"]));
     expect(api.createTimer).toHaveBeenCalledWith({ child: 7, name: "tummy" });
+  });
+
+  it("logs pumping from More, as a quarter of an hour ending now", async () => {
+    api.createPumping.mockResolvedValue({ id: 14, start: iso(15), end: iso(0), amount: 90 });
+    renderUi();
+    press("More");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "More" })).getByRole("button", { name: "Pumping" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Log Pumping" })).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(story().slice(-2)).toEqual(["Pumping · 90 mL", "Now"]));
+    expect(api.createPumping).toHaveBeenCalledWith({ child: 7, start: utc(minsAgo(15)), end: utc(NOW), amount: 90 });
   });
 
   it("is read-only for someone who may only look", () => {

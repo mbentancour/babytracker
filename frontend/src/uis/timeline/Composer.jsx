@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatElapsed } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
 import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
-import { toUTC, clock, lastClock, isNapSleep } from "../simple/time";
+import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "../simple/time";
 import { Glyph } from "./icons";
 import { KINDS, toneOf, iconOf, feedingIcon } from "./kinds";
 import { usualFeeds } from "./insights";
@@ -190,8 +190,7 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
       const at = whenToDate(when, new Date());
       if (!at) return setBad(true);
       setBad(false);
-      const stamp = toUTC(at);
-      const feed = { type, method, start: stamp, end: stamp };
+      const feed = { type, method, ...quickSpan(at) };
       if (method === "bottle" && amount > 0) feed.amount = amount;
       return run(() => log.add("feeding", feed));
     };
@@ -218,10 +217,7 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
     );
   }
 
-  const logNow = (feed) => run(() => {
-    const stamp = toUTC(new Date());
-    return log.add("feeding", { ...body(feed), start: stamp, end: stamp });
-  });
+  const logNow = (feed) => run(() => log.add("feeding", { ...body(feed), ...quickSpan(new Date()) }));
 
   return (
     <>
@@ -370,8 +366,8 @@ function PumpTray({ log, pumping, volume, busy, run, onForm }) {
   const { t } = useI18n();
   const [amount, setAmount] = useState(() => lastAmount(pumping, volume.pumping));
   const save = () => run(() => {
-    const stamp = toUTC(new Date());
-    return log.add("pumping", amount > 0 ? { start: stamp, end: stamp, amount } : { start: stamp, end: stamp });
+    const span = quickSpan(new Date());
+    return log.add("pumping", amount > 0 ? { ...span, amount } : span);
   });
   return (
     <>

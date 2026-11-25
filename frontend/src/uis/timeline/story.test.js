@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildRows, buildDated, groupDays, gapBefore, markSleep, timerElapsed, nudged, sleepLength, describeRow, dayKey } from "./story";
+import { buildRows, buildDated, groupDays, gapBefore, markSleep, timerElapsed, nudged, sleepLength, describeRow, dayKey, nextMinuteIn } from "./story";
 import en from "../../locales/en";
 
 const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).toISOString();
@@ -34,6 +34,27 @@ describe("buildRows", () => {
   it("puts a sleep before a feed logged the same minute, and leaves out what came before the window", () => {
     const rows = buildRows({ ...lists, sleeps: [{ id: 7, start: at(22, 7, 5), end: at(22, 8) }] }, { from: ms(22, 7) });
     expect(rows.map((r) => r.key)).toEqual(["sleep-7-start", "feeding-1", "diaper-3", "sleep-7-end", "feeding-2"]);
+  });
+
+  it("tells a feed, tummy time or pumping where it ended, after what happened meanwhile", () => {
+    const rows = buildRows({
+      feedings: [{ id: 1, start: at(22, 15, 55), end: at(22, 16, 10), type: "breast milk", method: "bottle", amount: 120 }],
+      sleeps: [{ id: 2, start: at(22, 15), end: at(22, 16), nap: true }],
+      changes: [{ id: 3, time: at(22, 16, 5), wet: true, solid: false }],
+      tummyTimes: [{ id: 4, start: at(22, 16, 12), end: at(22, 16, 20) }],
+      pumping: [{ id: 5, start: at(22, 16, 30), end: at(22, 16, 45), amount: 90 }],
+    });
+    expect(rows.map((r) => [r.key, r.at])).toEqual([
+      ["sleep-2-start", ms(22, 15)], ["sleep-2-end", ms(22, 16)], ["diaper-3", ms(22, 16, 5)],
+      ["feeding-1", ms(22, 16, 10)], ["tummy-4", ms(22, 16, 20)], ["pumping-5", ms(22, 16, 45)],
+    ]);
+  });
+
+  it("tells an entry with no usable end by its start", () => {
+    const rows = buildRows({
+      feedings: [{ id: 1, start: at(22, 9), end: null }, { id: 2, start: at(22, 10), end: at(22, 9, 30) }],
+    });
+    expect(rows.map((r) => [r.key, r.at])).toEqual([["feeding-1", ms(22, 9)], ["feeding-2", ms(22, 10)]]);
   });
 
   it("adds running timers as live rows", () => {
@@ -89,6 +110,17 @@ describe("markSleep", () => {
   it("stays asleep after a sleep timer that is still running", () => {
     const rows = markSleep(buildRows({ changes: lists.changes }, { timers: [{ id: 4, kind: "sleep", start: at(22, 6) }] }));
     expect(rows.map((r) => [r.key, r.asleepAfter])).toEqual([["timer-4", true], ["diaper-3", true]]);
+  });
+});
+
+describe("nextMinuteIn", () => {
+  it("lands just inside the next minute, from anywhere in this one", () => {
+    const minute = ms(22, 16, 29);
+    for (const into of [0, 1, 30000, 59999]) {
+      const due = minute + into + nextMinuteIn(minute + into);
+      expect(due).toBeGreaterThanOrEqual(minute + 60000);
+      expect(due).toBeLessThan(minute + 60100);
+    }
   });
 });
 

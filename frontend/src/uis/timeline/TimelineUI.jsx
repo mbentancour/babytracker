@@ -16,7 +16,7 @@ import Overview from "./Overview";
 import Sky, { SkyPaint } from "./Sky";
 import { skyAt, span } from "./daylight";
 import Stream from "./Stream";
-import { buildDated, buildRows, describeRow, groupDays, markSleep, startOfDay, time, timerElapsed } from "./story";
+import { buildDated, buildRows, describeRow, groupDays, markSleep, nextMinuteIn, startOfDay, time, timerElapsed } from "./story";
 import { useTimelineLog } from "./useTimelineLog";
 import "./timeline.css";
 
@@ -68,15 +68,24 @@ function newest(entries) {
   return best;
 }
 
+// The clock, read again every `every` ms and also as each minute begins. On
+// the minute, because the screen is told in minutes: read only now and then,
+// "Now" would still say 04:29 for a while under an entry logged at 04:30.
 function useNow(every) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), every);
-    return () => clearInterval(id);
+    let id;
+    const tick = () => {
+      const at = Date.now();
+      setNow(at);
+      id = setTimeout(tick, Math.min(every, nextMinuteIn(at)));
+    };
+    tick();
+    return () => clearTimeout(id);
   }, [every]);
   return now;
 }
+
 
 // The Timeline UI: the day told as a story you add to. A strip of sky across
 // the top shows the last 24 hours and how things stand; below it the entries
