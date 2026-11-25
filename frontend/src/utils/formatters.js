@@ -521,6 +521,38 @@ export function dailyFeedingCountsByType(entries, numDays = 30) {
   return firstNonZero > 0 ? result.slice(firstNonZero) : result;
 }
 
+/**
+ * The amount fed per day over the last N days, in total (`amount`) and per
+ * feeding type — the same buckets, and the same trimming of leading empty
+ * days, as dailyFeedingCountsByType, so the two can be drawn one above the
+ * other. A feed with no amount (at the breast) adds nothing here; it is only
+ * in the counts.
+ */
+export function dailyFeedingAmountsByType(entries, numDays = 30) {
+  const days = getLastNDays(numDays);
+  const sums = {};
+  days.forEach((d) => (sums[d.dateStr] = {}));
+
+  entries.forEach((e) => {
+    const key = entryDateStr(e.start || e.time || e.date);
+    if (!(key in sums)) return;
+    const type = FEEDING_COUNT_KEYS.includes(e.type) ? e.type : "other";
+    sums[key][type] = (sums[key][type] || 0) + parseFloat(e.amount || 0);
+  });
+
+  const result = days.map((d) => {
+    const base = { date: d.label, amount: 0 };
+    for (const type of FEEDING_COUNT_KEYS) {
+      base[type] = Math.round(sums[d.dateStr][type] || 0);
+      base.amount += base[type];
+    }
+    return base;
+  });
+
+  const firstNonZero = result.findIndex((d) => d.amount > 0);
+  return firstNonZero > 0 ? result.slice(firstNonZero) : result;
+}
+
 export function dailySleepTotals(entries, numDays = 30) {
   const days = getLastNDays(numDays);
   const sums = {};

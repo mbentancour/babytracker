@@ -284,6 +284,25 @@ func (h *UsersHandler) SetUserUI(w http.ResponseWriter, r *http.Request) {
 	pagination.WriteJSON(w, http.StatusOK, map[string]string{"ui": ui})
 }
 
+// SetDefaultUI lets an admin choose the UI for every account that has not
+// chosen one of its own, so an installation can move everyone to another UI
+// without editing each user. "" goes back to the frontend's built-in default.
+func (h *UsersHandler) SetDefaultUI(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(r) {
+		pagination.WriteError(w, http.StatusForbidden, "admin access required")
+		return
+	}
+	ui, ok := decodeUI(w, r)
+	if !ok {
+		return
+	}
+	if err := models.SetDefaultUI(h.db, ui); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to save ui")
+		return
+	}
+	pagination.WriteJSON(w, http.StatusOK, map[string]string{"ui": ui})
+}
+
 type grantAccessRequest struct {
 	ChildID int `json:"child_id"`
 	RoleID  int `json:"role_id"`
@@ -472,10 +491,16 @@ func (h *UsersHandler) GetCurrentUserAccess(w http.ResponseWriter, r *http.Reque
 	var oidcLinked bool
 	_ = h.db.Get(&oidcLinked, `SELECT EXISTS (SELECT 1 FROM user_identities WHERE user_id = $1)`, userID)
 
+	// What this account gets when its own choice is empty. A failed read is
+	// not worth failing the sign-in for: the frontend falls back to its own
+	// default.
+	defaultUI, _ := models.GetDefaultUI(h.db)
+
 	pagination.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":        user,
 		"is_admin":    user.IsAdmin,
 		"ui":          user.UI,
+		"default_ui":  defaultUI,
 		"access":      access,
 		"oidc_linked": oidcLinked,
 	})

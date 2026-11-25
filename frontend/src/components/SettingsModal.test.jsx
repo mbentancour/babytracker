@@ -106,3 +106,55 @@ describe("DataImportDialog", () => {
     expect(document.activeElement).toBe(screen.getByRole("dialog"));
   });
 });
+
+describe("interface choice", () => {
+  const open = (props) =>
+    render(
+      <I18nProvider>
+        <PreferencesProvider>
+          <SettingsModal unitSystem="metric" children={[]} onClose={() => {}} {...props} />
+        </PreferencesProvider>
+      </I18nProvider>,
+    );
+  const options = (select) => [...select.options].map((o) => o.textContent);
+
+  it("lets an account follow the installation's default, and names it", async () => {
+    const onUserUiChange = vi.fn().mockResolvedValue();
+    open({ userUi: "", defaultUi: "simple", onUserUiChange });
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const select = await screen.findByLabelText("Interface");
+    expect(options(select)).toEqual(["Default (Simple)", "Full", "Simple", "Timeline"]);
+    expect(select.value).toBe("");
+
+    fireEvent.change(select, { target: { value: "full" } });
+    expect(onUserUiChange).toHaveBeenCalledWith("full");
+  });
+
+  it("shows an account's own choice, and the build's default when none is set anywhere", async () => {
+    open({ userUi: "timeline", defaultUi: "", onUserUiChange: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const select = await screen.findByLabelText("Interface");
+    expect(select.value).toBe("timeline");
+    expect(options(select)[0]).toBe("Default (Full)");
+  });
+
+  it("lets an admin set the default for everyone", async () => {
+    const onDefaultUiChange = vi.fn().mockResolvedValue();
+    open({ isAdmin: true, defaultUi: "", onDefaultUiChange, onUserUiChange: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Users & Roles" }));
+    const select = await screen.findByLabelText("Default interface for everyone");
+    // Nothing set yet: it shows what everyone is getting, the build's default.
+    expect(select.value).toBe("full");
+    expect(options(select)).toEqual(["Full", "Simple", "Timeline"]);
+
+    fireEvent.change(select, { target: { value: "simple" } });
+    expect(onDefaultUiChange).toHaveBeenCalledWith("simple");
+  });
+
+  it("does not offer it to someone who is not an admin", () => {
+    open({ isAdmin: false, defaultUi: "simple", onDefaultUiChange: vi.fn(), onUserUiChange: vi.fn() });
+    const users = screen.queryByRole("button", { name: "Users & Roles" });
+    if (users) fireEvent.click(users);
+    expect(screen.queryByLabelText("Default interface for everyone")).toBeNull();
+  });
+});

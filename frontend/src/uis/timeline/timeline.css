@@ -1,0 +1,2000 @@
+/* The Timeline UI. Everything is scoped under .tl and prefixed tl-, so it
+   can't leak into the other UIs or pick anything up from them. Colours come
+   from the app's theme variables; the sky is the one thing that brings its
+   own. Laid out for a phone first, then widened at 900px. */
+
+.tl {
+  --tl-surface: var(--card-bg);
+  --tl-ground: var(--bg);
+  --tl-chip: rgba(125, 133, 160, 0.14);
+  --tl-chip-hover: rgba(125, 133, 160, 0.24);
+  --tl-raised: rgba(125, 133, 160, 0.07);
+  --tl-sleep: #8B5CF6;
+  --tl-sleep-rail: rgba(139, 92, 246, 0.42);
+  --tl-danger: #EF4444;
+  --tl-card-shadow: none;
+  /* Where the stream's rail runs, from the left edge of a row. */
+  --tl-axis: 77px;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-theme="light"] .tl {
+  --tl-card-shadow: 0 1px 2px rgba(16, 20, 40, 0.04), 0 12px 32px -14px rgba(16, 20, 40, 0.14);
+}
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .tl {
+    --tl-card-shadow: 0 1px 2px rgba(16, 20, 40, 0.04), 0 12px 32px -14px rgba(16, 20, 40, 0.14);
+  }
+}
+
+.tl button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.tl button:disabled {
+  cursor: default;
+}
+.tl svg {
+  display: block;
+  flex: none;
+}
+.tl :focus-visible {
+  outline: 2px solid #5B9DFF;
+  outline-offset: 2px;
+}
+
+.tl-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Sky ─────────────────────────────────────────────────────────────── */
+
+.tl-sky {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  padding: max(12px, env(safe-area-inset-top)) 16px 9px;
+  border-radius: 0 0 26px 26px;
+  overflow: hidden;
+  color: #fff;
+  box-shadow: 0 12px 28px -16px rgba(11, 16, 51, 0.7);
+}
+
+/* The sky as it is now: one colour high up, another at the horizon. */
+.tl-sky-paint {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-color: #0B1033;
+  transition: background 1s;
+}
+/* Daylight comes from somewhere: a soft brightness in one corner. */
+.tl-sky-sun {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 88% -30%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 58%);
+}
+.tl-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.tl-sky-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tl-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.tl-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 22px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.tl-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tl-id-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tl-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-age {
+  font-family: var(--mono);
+  font-size: 12px;
+  opacity: 0.8;
+}
+.tl-kids {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tl-kids::-webkit-scrollbar {
+  display: none;
+}
+.tl-kid {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tl .tl-kid[aria-pressed="true"] {
+  background: #fff;
+  color: #1A1D2E;
+}
+.tl-sky-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-round {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.15s;
+}
+.tl-round:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.tl-nav {
+  display: none;
+}
+.tl-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.tl-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.tl-nav-btn svg {
+  font-size: 17px;
+}
+.tl-offline {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.92);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tl-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 13px;
+}
+.tl-kpi {
+  min-width: 0;
+}
+.tl-kpi dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.74;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-kpi-value {
+  margin-top: 2px;
+  font-size: clamp(16px, 4.9vw, 20px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.tl-kpi-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  opacity: 0.84;
+}
+
+/* The last 24 hours: a strip of sky with the sleeps and feeds on it. */
+.tl-strip24 {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 4px;
+}
+.tl-strip-icons,
+.tl-track {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  height: 38px;
+  padding: 6px 0;
+}
+.tl-strip-icons {
+  align-items: center;
+  justify-items: center;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.tl-track {
+  position: relative;
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 8px 18px -10px rgba(5, 8, 30, 0.7);
+}
+/* The right-hand end is now. */
+.tl-track::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3px;
+  background: #fff;
+}
+.tl-lane {
+  position: relative;
+}
+.tl-slept {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1px 3px rgba(10, 16, 50, 0.35);
+}
+.tl-slept.is-live {
+  border-radius: 999px 0 0 999px;
+  animation: tl-breathe 2.4s ease-in-out infinite;
+}
+.tl-dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(10, 16, 50, 0.45);
+}
+.tl-hours {
+  position: relative;
+  grid-column: 2;
+  height: 14px;
+}
+.tl-hour {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  opacity: 0.82;
+}
+.tl-hour svg {
+  margin-top: 1px;
+  font-size: 12px;
+}
+.tl-hour.is-minor {
+  display: none;
+}
+.tl-hour-now {
+  right: 0;
+  transform: none;
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────── */
+
+.tl-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.tl-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tl-side {
+  display: none;
+}
+
+/* ── Stream ──────────────────────────────────────────────────────────── */
+
+.tl-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tl-chip-hover) transparent;
+}
+/* A short day sits at the bottom, next to the buttons, like a new chat. */
+.tl-story {
+  min-height: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 4px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.tl-earlier {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tl .tl-earlier {
+  color: var(--text-muted);
+}
+.tl .tl-earlier:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.tl-earlier svg {
+  font-size: 15px;
+}
+
+.tl-day-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 14px;
+  padding: 14px 6px 8px;
+  background: var(--tl-ground);
+}
+/* Rows slide away under the day's name instead of colliding with it. */
+.tl-day-head::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 12px;
+  background: linear-gradient(var(--tl-ground), transparent);
+  pointer-events: none;
+}
+.tl-day-head h2 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.tl-day-date {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+.tl-day-sum {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.tl-dated {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 6px 8px;
+}
+.tl-dated-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tl-dated-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #fff;
+}
+
+.tl-rows {
+  list-style: none;
+}
+
+/* A row carries the rail in two halves, one above its node and one below,
+   so each half can be thin (awake) or thick (asleep) on its own. */
+.tl-row {
+  --lead: 0px;
+  position: relative;
+  padding-top: calc(var(--gap, 0px) + var(--lead));
+}
+.tl-row::before,
+.tl-row::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--tl-axis) - 1px);
+  width: 2px;
+  background: var(--border);
+  pointer-events: none;
+}
+.tl-row::before {
+  top: 0;
+  height: calc(var(--gap, 0px) + var(--lead) + 22px);
+}
+.tl-row::after {
+  top: calc(var(--gap, 0px) + var(--lead) + 22px);
+  bottom: 0;
+}
+.tl-row.sleep-before::before,
+.tl-row.sleep-after::after {
+  left: calc(var(--tl-axis) - 4px);
+  width: 8px;
+  background: var(--tl-sleep-rail);
+}
+/* A day begins and ends with its first and last entry — unless the baby was
+   asleep across midnight, when the rail runs on into the next day. */
+.tl-row.is-first:not(.sleep-before)::before,
+.tl-row:last-child:not(.sleep-after)::after {
+  display: none;
+}
+.tl-row.is-first.sleep-before {
+  --lead: 12px;
+}
+.tl-row:last-child.sleep-after {
+  padding-bottom: 12px;
+}
+
+.tl-row-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.tl-row-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 58px 38px minmax(0, 1fr) auto;
+  align-items: start;
+  padding: 7px 8px 7px 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  text-align: left;
+  transition: background 0.12s;
+}
+.tl .tl-row.is-open > .tl-row-line > .tl-row-main {
+  background: var(--tl-chip);
+}
+/* Only where a pointer can hover: after a tap, a phone would leave the row lit. */
+@media (hover: hover) {
+  .tl button.tl-row-main:hover {
+    background: var(--tl-chip);
+  }
+}
+.tl-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 30px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tl-node {
+  position: relative;
+  z-index: 2;
+  justify-self: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  color: #fff;
+  background: var(--tone);
+  box-shadow: 0 0 0 4px var(--tl-ground);
+}
+.tl-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 0 0 6px;
+}
+.tl-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+}
+.tl-detail {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tl-note {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+  font-style: italic;
+  color: var(--text-muted);
+}
+.tl-thumb {
+  width: 44px;
+  height: 44px;
+  margin-left: 8px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* Something still going on: a ring that breathes, and the way to end it. */
+.tl-row.is-live .tl-node::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--tone);
+  animation: tl-ring 2.2s ease-out infinite;
+}
+.tl-row.is-paused .tl-node {
+  opacity: 0.55;
+}
+.tl-row.is-paused .tl-node::after {
+  animation: none;
+  opacity: 0;
+}
+.tl-row.is-live .tl-detail {
+  color: var(--tone);
+  font-weight: 600;
+}
+.tl-go {
+  flex: none;
+  margin-top: 8px;
+  padding: 0 16px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tone);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px -8px var(--tone);
+}
+.tl .tl-go {
+  color: #fff;
+}
+
+.tl-row.is-fresh > .tl-row-line {
+  animation: tl-arrive 0.36s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tl-row.is-fresh .tl-node {
+  animation: tl-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.tl-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 0 10px 102px;
+  animation: tl-arrive 0.2s ease-out;
+}
+.tl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--tl-surface);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.12s, background 0.12s;
+}
+.tl-chip:hover:not(:disabled) {
+  border-color: var(--text-dim);
+}
+.tl-chip:disabled {
+  opacity: 0.4;
+}
+.tl-chip svg {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.tl .tl-chip-strong {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+}
+.tl-chip-strong svg {
+  color: inherit;
+}
+.tl .tl-chip-danger.is-armed {
+  border-color: var(--tl-danger);
+  background: var(--tl-danger);
+  color: #fff;
+}
+.tl-chip-danger.is-armed svg {
+  color: #fff;
+}
+
+/* Where the story has got to. */
+.tl-now .tl-node {
+  width: 12px;
+  height: 12px;
+  margin-top: 9px;
+  background: var(--tl-ground);
+  border: 2.5px solid var(--text-dim);
+}
+.tl-now.sleep-before .tl-node {
+  border-color: var(--tl-sleep);
+}
+.tl-now .tl-title {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.tl-now .tl-time {
+  color: var(--text-dim);
+}
+.tl-empty {
+  padding: 4px 0 6px 102px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.tl-jump {
+  position: sticky;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  margin: 0 auto;
+  padding: 0 14px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--tl-surface);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 24px -10px rgba(8, 10, 24, 0.5);
+  animation: tl-arrive 0.2s ease-out;
+}
+.tl-jump svg {
+  font-size: 15px;
+}
+
+/* ── Composer ────────────────────────────────────────────────────────── */
+
+.tl-composer {
+  position: relative;
+  z-index: 5;
+  flex: none;
+}
+.tl-dock {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--tl-surface);
+}
+.tl-act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px 4px 5px;
+  border: 0;
+  border-radius: 18px;
+  background: none;
+  transition: background 0.12s;
+}
+.tl-act.is-open {
+  background: var(--tl-chip);
+}
+.tl-act-icon {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 23px;
+  color: #fff;
+  background: var(--tone);
+  box-shadow: 0 8px 16px -8px var(--tone);
+  transition: transform 0.15s;
+}
+.tl-act:not([style]) .tl-act-icon {
+  color: var(--text);
+  background: var(--tl-chip-hover);
+  box-shadow: none;
+}
+.tl-act:active .tl-act-icon {
+  transform: scale(0.92);
+}
+.tl-act.is-live .tl-act-icon::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--tone, var(--text-muted));
+  animation: tl-ring 2.2s ease-out infinite;
+}
+.tl-act-label {
+  max-width: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: rgba(8, 10, 24, 0.46);
+  animation: tl-fade 0.18s ease-out;
+}
+.tl-tray {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  max-height: min(84vh, 660px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: var(--tl-surface);
+  box-shadow: 0 -20px 40px -20px rgba(8, 10, 24, 0.55);
+  outline: none;
+  animation: tl-rise 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tl-tray-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 14px 6px 20px;
+}
+.tl-tray-head h2 {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.tl-tray-close,
+.tl-tray-back {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--tl-chip);
+}
+.tl .tl-tray-close,
+.tl .tl-tray-back {
+  color: var(--text-muted);
+}
+.tl-tray-back {
+  margin-left: -8px;
+}
+.tl-tray-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 4px 16px 16px;
+  overflow-y: auto;
+}
+
+.tl-lead {
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tl-label {
+  margin: 4px 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tl-badge {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 21px;
+  color: #fff;
+  background: var(--tone);
+}
+.tl-badge.is-live {
+  animation: tl-breathe 2.4s ease-in-out infinite;
+}
+
+.tl-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tl-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  padding: 9px 14px 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--tl-raised);
+  text-align: left;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+.tl-option:hover:not(:disabled),
+.tl-tile:hover:not(:disabled) {
+  border-color: var(--text-dim);
+  background: var(--tl-chip);
+}
+.tl-option:active:not(:disabled),
+.tl-tile:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.tl-option:disabled,
+.tl-tile:disabled,
+.tl-primary:disabled,
+.tl-secondary:disabled,
+.tl-seg-btn:disabled {
+  opacity: 0.55;
+}
+.tl-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.tl-option-text small {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.tl-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.tl-tiles-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.tl-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--tl-raised);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+.tl-tiles-3 .tl-tile {
+  padding: 18px 6px 16px;
+  font-size: 15px;
+}
+
+.tl-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+/* Four choices read better two by two than squeezed into one row. */
+.tl-seg[data-count="4"] {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tl-seg-btn {
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tl-raised);
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color 0.12s;
+}
+.tl-seg-btn:hover:not(:disabled) {
+  border-color: var(--text-dim);
+}
+.tl .tl-seg-btn[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.tl-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--tl-raised);
+}
+.tl-stepper button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: var(--tl-chip);
+}
+.tl-stepper button:hover {
+  background: var(--tl-chip-hover);
+}
+.tl-stepper output {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  transition: transform 0.12s, filter 0.12s;
+}
+.tl .tl-primary {
+  color: #fff;
+}
+.tl-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+.tl-primary:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.tl-primary svg {
+  font-size: 20px;
+}
+.tl-secondary {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tl-raised);
+  font-size: 14px;
+  font-weight: 700;
+}
+.tl-secondary:hover:not(:disabled) {
+  border-color: var(--text-dim);
+}
+.tl-times {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.tl-times label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.tl-time-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tl-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.tl-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 -4px -6px;
+}
+.tl-plain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+.tl .tl-plain {
+  color: var(--text-muted);
+}
+.tl .tl-plain:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--tl-chip);
+}
+.tl .tl-plain-danger:hover {
+  color: var(--tl-danger);
+}
+.tl-plain svg {
+  font-size: 16px;
+}
+.tl-error {
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tl-danger);
+}
+
+/* ── Overview ────────────────────────────────────────────────────────── */
+
+.tl-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tl-card {
+  padding: 18px 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--tl-surface);
+  box-shadow: var(--tl-card-shadow);
+}
+.tl-card h2 {
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tl-today {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tl-today li {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 7px;
+  align-items: center;
+}
+.tl-today .tl-badge {
+  grid-row: 1 / span 2;
+  width: 38px;
+  height: 38px;
+  font-size: 19px;
+}
+.tl-today-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.tl-today-value {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.tl-today-usual {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-meter {
+  grid-column: 2;
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tl-chip);
+}
+.tl-meter i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 6px;
+  border-radius: 999px;
+  background: var(--tone);
+}
+.tl-meter b {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.6;
+}
+
+.tl-week {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tl-week li,
+.tl-week-axis {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 60px;
+  gap: 10px;
+  align-items: center;
+}
+.tl-week-day {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.tl-week li.is-today .tl-week-day {
+  color: var(--text);
+}
+/* Night at both ends of the day, a shade darker than the hours between. */
+.tl-week-track {
+  position: relative;
+  height: 14px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--tl-chip-hover) 0 29.17%, var(--tl-raised) 29.17% 79.17%, var(--tl-chip-hover) 79.17% 100%);
+}
+.tl-week-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  border-radius: 3px;
+  background: var(--tl-sleep);
+}
+.tl-week-total {
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tl-week-axis {
+  margin-top: 7px;
+}
+.tl-week-hours {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+.tl-week-hours svg {
+  font-size: 12px;
+}
+
+.tl-links {
+  padding: 18px 10px 10px;
+}
+.tl-links h2 {
+  padding: 0 8px;
+  margin-bottom: 8px;
+}
+.tl-links button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.12s;
+}
+.tl-links button:hover {
+  background: var(--tl-chip);
+}
+.tl-links button > svg:last-child {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-dim);
+}
+.tl-links-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  color: var(--text-muted);
+  background: var(--tl-chip);
+}
+
+/* ── Pages and messages ──────────────────────────────────────────────── */
+
+.tl-page {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: tl-fade 0.18s ease-out;
+}
+/* A page's head is the home screen's sky, cut short. */
+.tl-page-sky {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+.tl-page-sky h1 {
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-page-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 38px;
+  padding: 0 15px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.tl-page-back:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.tl-page-back svg {
+  font-size: 17px;
+}
+.tl-page-sky .tl-nav {
+  margin-left: auto;
+}
+.tl .tl-nav-btn[aria-current="page"] {
+  background: #fff;
+  color: #1A1D2E;
+}
+.tl-page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 12px calc(28px + env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+  scrollbar-color: var(--tl-chip-hover) transparent;
+}
+.tl-page-body > .tl-overview {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* One past day: a way to step between days, and the day's story in a card. */
+.tl-daypage {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.tl-daynav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.tl-daynav-step {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: var(--tl-surface);
+  box-shadow: var(--tl-card-shadow);
+}
+.tl-daynav-step:hover:not(:disabled) {
+  border-color: var(--text-dim);
+}
+.tl-daynav-step:disabled {
+  opacity: 0.4;
+}
+.tl .tl-daynav-date {
+  flex: 1;
+  min-width: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  font-weight: 600;
+  background: var(--tl-surface);
+  box-shadow: var(--tl-card-shadow);
+}
+.tl-daypage-card {
+  --tl-ground: var(--card-bg);
+  padding: 2px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--tl-surface);
+  box-shadow: var(--tl-card-shadow);
+}
+/* A finished day reads from the top. */
+.tl-story.is-top {
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+/* ── The full UI's cards, in Timeline clothes ────────────────────────────
+   The pages are the full UI's own tabs — one Growth page, not two to keep in
+   step. Their cards style themselves inline, so changing how they look here
+   has to insist with !important. Everything is scoped to .tl and hangs on the
+   class names those components expose for the purpose. */
+.tl .stat-card,
+.tl .section-card {
+  border-radius: 24px !important;
+  box-shadow: var(--tl-card-shadow);
+}
+.tl .stat-card-glow {
+  display: none;
+}
+/* Badges are solid with a white icon, as everywhere else in this UI. */
+.tl .stat-card-icon,
+.tl .section-card-icon {
+  border-radius: 50% !important;
+  background: var(--tone) !important;
+  color: #fff !important;
+}
+.tl .stat-card-icon svg {
+  width: 19px;
+  height: 19px;
+}
+.tl .section-card-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.tl .stat-card-label {
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
+  color: var(--text-muted) !important;
+}
+.tl .section-card-head {
+  padding: 16px 18px 4px !important;
+  border-bottom: 0 !important;
+}
+.tl .section-card-title {
+  font-size: 11.5px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+  color: var(--text-muted) !important;
+}
+.tl .section-card-body {
+  padding: 12px 18px 18px !important;
+}
+.tl .add-button {
+  border-radius: 50% !important;
+  background: var(--tl-chip-hover) !important;
+  color: var(--text) !important;
+}
+.tl .seg-toggle button {
+  padding: 5px 11px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+}
+.tl .seg-toggle button[aria-pressed="true"] {
+  border-color: transparent !important;
+  background: var(--text) !important;
+  color: var(--bg) !important;
+}
+/* The controls for arranging a page's cards (ArrangeGrid) are buttons with
+   classes from the shared stylesheet, and `.tl button` at the top of this file
+   outranks a lone class: it hands them the page's own font and colour, which
+   left the filled Done button with text the colour of its background. */
+.tl .arrange-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.tl .arrange-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+.tl .arrange-btn-primary,
+.tl .arrange-btn-primary:hover:not(:disabled) {
+  color: var(--bg);
+}
+.tl .arrange-tile {
+  border-radius: 24px;
+  box-shadow: var(--tl-card-shadow);
+}
+.tl .routine-filter {
+  background: var(--tl-surface);
+  font-weight: 600;
+}
+.tl .routine-periods {
+  background: var(--tl-surface);
+}
+.tl .routine-period-on {
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.tl-loading {
+  padding: 40px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.tl-toast {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--tl-danger);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 12px 28px -10px rgba(239, 68, 68, 0.6);
+}
+
+/* ── Dialogs: the full forms ─────────────────────────────────────────────
+   "More options" and Edit open the app's full entry forms. Like the cards
+   above, they style themselves inline, hence the !important. */
+.tl .modal-overlay {
+  background: rgba(8, 10, 24, 0.5) !important;
+  backdrop-filter: blur(3px) !important;
+}
+.tl .modal-dialog {
+  max-width: 440px !important;
+  border-radius: 24px !important;
+  box-shadow: 0 30px 70px -24px rgba(8, 10, 24, 0.7);
+}
+.tl .modal-head {
+  padding: 14px 14px 6px 22px !important;
+  border-bottom: 0 !important;
+}
+.tl .modal-title {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.015em;
+}
+.tl .modal-close {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--tl-chip) !important;
+}
+.tl .modal-close svg {
+  width: 17px;
+  height: 17px;
+}
+.tl .modal-content {
+  padding: 10px 18px 20px !important;
+}
+.tl .form-field {
+  margin-bottom: 12px !important;
+}
+/* Labels keep the size the forms give them: a few fields (durations, tags,
+   photo) bring their own, and all of them should read alike. */
+.tl .form-field-label {
+  font-weight: 600 !important;
+}
+.tl .form-input {
+  min-height: 46px;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  background-color: var(--tl-raised) !important;
+  font-size: 16px !important;
+}
+.tl textarea,
+.tl .modal-content textarea {
+  border-radius: 12px !important;
+}
+/* The save button: the entry's colour, white on it, as in the trays. */
+.tl .form-button {
+  min-height: 54px;
+  border-radius: 16px !important;
+  background: var(--tone) !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  filter: saturate(1.06) brightness(0.95);
+}
+.tl .form-button:disabled {
+  opacity: 0.55;
+}
+.tl .form-delete-btn {
+  min-height: 44px;
+  border-color: transparent;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Settings ────────────────────────────────────────────────────────────
+   The Settings page is the app's own, laid out by class, so it takes the
+   Timeline look without any insisting: the sky across the top, the sections
+   as pills, the cards rounded like the ones on the home screen. */
+.tl .settings-page {
+  max-width: 1240px;
+}
+.tl .settings-header {
+  position: relative;
+  padding: max(12px, env(safe-area-inset-top)) 16px 14px;
+  border-bottom: 0;
+  border-radius: 0 0 26px 26px;
+  color: #fff;
+  background: linear-gradient(to bottom, var(--tl-sky-high, #1E66C8) 0%, var(--tl-sky-high, #1E66C8) 24%, var(--tl-sky-horizon, #4C9AE6) 100%);
+  box-shadow: 0 12px 28px -16px rgba(11, 16, 51, 0.7);
+}
+.tl .settings-title,
+.tl .settings-header h2 {
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.tl .settings-close {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 22px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+}
+.tl .settings-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.tl .settings-nav {
+  border-right: 0;
+  gap: 4px;
+}
+.tl .settings-nav-item {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.tl .settings-nav-item:hover {
+  background: var(--tl-chip);
+}
+.tl .settings-nav-active,
+.tl .settings-nav-active:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+.tl .settings-nav-active .settings-nav-icon {
+  opacity: 1;
+}
+.tl .settings-section-title {
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+.tl .settings-card {
+  border-radius: 24px;
+  box-shadow: var(--tl-card-shadow);
+}
+.tl .settings-card-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tl .settings-system-btn,
+.tl .settings-signout {
+  border-radius: 999px;
+  font-weight: 600;
+}
+.tl .settings-checkbox {
+  accent-color: var(--tl-sleep);
+}
+
+/* ── Narrow screens ──────────────────────────────────────────────────── */
+
+@media (max-width: 520px) {
+  /* Room is short beside the rail: Edit, Delete and Pause show their icon
+     alone, except while Delete is asking to be tapped again. */
+  .tl-chip-compact:not(.is-armed) {
+    padding: 0 11px;
+  }
+  .tl-chip-compact:not(.is-armed) span {
+    display: none;
+  }
+  .tl-strip {
+    padding-left: 96px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* A form comes up from the bottom, as the trays do. */
+  .tl .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .tl .modal-dialog {
+    max-width: none !important;
+    max-height: 92% !important;
+    border-bottom: 0 !important;
+    border-radius: 24px 24px 0 0 !important;
+  }
+  .tl .modal-content {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* ── Wide screens ────────────────────────────────────────────────────── */
+
+@media (min-width: 900px) {
+  .tl {
+    padding: 20px 24px 22px;
+  }
+  .tl-frame {
+    max-width: 1240px;
+    margin: 0 auto;
+    gap: 16px;
+  }
+  .tl-narrow-only {
+    display: none;
+  }
+
+  .tl-sky {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "id kids kpis actions"
+      "strip strip strip strip";
+    align-items: center;
+    column-gap: 30px;
+    row-gap: 16px;
+    padding: 16px 22px 10px;
+    border-radius: 24px;
+  }
+  .tl-sky-top {
+    display: contents;
+  }
+  .tl-id {
+    grid-area: id;
+  }
+  .tl-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 16px;
+  }
+  .tl-name {
+    font-size: 19px;
+  }
+  .tl-kids {
+    grid-area: kids;
+    flex: none;
+  }
+  .tl-sky-actions {
+    grid-area: actions;
+  }
+  .tl-nav {
+    display: flex;
+    gap: 6px;
+  }
+  .tl-kpis {
+    grid-area: kpis;
+    grid-template-columns: repeat(3, minmax(0, 190px));
+    gap: 26px;
+    margin: 0;
+  }
+  .tl-kpi-value {
+    font-size: 22px;
+  }
+  .tl-kpi-sub {
+    font-size: 12.5px;
+  }
+  .tl-strip24 {
+    grid-area: strip;
+  }
+  .tl-hour.is-minor {
+    display: block;
+  }
+  .tl-hour {
+    font-size: 10.5px;
+  }
+
+  .tl-body {
+    gap: 16px;
+  }
+  .tl-main {
+    --tl-ground: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+    background: var(--tl-surface);
+    box-shadow: var(--tl-card-shadow);
+  }
+  .tl-side {
+    display: block;
+    flex: none;
+    width: 340px;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .tl-side::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tl-story {
+    padding: 6px 28px 14px;
+  }
+
+  .tl-dock {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px 16px;
+  }
+  /* As wide as there is room for, up to a comfortable size: the panel is
+     narrow on a small laptop, and four fixed-width buttons would not fit. */
+  .tl-act {
+    flex: 1 1 0;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    max-width: 168px;
+    padding: 7px 16px 7px 7px;
+    border-radius: 999px;
+    background: var(--tl-chip);
+  }
+  .tl-act:hover,
+  .tl-act.is-open {
+    background: var(--tl-chip-hover);
+  }
+  .tl-act-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  .tl-act-label {
+    font-size: 15px;
+  }
+
+  .tl-scrim {
+    background: rgba(8, 10, 24, 0.34);
+  }
+  .tl-tray {
+    width: min(460px, calc(100% - 32px));
+    margin: 0 auto;
+    bottom: calc(100% + 6px);
+    border-bottom: 1px solid var(--border);
+    border-radius: 22px;
+    box-shadow: 0 24px 60px -20px rgba(8, 10, 24, 0.6);
+  }
+
+  .tl-toast {
+    bottom: 120px;
+  }
+  .tl-page {
+    padding: 20px 24px 0;
+  }
+  .tl .settings-page {
+    padding: 20px 24px 0;
+  }
+  .tl .settings-header {
+    padding: 14px 22px;
+    border-radius: 24px;
+  }
+  .tl .settings-title,
+  .tl .settings-header h2 {
+    font-size: 21px;
+  }
+  .tl .settings-nav {
+    padding: 20px 12px 16px 0;
+  }
+  .tl .settings-content {
+    padding: 20px 0 32px 20px;
+  }
+  .tl-page-sky {
+    display: flex;
+    padding: 14px 22px;
+  }
+  .tl-page-sky h1 {
+    font-size: 21px;
+  }
+  .tl-page-body {
+    padding: 0 0 28px;
+  }
+}
+
+/* Between a tablet and a full desktop there is no room for the names of the
+   pages next to the three figures: the icons stand alone. */
+@media (min-width: 900px) and (max-width: 1220px) {
+  .tl-nav-btn {
+    width: 38px;
+    padding: 0;
+  }
+  .tl-nav-btn span {
+    display: none;
+  }
+  .tl-kpis {
+    gap: 18px;
+  }
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+@keyframes tl-fade {
+  from { opacity: 0; }
+}
+@keyframes tl-rise {
+  from { opacity: 0; transform: translateY(18px); }
+}
+@keyframes tl-arrive {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@keyframes tl-pop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.14); }
+}
+@keyframes tl-ring {
+  0% { opacity: 0.7; transform: scale(0.82); }
+  70%, 100% { opacity: 0; transform: scale(1.25); }
+}
+@keyframes tl-breathe {
+  50% { opacity: 0.62; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl *,
+  .tl *::before,
+  .tl *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

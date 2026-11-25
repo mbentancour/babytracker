@@ -241,6 +241,28 @@ automation:
 
 ---
 
+## Live Updates
+
+The web app keeps one event stream open, so a change made on one device shows on the others without waiting for the next poll.
+
+```
+GET /api/events
+```
+
+This is a Server-Sent Events stream. It is authenticated by the `refresh_token` cookie set at login (an `EventSource` cannot send an `Authorization` header), so it is for browser sessions; an API token is not accepted. The messages carry no data:
+
+```
+data: {"connected":true}
+
+data: {"changed":true}
+```
+
+`connected` is sent once when the stream opens. `changed` follows any successful write (`POST`, `PUT`, `PATCH` or `DELETE` answered with a 2xx status), except signing in and token refreshes, display commands and first-boot setup. It does not say what changed or for which child: the client refetches through the normal endpoints, which apply its permissions as usual. Writes in quick succession may arrive as one message, and a comment line (`: keep-alive`) is sent every 25 seconds.
+
+The stream is an addition to polling, not a replacement. A client that cannot open it (the Home Assistant ingress panel, where the cookie is often missing) or that loses it is as fresh as its poll interval.
+
+---
+
 ## Data Endpoints
 
 All data endpoints follow the same pattern and return paginated responses:
@@ -1133,7 +1155,7 @@ Content-Type: application/json
 
 ## Interface choice
 
-Each user can have a preferred UI, stored on their account. The value is the id of a UI the web app ships (currently only `full`); an empty string means the default. The server stores any well-formed id (lowercase letters, digits and hyphens, at most 32 characters) and the web app falls back to its default for an id it does not have. A device can override the account's choice locally; that override is kept in the browser and never sent to the server.
+Each user can have a preferred UI, stored on their account. The value is the id of a UI the web app ships (such as `full` or `simple`); an empty string means the default. The server stores any well-formed id (lowercase letters, digits and hyphens, at most 32 characters) and the web app falls back to its default for an id it does not have. A device can override the account's choice locally; that override is kept in the browser and never sent to the server.
 
 `GET /api/users/me` and `GET /api/users/` include the value as `ui`.
 
@@ -1154,6 +1176,16 @@ Content-Type: application/json
 ```
 
 Both return `{"ui": "..."}`. A malformed id is a 400; an unknown user is a 404.
+
+An admin can also set one default for the whole installation. It applies to every account whose own `ui` is empty, so everyone can be moved to another UI without changing each user:
+```
+PUT /api/settings/ui
+Content-Type: application/json
+
+{"ui": "simple"}
+```
+
+It returns `{"ui": "..."}`; an empty string clears it. `GET /api/users/me` includes the current value as `default_ui` (empty when none is set). The web app picks, in order: the device's own override, the account's `ui`, `default_ui`, then the default it was built with.
 
 ---
 

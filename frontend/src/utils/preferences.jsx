@@ -52,6 +52,11 @@ const DEFAULT_PREFERENCES = {
   // Activity types hidden on the Day timeline. Same semantics as routineHidden.
   dayHidden: [],
 
+  // How this device arranges the card grids that can be customised (see
+  // ArrangeGrid): { [grid]: { order: [card ids], hidden: [card ids] } }. A grid
+  // with no entry shows every card in its built-in order.
+  layouts: {},
+
   // Auto-calculate BMI from weight/height when no manual entry exists for a date
   autoCalculateBMI: true,
 
@@ -119,6 +124,7 @@ function loadPreferences() {
         routineDays: parsed.routineDays ?? DEFAULT_PREFERENCES.routineDays,
         routineHidden: parsed.routineHidden ?? DEFAULT_PREFERENCES.routineHidden,
         dayHidden: parsed.dayHidden ?? DEFAULT_PREFERENCES.dayHidden,
+        layouts: parsed.layouts && typeof parsed.layouts === "object" ? parsed.layouts : DEFAULT_PREFERENCES.layouts,
         autoCalculateBMI: parsed.autoCalculateBMI ?? DEFAULT_PREFERENCES.autoCalculateBMI,
         photoQuality: parsed.photoQuality ?? DEFAULT_PREFERENCES.photoQuality,
         pictureFrameTimeout: parsed.pictureFrameTimeout ?? DEFAULT_PREFERENCES.pictureFrameTimeout,

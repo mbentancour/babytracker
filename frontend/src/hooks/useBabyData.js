@@ -36,6 +36,47 @@ const emptyPage = { results: [], count: 0 };
 // the all-time stash balance). It's a per-device preference that defaults off,
 // and this hook already fires 20+ requests per poll, so households that don't
 // track a stash shouldn't pay for it.
+// How soon after a change on another screen this one refetches, and how
+// recent a fetch has to be for that refetch to be skipped.
+const LIVE_DELAY_MS = 300;
+const LIVE_FRESH_MS = 1500;
+
+// listenForChanges opens the server's live-update stream (/api/events) and
+// refetches when it says something changed, so a feed logged on one phone
+// shows on the other within a moment instead of at its next poll.
+//
+// The poll keeps running underneath: where the stream can't connect (it is
+// authenticated by cookie, which the Home Assistant panel doesn't have) or
+// drops, the screen is simply as fresh as it was before this existed.
+//
+// Returns a function that closes the stream.
+export function listenForChanges(refetch, lastFetchRef, EventSourceImpl = globalThis.EventSource) {
+  if (typeof EventSourceImpl !== "function") return () => {};
+  let timer = null;
+  let first = true;
+  const source = new EventSourceImpl("./api/events");
+  source.onmessage = () => {
+    // The first message only says the stream is open; the initial fetch has
+    // just run. Later "connected" messages follow a reconnect, when changes
+    // may have been missed, so those refetch like any other.
+    if (first) {
+      first = false;
+      return;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      // The screen that made the change has already refetched after its own
+      // save; fetching again a moment later would only repeat the work.
+      if (Date.now() - lastFetchRef.current < LIVE_FRESH_MS) return;
+      refetch();
+    }, LIVE_DELAY_MS);
+  };
+  return () => {
+    clearTimeout(timer);
+    source.close();
+  };
+}
+
 export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
   const canReadRef = useRef(canReadFn || (() => true));
   canReadRef.current = canReadFn || (() => true);
@@ -82,6 +123,9 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
     setUnitSystem(system);
   }, []);
   const intervalRef = useRef(null);
+  // When the last full fetch started, so a live-update nudge that arrives
+  // right after one can be skipped.
+  const lastFetchRef = useRef(0);
   const childIdRef = useRef(null);
   const fetchSeqRef = useRef(0);
 
@@ -272,6 +316,7 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
   }, []);
 
   const fetchAll = useCallback(async () => {
+    lastFetchRef.current = Date.now();
     try {
       const childrenRes = await api.getChildren();
       const allChildren = (childrenRes.results || []).map(fixChildPicture);
@@ -353,6 +398,8 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
   const demoRef = useRef(false);
 
   useEffect(() => {
+    let stopLive = () => {};
+    let unmounted = false;
     api
       .getConfig()
       .then((cfg) => {
@@ -369,6 +416,7 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
           fetchAll();
           const ms = (cfg.refresh_interval || 30) * 1000;
           intervalRef.current = setInterval(fetchAll, ms);
+          if (!unmounted) stopLive = listenForChanges(fetchAll, lastFetchRef);
         }
       })
       .catch(() => {
@@ -376,7 +424,11 @@ export function useBabyData(canReadFn, { milkStockEnabled = false } = {}) {
         intervalRef.current = setInterval(fetchAll, 30000);
       });
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      unmounted = true;
+      clearInterval(intervalRef.current);
+      stopLive();
+    };
   }, [fetchAll, loadMock]);
 
   return {

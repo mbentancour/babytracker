@@ -345,6 +345,9 @@ func main() {
 	if closer, ok := cfg.DisplaySubs.(interface{ CloseAll() }); ok {
 		closer.CloseAll()
 	}
+	if closer, ok := cfg.LiveSubs.(interface{ CloseAll() }); ok {
+		closer.CloseAll()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

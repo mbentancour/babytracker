@@ -17,6 +17,7 @@ import {
   lastSeenLabel,
   dailyFeedingCountsByType,
   aggregateDiapersByDay,
+  dailyFeedingAmountsByType,
 } from "./formatters";
 
 describe("formatElapsed", () => {
@@ -578,5 +579,37 @@ describe("Portuguese display formatting", () => {
     } finally {
       setDisplayLocale(undefined);
     }
+  });
+});
+
+describe("dailyFeedingAmountsByType", () => {
+  const at = (daysAgo, hour) => {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(hour, 0, 0, 0);
+    return d.toISOString();
+  };
+
+  it("totals the amount per day and per type, leaving unmeasured feeds out", () => {
+    const days = dailyFeedingAmountsByType([
+      { start: at(0, 8), type: "formula", amount: 120 },
+      { start: at(0, 12), type: "formula", amount: "90.4" },
+      { start: at(0, 14), type: "breast milk", amount: 60 },
+      { start: at(0, 16), type: "breast milk" },
+      { start: at(1, 9), type: "something new", amount: 30 },
+    ]);
+    expect(days).toHaveLength(2);
+    expect(days[1]).toMatchObject({ amount: 270, formula: 210, "breast milk": 60, "solid food": 0 });
+    expect(days[0]).toMatchObject({ amount: 30, other: 30, formula: 0 });
+  });
+
+  it("starts at the first day anything was measured", () => {
+    const days = dailyFeedingAmountsByType([
+      { start: at(5, 9), type: "breast milk" },
+      { start: at(2, 9), type: "formula", amount: 100 },
+    ]);
+    expect(days).toHaveLength(3);
+    expect(days.map((d) => d.amount)).toEqual([100, 0, 0]);
+    expect(dailyFeedingAmountsByType([])).toHaveLength(30);
   });
 });

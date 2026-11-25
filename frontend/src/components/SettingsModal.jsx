@@ -40,7 +40,7 @@ function formatBackupDate(raw) {
   return d.toLocaleString(getDisplayLocale());
 }
 
-export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch, userUi, onUserUiChange }) {
+export default function SettingsModal({ childId, unitSystem, onUnitSystemChange, children, isAdmin, applianceMode, onClose, onLogout, onRefetch, userUi, onUserUiChange, defaultUi, onDefaultUiChange }) {
   const { t, locale, setLocale } = useI18n();
   const [section, setSection] = useState("preferences");
   const [units, setUnits] = useState(unitSystem || "metric");
@@ -554,7 +554,7 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.account")}</h3>
 
-                {onUserUiChange && <AccountInterfaceSection userUi={userUi} onChange={onUserUiChange} />}
+                {onUserUiChange && <AccountInterfaceSection userUi={userUi} defaultUi={defaultUi} onChange={onUserUiChange} />}
 
                 {onLogout && authConfig?.oidc_enabled && (
                   <OIDCLinkSection providerName={authConfig.oidc_provider_name} />
@@ -655,7 +655,10 @@ export default function SettingsModal({ childId, unitSystem, onUnitSystemChange,
               <div className="settings-section">
                 <h3 className="settings-section-title">{t("settings.users")}</h3>
                 {isAdmin ? (
-                  <UserManagement children={children || []} onOwnUiChange={onUserUiChange} />
+                  <>
+                    {onDefaultUiChange && <DefaultInterfaceSection defaultUi={defaultUi} onChange={onDefaultUiChange} />}
+                    <UserManagement children={children || []} onOwnUiChange={onUserUiChange} defaultUi={defaultUi} />
+                  </>
                 ) : (
                   <div className="settings-card" style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
                     {t("settings.adminOnly")}
@@ -2372,18 +2375,18 @@ function OIDCLinkSection({ providerName }) {
   );
 }
 
-// The UI saved on the account: what this user gets on any device that has no
-// override of its own (Preferences → Interface on this device).
-function AccountInterfaceSection({ userUi, onChange }) {
+// A select that saves as soon as it changes, and says so when that fails.
+function InterfaceSelect({ label, hint, options, value, onChange }) {
   const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   return (
     <div className="settings-card" style={{ marginBottom: 16 }}>
-      <FormField label={t("settings.interface")}>
+      <FormField label={label}>
         <FormSelect
-          options={Object.entries(UIS).map(([id, ui]) => ({ value: id, label: t(ui.labelKey) }))}
-          value={resolveUi(userUi)}
+          aria-label={label}
+          options={options}
+          value={value}
           disabled={saving}
           onChange={async (e) => {
             setSaving(true);
@@ -2397,9 +2400,44 @@ function AccountInterfaceSection({ userUi, onChange }) {
           }}
         />
       </FormField>
-      <p className="settings-hint">{t("settings.interfaceAccountHint")}</p>
+      <p className="settings-hint">{hint}</p>
       {failed && <p className="settings-hint" role="alert" style={{ color: "#e74c3c" }}>{t("settings.interfaceSaveFailed")}</p>}
     </div>
+  );
+}
+
+// The UI for every account that has not chosen one: set once by an admin, so
+// a household can move to another UI without editing each user. An account's
+// own choice, and a device's, still come first.
+function DefaultInterfaceSection({ defaultUi, onChange }) {
+  const { t } = useI18n();
+  return (
+    <InterfaceSelect
+      label={t("settings.interfaceSystem")}
+      hint={t("settings.interfaceSystemHint")}
+      options={Object.entries(UIS).map(([id, ui]) => ({ value: id, label: t(ui.labelKey) }))}
+      value={resolveUi(defaultUi)}
+      onChange={onChange}
+    />
+  );
+}
+
+// The UI saved on the account: what this user gets on any device that has no
+// override of its own (Preferences → Interface on this device). The first
+// option follows the installation's default, and names it.
+function AccountInterfaceSection({ userUi, defaultUi, onChange }) {
+  const { t } = useI18n();
+  return (
+    <InterfaceSelect
+      label={t("settings.interface")}
+      hint={t("settings.interfaceAccountHint")}
+      options={[
+        { value: "", label: t("settings.interfaceDefault", { name: t(UIS[resolveUi(defaultUi)].labelKey) }) },
+        ...Object.entries(UIS).map(([id, ui]) => ({ value: id, label: t(ui.labelKey) })),
+      ]}
+      value={isKnownUi(userUi) ? userUi : ""}
+      onChange={onChange}
+    />
   );
 }
 

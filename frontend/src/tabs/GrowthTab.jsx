@@ -21,13 +21,16 @@ import DayActivitiesModal from "../components/DayActivitiesModal";
 import WHOGrowthChart from "../components/WHOGrowthChart";
 import AddButton from "../components/AddButton";
 import SleepTypeToggle from "../components/SleepTypeToggle";
+import ChartKey from "../components/ChartKey";
+import { ArrangeGrid, ArrangeSlot } from "../components/ArrangeGrid";
 import { Icons } from "../components/Icons";
 import { colors } from "../utils/colors";
 import { useUnits } from "../utils/units";
-import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, avgFeedingGap, avgBreastDuration, formatHoursMinutes, FEEDING_COUNT_KEYS } from "../utils/formatters";
+import { toGrowthSeries, formatGrowthTick, dailyAmountTotals, dailyFeedingAmountsByType, dailyCounts, dailyFeedingCountsByType, dailySleepTotals, getEntriesForDate, avgFeedingGap, avgBreastDuration, formatHoursMinutes, FEEDING_COUNT_KEYS } from "../utils/formatters";
 import { usePreferences, FEEDING_TYPES } from "../utils/preferences";
 import { useI18n } from "../utils/i18n";
 import { getPointSelection } from "../utils/chartSelection";
+import { splitDaily } from "../utils/dailySplit";
 import ActiveChartPoint from "../components/ActiveChartPoint";
 
 // Labels come from the canonical FEEDING_TYPES i18n keys; a type without an
@@ -36,13 +39,21 @@ const feedingCountLabelKeys = {
   ...Object.fromEntries(FEEDING_TYPES.map((ft) => [ft.value, ft.labelKey])),
   other: "feeding.other",
 };
+// One colour per feeding type. They are picked to sit well together around
+// the app's feeding yellow — a cool teal for formula, a deeper shade of the
+// yellow for fortified breast milk, a blue for solids — and so that any two of
+// them can be told apart, also with a colour-vision deficiency (breast milk
+// and formula used to be two near-identical ambers).
 const feedingCountFills = {
   "breast milk": colors.feeding,
-  formula: "#F9A826",
-  "fortified breast milk": "#FFB74D",
-  "solid food": "#81C784",
+  formula: "#14B8A6",
+  "fortified breast milk": "#B45309",
+  "solid food": "#3987E5",
   other: "#B0BEC5",
 };
+const feedingFill = (type) => feedingCountFills[type] || feedingCountFills.other;
+// Night sleep and naps are the same thing at different depths of colour.
+const sleepFills = { night: "#7C3AED", nap: "#C4B5FD" };
 
 export default function GrowthTab({ weights, heights, headCircumferences = [], bmiEntries = [], monthlyFeedings, monthlySleep, monthlyPumping = [], child, onEditEntry, onDeleteEntry, canWrite = () => true }) {
   const units = useUnits();
@@ -61,7 +72,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const weightSeries = toGrowthSeries(weights, "weight");
   const heightSeries = toGrowthSeries(heights, "height");
   const headCircSeries = toGrowthSeries(headCircumferences, "head_circumference");
-  const feedingSeries = dailyAmountTotals(monthlyFeedings);
+  const feedingSeries = dailyFeedingAmountsByType(monthlyFeedings);
   const feedingCountSeries = dailyFeedingCountsByType(monthlyFeedings);
   const totalSleepSeries = dailySleepTotals(monthlySleep);
   const napSleepSeries = dailySleepTotals(monthlySleep.filter((entry) => entry.nap));
@@ -73,6 +84,20 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
   const sleepCountSeries = dailyCounts(filteredSleep);
   const pumpingSeries = dailyAmountTotals(monthlyPumping);
   const pumpingCountSeries = dailyCounts(monthlyPumping);
+
+  // The parts each daily chart is split into: the feeding types that have
+  // anything to show, and sleep as night sleep and naps (the switch on a
+  // sleep chart narrows it to one of the two).
+  const feedingTypesMeasured = FEEDING_COUNT_KEYS.filter((type) => feedingSeries.some((day) => day[type] > 0));
+  const feedingTypesCounted = FEEDING_COUNT_KEYS.filter((type) => feedingCountSeries.some((day) => day[type] > 0));
+  const feedingKey = (types) => types.map((type) => ({ label: t(feedingCountLabelKeys[type]), color: feedingFill(type) }));
+  const sleepKinds = sleepType === "total" ? ["night", "nap"] : [sleepType];
+  const sleepOf = { night: monthlySleep.filter((entry) => !entry.nap), nap: monthlySleep.filter((entry) => entry.nap) };
+  const sleepSplit = (series) => Object.fromEntries(sleepKinds.map((kind) => [kind, series(sleepOf[kind])]));
+  const sleepHourDays = splitDaily(sleepSeries, sleepSplit(dailySleepTotals), "hours");
+  const sleepCountDays = splitDaily(sleepCountSeries, sleepSplit(dailyCounts), "count");
+  const sleepKindName = (kind) => t(kind === "nap" ? "sleep.nap" : "sleep.night");
+  const sleepKey = sleepKinds.map((kind) => ({ label: sleepKindName(kind), color: sleepFills[kind] }));
 
   const latestWeight = weights[0];
   const latestHeight = heights[0];
@@ -186,6 +211,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("weight") && <div className="fade-in fade-in-1">
           <div
             onClick={() => latestWeight && canWrite("weight") && onEditEntry?.("weight", latestWeight)}
+            className="stat-card"
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
@@ -202,7 +228,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div
+                className="stat-card-icon"
                 style={{
+                  "--tone": colors.growth,
                   width: 30,
                   height: 30,
                   borderRadius: 8,
@@ -215,7 +243,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               >
                 <Icons.Weight />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+              <span className="stat-card-label" style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
                 {t("growth.weight")}
               </span>
             </div>
@@ -233,6 +261,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("height") && <div className="fade-in fade-in-2">
           <div
             onClick={() => latestHeight && canWrite("height") && onEditEntry?.("height", latestHeight)}
+            className="stat-card"
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
@@ -249,7 +278,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div
+                className="stat-card-icon"
                 style={{
+                  "--tone": colors.height,
                   width: 30,
                   height: 30,
                   borderRadius: 8,
@@ -262,7 +293,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               >
                 <Icons.Ruler />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+              <span className="stat-card-label" style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>
                 {t("growth.height")}
               </span>
             </div>
@@ -280,6 +311,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("headcirc") && <div className="fade-in fade-in-3">
           <div
             onClick={() => latestHeadCirc && canWrite("headcirc") && onEditEntry?.("headcirc", latestHeadCirc)}
+            className="stat-card"
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
@@ -295,10 +327,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.growth}18`, color: colors.growth, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div className="stat-card-icon" style={{ "--tone": colors.growth, width: 30, height: 30, borderRadius: 8, background: `${colors.growth}18`, color: colors.growth, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.Baby />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.headCirc")}</span>
+              <span className="stat-card-label" style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.headCirc")}</span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
               {latestHeadCirc ? `${latestHeadCirc.head_circumference} ${units.length}` : "—"}
@@ -314,6 +346,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         {isFeatureEnabled("bmi") && <div className="fade-in fade-in-4">
           <div
             onClick={() => latestManualBMI && canWrite("bmi") && onEditEntry?.("bmi", latestManualBMI)}
+            className="stat-card"
             style={{
               background: "var(--card-bg)",
               borderRadius: 16,
@@ -331,10 +364,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: `${colors.feeding}18`, color: colors.feeding, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div className="stat-card-icon" style={{ "--tone": colors.feeding, width: 30, height: 30, borderRadius: 8, background: `${colors.feeding}18`, color: colors.feeding, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Icons.TrendUp />
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.bmi")}</span>
+              <span className="stat-card-label" style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.03em" }}>{t("growth.bmi")}</span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>
               {bmi ? bmi.value : "—"}
@@ -403,7 +436,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
       )}
 
       {/* Charts */}
-      <div
+      <ArrangeGrid
+        layoutKey="growth"
+        hint={t("growth.arrangeHint")}
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
@@ -411,7 +446,7 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
         }}
       >
         {/* Daily Feeding Totals */}
-        {isFeatureEnabled("feeding") && <div className="fade-in fade-in-5">
+        {isFeatureEnabled("feeding") && <ArrangeSlot id="feedingAmount" title={t("growth.dailyFeeding30d")} className="fade-in fade-in-5">
           <SectionCard title={t("growth.dailyFeeding30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingSeries.some((d) => d.amount > 0) ? (
               <>
@@ -422,20 +457,27 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="amount"
-                        stroke={colors.feeding}
-                        strokeWidth={2}
-                        fill={`${colors.feeding}30`}
-                        dot={false}
-                        activeDot={{ r: 4, fill: colors.feeding, cursor: "pointer" }}
-                        cursor="pointer"
-                      />
+                      <Tooltip content={<CustomTooltip unit={units.volume} totalLabel={t("growth.sleepTotal")} />} />
+                      {feedingTypesMeasured.map((type) => (
+                        <Area
+                          key={type}
+                          type="monotone"
+                          dataKey={type}
+                          stackId="amount"
+                          name={t(feedingCountLabelKeys[type])}
+                          stroke={feedingFill(type)}
+                          strokeWidth={2}
+                          fill={feedingFill(type)}
+                          fillOpacity={feedingTypesMeasured.length > 1 ? 0.5 : 0.19}
+                          dot={false}
+                          activeDot={{ r: 4, fill: feedingFill(type), cursor: "pointer" }}
+                          cursor="pointer"
+                        />
+                      ))}
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+                <ChartKey items={feedingKey(feedingTypesMeasured)} />
                 {selectedBar?.type === "feeding" && (
                   <ChartDetailBar
                     label={selectedBar.label}
@@ -453,19 +495,20 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Daily Feeding Counts by Type */}
-        {isFeatureEnabled("feeding") && <div className="fade-in fade-in-6">
+        {isFeatureEnabled("feeding") && <ArrangeSlot id="feedingCount" title={t("growth.dailyFeedingCount30d")} className="fade-in fade-in-6">
           <SectionCard title={t("growth.dailyFeedingCount30d")} icon={<Icons.Bottle />} color={colors.feeding}>
             {feedingCountSeries.some((d) => FEEDING_COUNT_KEYS.some((k) => d[k] > 0)) ? (
+              <>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={feedingCountSeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={<CustomTooltip totalLabel={t("growth.sleepTotal")} />} />
                     {FEEDING_COUNT_KEYS.map((key) => (
                       <Bar
                         key={key}
@@ -478,16 +521,18 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              <ChartKey items={feedingKey(feedingTypesCounted)} />
+              </>
             ) : (
               <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: 40 }}>
                 {t("growth.noData", { type: "feeding" })}
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Daily Sleep Totals */}
-        {isFeatureEnabled("sleep") && <div className="fade-in fade-in-7">
+        {isFeatureEnabled("sleep") && <ArrangeSlot id="sleepHours" title={t("growth.dailySleep30d")} className="fade-in fade-in-7">
           <SectionCard
             title={t("growth.dailySleep30d")}
             icon={<Icons.Moon />}
@@ -498,25 +543,32 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={sleepSeries} onClick={() => handleChartClick("sleep", sleepSeries, "hours")}>
+                    <AreaChart data={sleepHourDays} onClick={() => handleChartClick("sleep", sleepHourDays, "hours")}>
                       <ActiveChartPoint store={activePoints} type="sleep" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Area
-                        type="monotone"
-                        dataKey="hours"
-                        stroke={colors.sleep}
-                        strokeWidth={2}
-                        fill={`${colors.sleep}30`}
-                        dot={false}
-                        activeDot={{ r: 4, fill: colors.sleep, cursor: "pointer" }}
-                        cursor="pointer"
-                      />
+                      <Tooltip content={<CustomTooltip unit="h" totalLabel={t("growth.sleepTotal")} />} />
+                      {sleepKinds.map((kind) => (
+                        <Area
+                          key={kind}
+                          type="monotone"
+                          dataKey={kind}
+                          stackId="hours"
+                          name={sleepKindName(kind)}
+                          stroke={sleepFills[kind]}
+                          strokeWidth={2}
+                          fill={sleepFills[kind]}
+                          fillOpacity={sleepKinds.length > 1 ? 0.5 : 0.19}
+                          dot={false}
+                          activeDot={{ r: 4, fill: sleepFills[kind], cursor: "pointer" }}
+                          cursor="pointer"
+                        />
+                      ))}
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+                <ChartKey items={sleepKey} />
                 {selectedBar?.type === "sleep" && (
                   <ChartDetailBar
                     label={selectedBar.label}
@@ -534,10 +586,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Daily Sleep Counts */}
-        {isFeatureEnabled("sleep") && <div className="fade-in fade-in-7">
+        {isFeatureEnabled("sleep") && <ArrangeSlot id="sleepCount" title={t("growth.dailySleepCount30d")} className="fade-in fade-in-7">
           <SectionCard
             title={t("growth.dailySleepCount30d")}
             icon={<Icons.Moon />}
@@ -548,16 +600,27 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               <>
                 <div style={{ height: 200 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sleepCountSeries} onClick={() => handleChartClick("sleepCount", sleepCountSeries, "count")}>
+                    <BarChart data={sleepCountDays} onClick={() => handleChartClick("sleepCount", sleepCountDays, "count")}>
                       <ActiveChartPoint store={activePoints} type="sleepCount" />
                       <CartesianGrid strokeDasharray="3 3" stroke="#252836" vertical={false} />
                       <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: "#5A6178" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="count" fill={colors.sleep} radius={[4, 4, 0, 0]} opacity={0.85} cursor="pointer" />
+                      <Tooltip content={<CustomTooltip totalLabel={t("growth.sleepTotal")} />} />
+                      {sleepKinds.map((kind) => (
+                        <Bar
+                          key={kind}
+                          dataKey={kind}
+                          stackId="count"
+                          name={sleepKindName(kind)}
+                          fill={sleepFills[kind]}
+                          radius={sleepKinds.length === 1 ? [4, 4, 0, 0] : undefined}
+                          cursor="pointer"
+                        />
+                      ))}
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                <ChartKey items={sleepKey} />
                 {selectedBar?.type === "sleepCount" && (
                   <ChartDetailBar
                     label={selectedBar.label}
@@ -575,11 +638,11 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Daily Pumping Totals — data-gated like the Overview card so
             families who don't pump aren't stuck with an empty chart */}
-        {isFeatureEnabled("pumping") && pumpingSeries.some((d) => d.amount > 0) && <div className="fade-in fade-in-7">
+        {isFeatureEnabled("pumping") && pumpingSeries.some((d) => d.amount > 0) && <ArrangeSlot id="pumpingAmount" title={t("growth.dailyPumping30d")} className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumping30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
               <div style={{ height: 200 }}>
@@ -615,11 +678,11 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               )}
             </>
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Daily Pumping Counts — gated on sessions rather than amounts so
             it still shows for entries logged without an amount */}
-        {isFeatureEnabled("pumping") && pumpingCountSeries.some((d) => d.count > 0) && <div className="fade-in fade-in-7">
+        {isFeatureEnabled("pumping") && pumpingCountSeries.some((d) => d.count > 0) && <ArrangeSlot id="pumpingCount" title={t("growth.dailyPumpingCount30d")} className="fade-in fade-in-7">
           <SectionCard title={t("growth.dailyPumpingCount30d")} icon={<Icons.Bottle />} color={colors.pumping}>
             <>
               <div style={{ height: 200 }}>
@@ -646,10 +709,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               )}
             </>
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Weight Chart */}
-        {isFeatureEnabled("weight") && <div className="fade-in fade-in-8">
+        {isFeatureEnabled("weight") && <ArrangeSlot id="weightTrend" title={t("growth.weightTrend")} className="fade-in fade-in-8">
           <SectionCard
             title={t("growth.weightTrend")}
             icon={<Icons.Weight />}
@@ -700,10 +763,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* Height Chart */}
-        {isFeatureEnabled("height") && <div className="fade-in fade-in-9">
+        {isFeatureEnabled("height") && <ArrangeSlot id="heightTrend" title={t("growth.heightTrend")} className="fade-in fade-in-9">
           <SectionCard
             title={t("growth.heightTrend")}
             icon={<Icons.Ruler />}
@@ -754,9 +817,9 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
         {/* Head Circumference Chart */}
-        {isFeatureEnabled("headcirc") && <div className="fade-in fade-in-10">
+        {isFeatureEnabled("headcirc") && <ArrangeSlot id="headCircTrend" title={t("growth.headCircTrend")} className="fade-in fade-in-10">
           <SectionCard
             title={t("growth.headCircTrend")}
             icon={<Icons.Baby />}
@@ -800,10 +863,10 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
+        </ArrangeSlot>}
 
         {/* BMI Chart */}
-        {isFeatureEnabled("bmi") && <div className="fade-in fade-in-11">
+        {isFeatureEnabled("bmi") && <ArrangeSlot id="bmiTrend" title={t("growth.bmiTrend")} className="fade-in fade-in-11">
           <SectionCard
             title={t("growth.bmiTrend")}
             icon={<Icons.TrendUp />}
@@ -838,8 +901,8 @@ export default function GrowthTab({ weights, heights, headCircumferences = [], b
               </div>
             )}
           </SectionCard>
-        </div>}
-      </div>
+        </ArrangeSlot>}
+      </ArrangeGrid>
 
       {dayModal && (
         <DayActivitiesModal

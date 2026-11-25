@@ -9,7 +9,7 @@ export default function SleepTypeToggle({ value, onChange }) {
   ];
 
   return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("growth.sleepFilterLabel")}>
+    <div className="seg-toggle" style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }} role="group" aria-label={t("growth.sleepFilterLabel")}>
       {options.map(([key, label]) => (
         <button
           key={key}

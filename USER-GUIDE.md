@@ -28,6 +28,11 @@ Your baby's dashboard is organized into tabs. Four are always there; **Day** and
 **Routine** are optional and can be switched off per device under
 Settings → Preferences → Views.
 
+The screen keeps itself up to date: an entry logged on another phone or tablet
+shows up within a second or two, in every interface. Inside the Home Assistant
+panel that live connection is often unavailable; there it can take up to 30
+seconds.
+
 - **Overview** -- Today's summary at a glance: last feeding, last sleep, last diaper change, and any active timers.
 
   ![Overview tab](docs/screenshots/Overview.png)
@@ -45,7 +50,7 @@ Settings → Preferences → Views.
   later across the week. Use the chips above the grid to hide activity types you
   aren't looking at.
 
-- **Growth** -- Charts showing weight, height, head circumference, and BMI over time, with optional WHO percentile overlays.
+- **Growth** -- Charts showing weight, height, head circumference, and BMI over time, with optional WHO percentile overlays. The page also charts daily feeding, sleep and pumping for the last 30 days. Use **Customize** above the graphs to put them in the order you want and to hide the ones you don't use; **Reset** brings back the original arrangement. The arrangement is saved on the device you set it on, so a phone and a tablet can each show what suits them.
 
   ![Growth tab](docs/screenshots/Growth.png)
 
@@ -76,9 +81,23 @@ BabyTracker has a second, simpler interface for people who only want to log the 
 - **More options** on every sheet opens the full form (notes, tags, photos, another date).
 - **History** shows the day's timeline, where entries can be edited.
 
-Measurements, notes, medications and charts are only in the full interface.
+Measurements, notes, medications and charts are not in the simple interface; the other two have them.
 
-**Choosing the interface.** Each person picks theirs under **Settings → Account → Interface**; it follows them to every device. An admin can set it for others under **Settings → Users & Roles**. A single device can use a different one under **Settings → Preferences → Interface on this device**, for example a shared tablet that should always show the simple interface.
+## The Timeline Interface
+
+A third interface tells the day as a list you add to. Entries run from oldest to newest and end at "Now", right above the buttons that log the next one.
+
+- **The top of the screen** is drawn as the sky at the current time of day, so it is dark at night. It says whether the baby is asleep or awake and for how long, and when the last feed and the last diaper were. When the past week holds enough to go by, it also says about when the next sleep and the next feed usually come. A narrow strip in it shows the last 24 hours, with sleep and feeds marked.
+- **Feeding** offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. **Diaper** is one tap on Wet, Solid or Wet + solid.
+- **Sleep, feeding and tummy time** can run as timers. A timed feed asks how it was given when it ends.
+- **More** has tummy time and pumping, and opens the full form for everything else (temperature, measurements, notes, medications, milestones).
+- **A new entry** appears at once, with a strip to move it five minutes earlier or later, change its amount, or **Undo** it. Tapping any entry opens the same strip, with **Edit** for the full form and **Delete**, which asks for a second tap.
+- **Earlier days:** the list starts with today and yesterday. **Show earlier days** goes back through the week, and **Older days** opens any day before that.
+- **Overview** sits beside the list on a wide screen and behind the chart button on a phone. It compares today so far with a usual day, shows the week's sleep, and leads to Growth, Routine, Journal and Photos.
+
+## Choosing the Interface
+
+Each person picks theirs under **Settings → Account → Interface**; it follows them to every device. An admin can set it for others under **Settings → Users & Roles**. The same page has **Default interface for everyone**: what every account gets until it chooses its own, so a household can move to another interface in one step instead of changing each person. In a person's own picker, **Default** follows that setting. A single device can use a different one under **Settings → Preferences → Interface on this device**, for example a shared tablet that should always show the simple interface.
 
 ## Tracking Activities
 
