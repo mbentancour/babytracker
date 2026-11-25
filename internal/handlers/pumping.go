@@ -51,6 +51,9 @@ func (h *PumpingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "pumping", input.Child) {
+		return
+	}
 
 	start, err := time.Parse("2006-01-02T15:04:05", input.Start)
 	if err != nil {

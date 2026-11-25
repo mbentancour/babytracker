@@ -50,6 +50,9 @@ func (h *HeadCircumferenceHandler) Create(w http.ResponseWriter, r *http.Request
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "head_circumference", input.Child) {
+		return
+	}
 
 	hc := models.HeadCircumference{
 		ChildID:           input.Child,

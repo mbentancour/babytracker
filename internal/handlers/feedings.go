@@ -50,6 +50,9 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "feedings", input.Child) {
+		return
+	}
 
 	f := models.Feeding{
 		ChildID: input.Child,
@@ -59,7 +62,7 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:   input.Notes,
 	}
 
-	start, end, pausedSeconds, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	start, end, pausedSeconds, timerID, ok := resolveEntryTimes(w, h.db, input.Child, input.Timer, input.Start, input.End)
 	if !ok {
 		return
 	}

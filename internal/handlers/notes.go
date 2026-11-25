@@ -51,6 +51,9 @@ func (h *NotesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "notes", input.Child) {
+		return
+	}
 
 	t, err := time.Parse("2006-01-02T15:04:05", input.Time)
 	if err != nil {

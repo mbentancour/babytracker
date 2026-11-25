@@ -51,6 +51,9 @@ func (h *MedicationsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "medications", input.Child) {
+		return
+	}
 	if input.Name == "" {
 		pagination.WriteError(w, http.StatusBadRequest, "name is required")
 		return

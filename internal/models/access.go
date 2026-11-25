@@ -107,6 +107,24 @@ func WritableRecordChild(db *sqlx.DB, userID int, table string, id int) (int, er
 	return childID, nil
 }
 
+// EnsureChildWritable authorises creating a row in a child-scoped table under
+// childID: the user needs "write" access to that child for the table's
+// feature. It is the create-side counterpart of EnsureRecordWritable, which
+// has an existing row to look the child up from.
+//
+// Returns ErrForbidden when the user may not, or an error for a table that is
+// not child-owned.
+func EnsureChildWritable(db *sqlx.DB, userID int, table string, childID int) error {
+	feature, ok := childOwnedTables[table]
+	if !ok {
+		return fmt.Errorf("table %q is not child-owned", table)
+	}
+	if CheckAccess(db, userID, childID, feature) != "write" {
+		return ErrForbidden
+	}
+	return nil
+}
+
 // EnsurePhotoWritable authorises a mutation on a row in the photos table,
 // whose child relationship is many-to-many via photo_children. Rules:
 //   - Admins pass unconditionally (once the photo is confirmed to exist).

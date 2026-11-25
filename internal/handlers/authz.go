@@ -38,6 +38,33 @@ func ensureWritable(w http.ResponseWriter, r *http.Request, db *sqlx.DB, table s
 	return true
 }
 
+// ensureCreatable authorises a create in a child-owned table under childID.
+// A Create handler should call it with the child it is about to save under,
+// taken from the body it decoded, before it does anything else, and bail out
+// when it returns false: a 403 has already been written.
+//
+// The RBAC middleware checks the child a request names as well, but it reads
+// the request for itself: the query string first, and the body only when it
+// is declared as JSON. What it checked is therefore not necessarily the child
+// the handler decoded. Checking the decoded value here is what ties the
+// permission to the row that gets written.
+//
+// Like ensureWritable it also tells the live-update stream which child the
+// change is about (see middleware.ChangeScope).
+func ensureCreatable(w http.ResponseWriter, r *http.Request, db *sqlx.DB, table string, childID int) bool {
+	userID := middleware.GetUserID(r.Context())
+	if err := models.EnsureChildWritable(db, userID, table, childID); err != nil {
+		if errors.Is(err, models.ErrForbidden) {
+			pagination.WriteError(w, http.StatusForbidden, "forbidden")
+		} else {
+			pagination.WriteError(w, http.StatusInternalServerError, "access check failed")
+		}
+		return false
+	}
+	middleware.NoteChangedChild(r.Context(), childID)
+	return true
+}
+
 // ensurePhotoWritable is the photos-table equivalent of ensureWritable: the
 // photo must be tagged (via photo_children) with at least one child the user
 // can write to.

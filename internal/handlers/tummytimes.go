@@ -50,6 +50,9 @@ func (h *TummyTimesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		pagination.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !ensureCreatable(w, r, h.db, "tummy_times", input.Child) {
+		return
+	}
 
 	t := models.TummyTime{
 		ChildID:   input.Child,
@@ -57,7 +60,7 @@ func (h *TummyTimesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Notes:     input.Notes,
 	}
 
-	start, end, pausedSeconds, timerID, ok := resolveEntryTimes(w, h.db, input.Timer, input.Start, input.End)
+	start, end, pausedSeconds, timerID, ok := resolveEntryTimes(w, h.db, input.Child, input.Timer, input.Start, input.End)
 	if !ok {
 		return
 	}

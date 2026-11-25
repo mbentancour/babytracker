@@ -11,10 +11,9 @@ const changeScopeKey contextKey = "change_scope"
 // taken to concern everyone.
 //
 // Nothing has to be added to an endpoint for this: the scope is filled in by
-// the code that already works out a request's child. RBAC notes a child named
-// in the query string or the JSON body (a create), and the handlers'
-// ensureWritable notes the child an existing record belongs to (an update or
-// a delete).
+// the checks that already tie a write to its child. The handlers'
+// ensureCreatable notes the child a new row is saved under, and ensureWritable
+// the child an existing record belongs to.
 type ChangeScope struct {
 	children []int
 }
