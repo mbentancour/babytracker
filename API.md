@@ -340,7 +340,7 @@ Body (create):
 Types: `breast milk`, `formula`, `fortified breast milk`, `solid food`
 Methods: `bottle`, `left breast`, `right breast`, `both breasts`, `parent fed`, `self fed`
 
-With timer: send `{"child": 1, "type": "...", "method": "...", "timer": 5}` — the timer's start time is used, current time is the end, and the timer is deleted.
+With timer: send `{"child": 1, "type": "...", "method": "...", "timer": 5}` — the timer's start time is used, current time is the end, and the timer is deleted. The timer has to be the same child's; another child's is answered like one that does not exist (400). The same holds for sleep and tummy time.
 
 ### Sleep
 
@@ -642,6 +642,8 @@ DELETE /api/roles/{id}/                Delete custom role
 Predefined roles: `parent` (full write), `caregiver` (write daily, read measurements), `viewer` (read only)
 
 Permission levels: `none`, `read`, `write`
+
+A user who is not an admin needs `write` on a feature, for the child concerned, to create, change or delete its entries. For a create that is the child in the request body, whatever else the request names; for a change or a delete it is the child the entry belongs to. A request without that access is answered with 403.
 
 Features: `feeding`, `sleep`, `diaper`, `tummy`, `temp`, `weight`, `height`, `headcirc`, `pumping`, `bmi`, `medication`, `milestone`, `note`, `photo`
 
