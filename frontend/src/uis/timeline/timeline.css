@@ -34,7 +34,10 @@
   }
 }
 
-.tl button {
+/* A button starts out with the text around it. :where() keeps this rule at
+   the rank of a single class, so any rule further down can give a button
+   its own size, weight or colour without needing .tl in front. */
+.tl :where(button) {
   font: inherit;
   color: inherit;
   cursor: pointer;
@@ -167,8 +170,6 @@
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  font-size: 14px;
-  font-weight: 600;
   white-space: nowrap;
 }
 .tl-kid-age {
@@ -194,7 +195,6 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 19px;
   background: rgba(255, 255, 255, 0.12);
   transition: background 0.15s;
 }
@@ -214,8 +214,6 @@
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  font-size: 13.5px;
-  font-weight: 600;
   white-space: nowrap;
   transition: background 0.15s;
 }
@@ -427,8 +425,6 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   background: none;
-  font-size: 13px;
-  font-weight: 600;
 }
 .tl .tl-earlier {
   color: var(--text-muted);
@@ -531,8 +527,6 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   background: none;
-  font-size: 13px;
-  font-weight: 600;
 }
 .tl-dated-icon {
   width: 24px;
@@ -708,8 +702,6 @@
   border: 0;
   border-radius: 999px;
   background: var(--tone);
-  font-size: 14px;
-  font-weight: 700;
   white-space: nowrap;
   box-shadow: 0 8px 16px -8px var(--tone);
 }
@@ -726,7 +718,6 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 17px;
   background: var(--tl-surface);
   transition: border-color 0.12s;
 }
@@ -760,10 +751,7 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--tl-surface);
-  font-size: 13px;
-  font-weight: 600;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
   transition: border-color 0.12s, background 0.12s;
 }
 .tl-chip:hover:not(:disabled) {
@@ -848,8 +836,6 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--tl-surface);
-  font-size: 13px;
-  font-weight: 600;
   box-shadow: 0 10px 24px -10px rgba(8, 10, 24, 0.5);
   animation: tl-arrive 0.2s ease-out;
 }
@@ -978,7 +964,6 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 17px;
   background: var(--tl-chip);
 }
 .tl .tl-tray-close,
@@ -1106,10 +1091,7 @@
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--tl-raised);
-  font-size: 13px;
-  font-weight: 600;
   text-align: center;
-  font-variant-numeric: tabular-nums;
   transition: transform 0.12s, border-color 0.12s, background 0.12s;
 }
 .tl-tiles-3 .tl-tile {
@@ -1146,8 +1128,6 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--tl-raised);
-  font-size: 14px;
-  font-weight: 600;
   transition: border-color 0.12s;
 }
 .tl-seg-btn:hover:not(:disabled) {
@@ -1236,8 +1216,6 @@
   margin-top: 4px;
   border: 0;
   border-radius: 16px;
-  font-size: 16px;
-  font-weight: 700;
   transition: transform 0.12s, filter 0.12s;
 }
 .tl .tl-primary {
@@ -1258,8 +1236,6 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--tl-raised);
-  font-size: 14px;
-  font-weight: 700;
 }
 .tl-secondary:hover:not(:disabled) {
   border-color: var(--text-dim);
@@ -1308,8 +1284,6 @@
   border: 0;
   border-radius: 10px;
   background: none;
-  font-size: 14px;
-  font-weight: 600;
 }
 .tl .tl-plain {
   color: var(--text-muted);
@@ -1561,8 +1535,6 @@
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
-  font-size: 14px;
-  font-weight: 600;
   transition: background 0.15s;
 }
 .tl-page-back:hover {
@@ -1610,7 +1582,6 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 18px;
   background: var(--tl-surface);
   box-shadow: var(--tl-card-shadow);
 }
