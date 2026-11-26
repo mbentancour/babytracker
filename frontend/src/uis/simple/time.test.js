@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "./time";
+import { toUTC, quickSpan, nursingSpan, clock, lastClock, isNapSleep } from "./time";
 
 describe("simple UI time helpers", () => {
   it("formats a date as the API's naive UTC string", () => {
@@ -9,6 +9,22 @@ describe("simple UI time helpers", () => {
   it("records a quick feed as the quarter of an hour before the time given", () => {
     expect(quickSpan(new Date(Date.UTC(2026, 9, 22, 8, 5, 9)))).toEqual({ start: "2026-10-22T07:50:09", end: "2026-10-22T08:05:09" });
     expect(quickSpan(new Date(Date.UTC(2026, 9, 22, 0, 5)))).toEqual({ start: "2026-10-21T23:50:00", end: "2026-10-22T00:05:00" });
+  });
+
+  it("records a feed of a known length as that long", () => {
+    expect(quickSpan(new Date(Date.UTC(2026, 9, 22, 8, 5)), 22)).toEqual({ start: "2026-10-22T07:43:00", end: "2026-10-22T08:05:00" });
+  });
+
+  it("records a breastfeed on one side as the minutes it took", () => {
+    const end = new Date(Date.UTC(2026, 9, 22, 8, 5));
+    expect(nursingSpan(end, "left breast", { minutes: 12, left: 10, right: 10 })).toEqual({ start: "2026-10-22T07:53:00", end: "2026-10-22T08:05:00" });
+  });
+
+  it("records a feed on both breasts as its two sides, one after the other", () => {
+    const end = new Date(Date.UTC(2026, 9, 22, 8, 5));
+    expect(nursingSpan(end, "both breasts", { minutes: 15, left: 12, right: 8 })).toEqual({
+      start: "2026-10-22T07:45:00", end: "2026-10-22T08:05:00", left_seconds: 720, right_seconds: 480,
+    });
   });
 
   it("formats a clock reading for a time input", () => {

@@ -185,6 +185,94 @@ describe("SimpleUI", () => {
     expect(api.createFeeding.mock.calls[0][0].method).toBe("left breast");
   });
 
+  it("says how long a breastfeed took, starting from how long the last one did", async () => {
+    api.createFeeding.mockResolvedValue({ id: 53 });
+    renderUi();
+    fireEvent.click(within(row("Feeding")).getByRole("button", { name: "Log Feeding" }));
+    const dialog = screen.getByRole("dialog");
+    // A bottle is measured, not timed.
+    expect(within(dialog).queryByText("How long")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Left Breast" }));
+    expect(within(dialog).getByText("10 min")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "More" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "More" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledTimes(1));
+    expect(api.createFeeding).toHaveBeenCalledWith({
+      child: 7,
+      type: "breast milk",
+      method: "left breast",
+      start: new Date(NOW.getTime() - 12 * 60000).toISOString().slice(0, 19),
+      end: NOW.toISOString().slice(0, 19),
+    });
+  });
+
+  it("times each side of a feed on both breasts", async () => {
+    api.createFeeding.mockResolvedValue({ id: 54 });
+    renderUi();
+    fireEvent.click(within(row("Feeding")).getByRole("button", { name: "Log Feeding" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Both Breasts" }));
+    const left = within(dialog).getByRole("group", { name: "Left" });
+    const right = within(dialog).getByRole("group", { name: "Right" });
+    fireEvent.click(within(left).getByRole("button", { name: "More" }));
+    fireEvent.click(within(left).getByRole("button", { name: "More" }));
+    fireEvent.click(within(right).getByRole("button", { name: "Less" }));
+    fireEvent.click(within(right).getByRole("button", { name: "Less" }));
+    expect(within(left).getByText("12 min")).toBeTruthy();
+    expect(within(right).getByText("8 min")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledTimes(1));
+    expect(api.createFeeding).toHaveBeenCalledWith({
+      child: 7,
+      type: "breast milk",
+      method: "both breasts",
+      start: new Date(NOW.getTime() - 20 * 60000).toISOString().slice(0, 19),
+      end: NOW.toISOString().slice(0, 19),
+      left_seconds: 720,
+      right_seconds: 480,
+    });
+  });
+
+  it("logs a pumped total, or what each breast gave", async () => {
+    api.createPumping.mockResolvedValue({ id: 55 });
+    renderUi();
+    fireEvent.click(within(row("Pumping")).getByRole("button", { name: "Log Pumping" }));
+    let dialog = screen.getByRole("dialog");
+    // Nothing pumped yet: a total, from where the sheet always started.
+    expect(within(dialog).getByRole("button", { name: "Total" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByText("90 mL")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createPumping).toHaveBeenCalledTimes(1));
+    const span = { start: new Date(NOW.getTime() - 15 * 60000).toISOString().slice(0, 19), end: NOW.toISOString().slice(0, 19) };
+    expect(api.createPumping).toHaveBeenLastCalledWith({ child: 7, ...span, amount: 90 });
+
+    fireEvent.click(within(row("Pumping")).getByRole("button", { name: "Log Pumping" }));
+    dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Each side" }));
+    const left = within(dialog).getByRole("group", { name: "Left" });
+    const right = within(dialog).getByRole("group", { name: "Right" });
+    expect(within(left).getByText("50 mL")).toBeTruthy();
+    expect(within(right).getByText("40 mL")).toBeTruthy();
+    fireEvent.click(within(right).getByRole("button", { name: "More" }));
+    expect(within(dialog).getByText("Total 100 mL")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createPumping).toHaveBeenCalledTimes(2));
+    expect(api.createPumping).toHaveBeenLastCalledWith({ child: 7, ...span, amount_left: 50, amount_right: 50 });
+  });
+
+  it("opens the pumping sheet the way the last session was logged", () => {
+    const base = makeSession();
+    session.value = { ...base, data: { ...base.data, weeklyPumping: [{ id: 30, start: minsAgo(200), end: minsAgo(185), amount: 110, amount_left: 50, amount_right: 60 }] } };
+    renderUi();
+    fireEvent.click(within(row("Pumping")).getByRole("button", { name: "Log Pumping" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Each side" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(dialog).getByText("Total 110 mL")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Total" }));
+    expect(within(dialog).getByText("110 mL")).toBeTruthy();
+  });
+
   it("logs solid food, which has no bottle amount", async () => {
     api.createFeeding.mockResolvedValue({ id: 52 });
     renderUi();

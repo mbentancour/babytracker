@@ -206,6 +206,10 @@ export default {
   "feeding.leftBreast": "Sein gauche",
   "feeding.rightBreast": "Sein droit",
   "feeding.bothBreasts": "Les deux seins",
+  "sides.left": "Gauche",
+  "sides.right": "Droit",
+  "sides.total": "Total",
+  "sides.each": "Chaque côté",
   "feeding.parentFed": "Donné par un parent",
   "feeding.selfFed": "Mangé seul",
 
@@ -454,6 +458,7 @@ export default {
   "simple.when": "Quand",
   "simple.what": "Quoi",
   "simple.how": "Comment",
+  "simple.howLong": "Combien de temps",
   "simple.oneTap": "Un appui enregistre",
   "simple.rightNow": "En ce moment",
   "simple.startSleep": "Démarrer le sommeil maintenant",

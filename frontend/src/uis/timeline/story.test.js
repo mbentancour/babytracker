@@ -183,6 +183,18 @@ describe("describeRow", () => {
     expect(say(row("feeding", null, { live: true }))).toEqual({ title: "Feeding" });
   });
 
+  it("says under a feed on both breasts how long each side took", () => {
+    const both = { type: "breast milk", method: "both breasts", start: at(22, 9), end: at(22, 9, 20) };
+    expect(say(row("feeding", { ...both, left_seconds: 720, right_seconds: 480 }))).toEqual({ title: "Both Breasts · 20m", detail: "Left 12m · Right 8m" });
+    // Not timed side by side: the feed alone, as before.
+    expect(say(row("feeding", both))).toEqual({ title: "Both Breasts · 20m", detail: null });
+  });
+
+  it("says under a pumping session what each breast gave", () => {
+    expect(say(row("pumping", { amount: 90, amount_left: 40, amount_right: 50 }))).toEqual({ title: "Pumping · 90 mL", detail: "Left 40 mL · Right 50 mL" });
+    expect(say(row("pumping", { amount: 90 }))).toEqual({ title: "Pumping · 90 mL", detail: null });
+  });
+
   it("words a sleep at both ends, net of pauses", () => {
     expect(say(row("sleep", lists.sleeps[1], { part: "start" }))).toEqual({ title: "Fell asleep" });
     expect(say(row("sleep", lists.sleeps[1], { part: "end" }))).toEqual({ title: "Woke up", detail: "slept 1h 10m · Nap" });

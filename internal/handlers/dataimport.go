@@ -250,6 +250,9 @@ type importFeeding struct {
 	Type, Method string
 	Amount       *float64
 	Notes        string
+
+	// How long each side took, in seconds, for a feed on both breasts.
+	LeftSeconds, RightSeconds *int
 }
 
 type importSleep struct {
@@ -271,6 +274,9 @@ type importPumping struct {
 	Note       string // pumping entries have no notes field; saved as a note
 	Family     bool   // logged for the family, not this child (no profile)
 	Duplicate  bool   // a family session that's already in the database
+
+	// What each breast gave, kept only when the two add up to Amount.
+	AmountLeft, AmountRight *float64
 }
 
 type importMeasurement struct {
@@ -505,8 +511,8 @@ func insertImportPlan(ctx context.Context, db *sqlx.DB, c importChild, p *import
 		batches[len(batches)-1].args = append(batches[len(batches)-1].args, args)
 	}
 	for _, f := range p.Feedings {
-		add("feeding", `INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, notes) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-			[]any{childID, f.Start, f.End, f.Type, f.Method, f.Amount, f.Notes})
+		add("feeding", `INSERT INTO feedings (child_id, start_time, end_time, type, method, amount, left_seconds, right_seconds, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			[]any{childID, f.Start, f.End, f.Type, f.Method, f.Amount, f.LeftSeconds, f.RightSeconds, f.Notes})
 	}
 	for _, s := range p.Sleep {
 		add("sleep", `INSERT INTO sleep (child_id, start_time, end_time, nap, notes) VALUES ($1,$2,$3,$4,$5)`,
@@ -517,8 +523,8 @@ func insertImportPlan(ctx context.Context, db *sqlx.DB, c importChild, p *import
 			[]any{childID, ch.Time, ch.Wet, ch.Solid, ch.Color, ch.Notes})
 	}
 	for _, pm := range p.Pumping {
-		add("pumping", `INSERT INTO pumping (child_id, start_time, end_time, amount) VALUES ($1,$2,$3,$4)`,
-			[]any{childID, pm.Start, pm.End, pm.Amount})
+		add("pumping", `INSERT INTO pumping (child_id, start_time, end_time, amount, amount_left, amount_right) VALUES ($1,$2,$3,$4,$5,$6)`,
+			[]any{childID, pm.Start, pm.End, pm.Amount, pm.AmountLeft, pm.AmountRight})
 	}
 	for _, m := range p.Weight {
 		add("weight", `INSERT INTO weight (child_id, date, weight, notes) VALUES ($1,$2,$3,$4)`,
@@ -646,6 +652,62 @@ func convertVolume(v float64, unit, col string, opts importOptions) (*float64, e
 		out = roundVolume(ml/mlPerFlOz, "imperial")
 	}
 	return &out, nil
+}
+
+// pumpAmounts settles a pumping session's total and its two sides from what
+// a file recorded for it; sidesCol names the side columns in an error.
+//
+// The source's own total is the total, as it always was; without one, the
+// sides add up to it. The sides themselves are kept only when they add up to
+// that total, so that a saved session never shows two sides that disagree
+// with its amount. Each figure was rounded on its own when its unit was
+// converted, which can leave the sum a rounding step away from the total;
+// the total then becomes the sum.
+func pumpAmounts(left, right, total *float64, sidesCol string, opts importOptions) (amount, keptLeft, keptRight *float64, err error) {
+	var sides float64
+	if left != nil {
+		sides += *left
+	}
+	if right != nil {
+		sides += *right
+	}
+	sum := roundVolume(sides, opts.UnitSystem)
+	switch {
+	case total != nil && *total > 0:
+		amount = total
+	case sides > 0:
+		// Each side passed the limit on its own; their sum must too.
+		if sum > volumeLimit(opts.UnitSystem) {
+			return nil, nil, nil, rowErr("out_of_range", sidesCol, "the left and right amounts add up to an implausible amount")
+		}
+		amount = &sum
+	case total != nil:
+		amount = total
+	case left != nil || right != nil:
+		amount = &sides // explicit zeros
+	}
+	if sides > 0 && amount != nil && math.Abs(sum-*amount) <= 1.5*volumeStep(opts.UnitSystem) {
+		amount, keptLeft, keptRight = &sum, left, right
+	}
+	return amount, keptLeft, keptRight, nil
+}
+
+// volumeStep is the smallest difference roundVolume keeps.
+func volumeStep(system string) float64 {
+	if system == "imperial" {
+		return 0.01
+	}
+	return 0.1
+}
+
+// sideSecondsOf gives the two sides of a nursing session for a feed on both
+// breasts; a session on one side has nothing to tell apart.
+func sideSecondsOf(left, right time.Duration) (*int, *int) {
+	if left <= 0 || right <= 0 {
+		return nil, nil
+	}
+	l, r := int(left/time.Second), int(right/time.Second)
+	return &l, &r
 }
 
 func roundVolume(v float64, system string) float64 {

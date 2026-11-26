@@ -420,6 +420,7 @@ func TestNaraBreastfeed(t *testing.T) {
 		warn    bool
 		notes   string
 	}{
+		// The one row with two timed sides: checked for them below.
 		{"both timed", row("Breastfeed", "[Breastfeed] Begin Side", "LEFT", "[Breastfeed] End Side", "RIGHT",
 			"[Breastfeed] Left Duration (Seconds)", "600", "[Breastfeed] Right Duration (Seconds)", "300", "Note", "sleepy"),
 			"both breasts", 15, false, "sleepy"},
@@ -447,6 +448,14 @@ func TestNaraBreastfeed(t *testing.T) {
 		}
 		if f.Notes != c.notes {
 			t.Errorf("%s: notes %q, want %q", c.name, f.Notes, c.notes)
+		}
+		// Each side's length is kept where both were timed, and nowhere else.
+		wantSides := ""
+		if c.name == "both timed" {
+			wantSides = "600 300"
+		}
+		if got := sidesText(f.LeftSeconds, f.RightSeconds); got != wantSides {
+			t.Errorf("%s: sides %q, want %q", c.name, got, wantSides)
 		}
 	}
 }
@@ -646,22 +655,31 @@ func TestNaraPump(t *testing.T) {
 		units   string
 		amount  float64 // -1 for no amount
 		minutes float64
+		sides   string // what each breast gave, "" when the session keeps no sides
 	}{
 		{"sides with end time", row("Pump", "[Pump] End Date/time (Epoch)", "1789579433000",
-			"[Pump] Left Volume", "2", "[Pump] Left Volume Unit", "FLOZ", "[Pump] Right Volume", "70", "[Pump] Right Volume Unit", "ML"), "metric", 129.1, 23},
+			"[Pump] Left Volume", "2", "[Pump] Left Volume Unit", "FLOZ", "[Pump] Right Volume", "70", "[Pump] Right Volume Unit", "ML"), "metric", 129.1, 23, "59.1 70"},
 		{"end epoch wins over the duration", row("Pump", "[Pump] End Date/time (Epoch)", "1789579433000", "[Pump] Duration (Seconds)", "60",
-			"[Pump] Total Volume", "50", "[Pump] Total Volume Unit", "ML"), "metric", 50, 23},
-		{"total only, duration", row("Pump", "[Pump] Duration (Seconds)", "600", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"), "metric", 100, 10},
+			"[Pump] Total Volume", "50", "[Pump] Total Volume Unit", "ML"), "metric", 50, 23, ""},
+		{"total only, duration", row("Pump", "[Pump] Duration (Seconds)", "600", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"), "metric", 100, 10, ""},
 		{"zero sides and a total", row("Pump", "[Pump] Left Volume", "0", "[Pump] Left Volume Unit", "ML",
-			"[Pump] Right Volume", "0", "[Pump] Right Volume Unit", "ML", "[Pump] Total Volume", "90", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0},
+			"[Pump] Right Volume", "0", "[Pump] Right Volume Unit", "ML", "[Pump] Total Volume", "90", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0, ""},
+		// The total stands, and sides that contradict it are not kept.
 		{"Nara's total wins over the sides", row("Pump", "[Pump] Left Volume", "2", "[Pump] Left Volume Unit", "FLOZ", "[Pump] Right Volume", "2.1", "[Pump] Right Volume Unit", "FLOZ",
-			"[Pump] Total Volume", "4", "[Pump] Total Volume Unit", "FLOZ"), "imperial", 4, 0},
-		{"explicit zero total", row("Pump", "[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 0, 0},
-		{"explicit zero sides", row("Pump", "[Pump] Left Volume", "0", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "0", "[Pump] Right Volume Unit", "ML"), "metric", 0, 0},
+			"[Pump] Total Volume", "4", "[Pump] Total Volume Unit", "FLOZ"), "imperial", 4, 0, ""},
+		{"sides that add up to Nara's total", row("Pump", "[Pump] Left Volume", "40", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "50", "[Pump] Right Volume Unit", "ML",
+			"[Pump] Total Volume", "90", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0, "40 50"},
+		// 1 fl oz is 29.6 mL and 2 fl oz is 59.1 mL: each figure was rounded
+		// on its own. The sides are kept, and the total is what they add up to.
+		{"sides a rounding step away from the total", row("Pump", "[Pump] Left Volume", "1", "[Pump] Left Volume Unit", "FLOZ", "[Pump] Right Volume", "1", "[Pump] Right Volume Unit", "FLOZ",
+			"[Pump] Total Volume", "2", "[Pump] Total Volume Unit", "FLOZ"), "metric", 59.2, 0, "29.6 29.6"},
+		{"one side only", row("Pump", "[Pump] Right Volume", "60", "[Pump] Right Volume Unit", "ML"), "metric", 60, 0, " 60"},
+		{"explicit zero total", row("Pump", "[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 0, 0, ""},
+		{"explicit zero sides", row("Pump", "[Pump] Left Volume", "0", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "0", "[Pump] Right Volume Unit", "ML"), "metric", 0, 0, ""},
 		{"zero total next to the sides", row("Pump", "[Pump] Left Volume", "50", "[Pump] Left Volume Unit", "ML", "[Pump] Right Volume", "40", "[Pump] Right Volume Unit", "ML",
-			"[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0},
-		{"duration but no amount", row("Pump", "[Pump] Duration (Seconds)", "900"), "metric", -1, 15},
-		{"imperial rounding", row("Pump", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"), "imperial", 3.38, 0},
+			"[Pump] Total Volume", "0", "[Pump] Total Volume Unit", "ML"), "metric", 90, 0, "50 40"},
+		{"duration but no amount", row("Pump", "[Pump] Duration (Seconds)", "900"), "metric", -1, 15, ""},
+		{"imperial rounding", row("Pump", "[Pump] Total Volume", "100", "[Pump] Total Volume Unit", "ML"), "imperial", 3.38, 0, ""},
 	}
 	for _, c := range cases {
 		pm := at(t, one(t, c.r, c.units).Pumping, 0)
@@ -671,6 +689,19 @@ func TestNaraPump(t *testing.T) {
 		}
 		if got != c.amount || pm.End.Sub(pm.Start).Minutes() != c.minutes {
 			t.Errorf("%s: amount %v, %v", c.name, got, pm.End.Sub(pm.Start))
+		}
+		sides := ""
+		if pm.AmountLeft != nil || pm.AmountRight != nil {
+			text := func(v *float64) string {
+				if v == nil {
+					return ""
+				}
+				return formatAmount(*v)
+			}
+			sides = text(pm.AmountLeft) + " " + text(pm.AmountRight)
+		}
+		if sides != c.sides {
+			t.Errorf("%s: sides %q, want %q", c.name, sides, c.sides)
 		}
 	}
 

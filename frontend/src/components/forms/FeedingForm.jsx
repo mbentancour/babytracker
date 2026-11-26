@@ -9,6 +9,10 @@ import { methodsForType, FEEDING_METHODS } from "../../utils/preferences";
 import { useUnits } from "../../utils/units";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC, timerEndToUTC } from "../../utils/datetime";
+import { BOTH_BREASTS, nursedSides } from "../../utils/sides";
+
+// A side's length as the form shows it: minutes, to one decimal.
+const sideMinutes = (seconds) => (seconds == null ? "" : String(+(seconds / 60).toFixed(1)));
 
 export default function FeedingForm({ childId, timerId, entry, defaultType, defaultMethod, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -41,6 +45,15 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
     : [...typeMethods, ...FEEDING_METHODS.filter((m) => m.value === method)];
   const METHODS = offeredMethods.map((m) => ({ value: m.value, label: t(m.labelKey) }));
   const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount) : "");
+  // How long each side took, for a feed on both breasts, in minutes. Only a
+  // side that was changed is sent, so opening and saving an entry leaves a
+  // length recorded to the second as it was.
+  const [sidesWere] = useState(() => {
+    const sides = nursedSides(entry);
+    return { left: sideMinutes(sides?.left), right: sideMinutes(sides?.right) };
+  });
+  const [leftMinutes, setLeftMinutes] = useState(sidesWere.left);
+  const [rightMinutes, setRightMinutes] = useState(sidesWere.right);
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [pausedMinutes, setPausedMinutes] = useState(entry ? String(Math.floor((Number(entry.paused_seconds) || 0) / 60)) : "0");
@@ -57,6 +70,17 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
   }, [entry?.id]);
 
 
+  // A new feed that says how long each side took lasted that long: its start
+  // follows, and can still be changed afterwards.
+  const setSide = (set, other) => (e) => {
+    const value = e.target.value;
+    set(value);
+    if (isEdit || timerId) return;
+    const minutes = (parseFloat(value) || 0) + (parseFloat(other) || 0);
+    const ended = new Date(end).getTime();
+    if (minutes > 0 && Number.isFinite(ended)) setStart(toLocalDatetime(new Date(ended - minutes * 60000)));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -64,6 +88,11 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
       const data = { type, method };
       if (amount) data.amount = parseFloat(amount);
       if (notes.trim()) data.notes = notes.trim();
+      if (method === BOTH_BREASTS) {
+        const seconds = (value) => (value === "" ? null : Math.round(parseFloat(value) * 60));
+        if (leftMinutes !== (isEdit ? sidesWere.left : "")) data.left_seconds = seconds(leftMinutes);
+        if (rightMinutes !== (isEdit ? sidesWere.right : "")) data.right_seconds = seconds(rightMinutes);
+      }
       let result;
       if (isEdit) {
         data.start = localInputToUTC(start);
@@ -115,6 +144,16 @@ export default function FeedingForm({ childId, timerId, entry, defaultType, defa
         <FormField label={t("feeding.method")}>
           <FormSelect options={METHODS} value={method} onChange={(e) => setMethod(e.target.value)} />
         </FormField>
+        {method === BOTH_BREASTS && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <FormField label={`${t("sides.left")} (${t("simple.minUnit")})`}>
+              <FormInput type="number" aria-label={t("sides.left")} value={leftMinutes} onChange={setSide(setLeftMinutes, rightMinutes)} placeholder={t("form.optional")} min="0" step="any" />
+            </FormField>
+            <FormField label={`${t("sides.right")} (${t("simple.minUnit")})`}>
+              <FormInput type="number" aria-label={t("sides.right")} value={rightMinutes} onChange={setSide(setRightMinutes, leftMinutes)} placeholder={t("form.optional")} min="0" step="any" />
+            </FormField>
+          </div>
+        )}
         <FormField label={`${t("feeding.amount")} (${units.volume})`}>
           <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
         </FormField>

@@ -716,6 +716,26 @@
 .tl .tl-go {
   color: #fff;
 }
+/* Holds the clock of the row it is on; quieter than the button that ends it. */
+.tl-hold {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--tl-surface);
+  transition: border-color 0.12s;
+}
+.tl .tl-hold {
+  color: var(--text);
+}
+.tl-hold:hover {
+  border-color: var(--text-dim);
+}
 
 .tl-row.is-fresh > .tl-row-line {
   animation: tl-arrive 0.36s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -924,7 +944,9 @@
   left: 0;
   right: 0;
   bottom: 100%;
-  max-height: min(84vh, 660px);
+  /* Tall enough for the longest tray, a feed on both breasts with a side
+     to time each, where two-line choices make it taller still (Danish). */
+  max-height: min(84vh, 700px);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -972,6 +994,16 @@
   gap: 9px;
   padding: 4px 16px 16px;
   overflow-y: auto;
+}
+
+/* The questions of a form, one under the other; each with its label. A wide
+   screen sets them two abreast (see below). */
+.tl-fields,
+.tl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
 }
 
 .tl-lead {
@@ -1154,6 +1186,45 @@
   font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* Left on the left, right on the right, each under its own name. */
+.tl-breasts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.tl-breast {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.tl-breast > span {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.tl-breast .tl-stepper {
+  gap: 4px;
+}
+.tl .tl-sum {
+  text-align: center;
+}
+
+/* A timer that is running, and the way to hold it. */
+.tl-running {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tl-running .tl-lead {
+  flex: 1;
+  min-width: 0;
+}
+.tl-running .tl-chip {
+  flex: none;
 }
 
 .tl-primary {
@@ -1960,13 +2031,21 @@
   .tl-body {
     gap: 16px;
   }
+  /* The card does not clip what is in it: a tray taller than the room above
+     the buttons rises past the card's top edge instead of losing its own.
+     The list and the buttons keep to the rounded corners themselves. */
   .tl-main {
     --tl-ground: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 24px;
-    overflow: hidden;
     background: var(--tl-surface);
     box-shadow: var(--tl-card-shadow);
+  }
+  .tl-scroll {
+    border-radius: 23px 23px 0 0;
+  }
+  .tl-dock {
+    border-radius: 0 0 23px 23px;
   }
   .tl-side {
     display: block;
@@ -2024,6 +2103,26 @@
     border-bottom: 1px solid var(--border);
     border-radius: 22px;
     box-shadow: 0 24px 60px -20px rgba(8, 10, 24, 0.6);
+  }
+  /* A form uses the width there is: its questions two abreast, which keeps
+     it low enough to sit inside the card on a laptop. The first column is
+     the wider one: it holds what was fed, the longest words in the form. */
+  .tl-tray.is-form {
+    width: min(760px, calc(100% - 32px));
+  }
+  .tl-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+    align-items: start;
+    gap: 12px 20px;
+  }
+  /* A question left on a row of its own takes the row, its four choices in
+     one line. */
+  .tl-fields > .tl-field:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .tl-fields > .tl-field:last-child:nth-child(odd) .tl-seg[data-count="4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .tl-toast {

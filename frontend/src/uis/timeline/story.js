@@ -20,6 +20,7 @@
 
 import { formatHoursMinutes, feedingMethodLabel, feedingTypeLabel } from "../../utils/formatters";
 import { agoAnchor } from "../../utils/overlayTime";
+import { sidesText } from "../../utils/sides";
 
 const HOUR = 3600000;
 const pad = (n) => String(n).padStart(2, "0");
@@ -265,7 +266,8 @@ export function describeRow(row, { t, units }) {
       if (e.method === "bottle") {
         return { title: join(how, Number(e.amount) > 0 && amount(e.amount, units.volume)), detail: what };
       }
-      return { title: join(how, spanLength(e)), detail: e.type === "breast milk" ? null : what };
+      // How long each side took, when a feed on both breasts says.
+      return { title: join(how, spanLength(e)), detail: join(e.type !== "breast milk" && what, sidesText(e, { t, volume: units.volume })) || null };
     }
     case "sleep": {
       if (row.live || row.part === "start") return { title: t("simple.fellAsleep") };
@@ -280,7 +282,11 @@ export function describeRow(row, { t, units }) {
     case "tummy":
       return { title: row.live ? t("timer.tummy") : join(t("timer.tummy"), spanLength(e)) };
     case "pumping":
-      return { title: join(t("action.pumping"), Number(e.amount) > 0 ? amount(e.amount, units.volume) : spanLength(e)) };
+      return {
+        title: join(t("action.pumping"), Number(e.amount) > 0 ? amount(e.amount, units.volume) : spanLength(e)),
+        // What each breast gave, for a session logged side by side.
+        detail: sidesText(e, { t, volume: units.volume }),
+      };
     case "milkWaste":
       return { title: join(t("action.milkWaste"), Number(e.amount) > 0 && amount(e.amount, units.volume)) };
     case "temp":

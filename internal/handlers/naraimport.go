@@ -502,7 +502,9 @@ func naraBreastfeed(row *importRow, prefix string, start time.Time) (importFeedi
 		}
 	}
 	has := l > 0 || r > 0 || begin != "" || end != ""
-	return importFeeding{Start: start, End: start.Add(l + r), Type: "breast milk", Method: method}, has, nil
+	feed := importFeeding{Start: start, End: start.Add(l + r), Type: "breast milk", Method: method}
+	feed.LeftSeconds, feed.RightSeconds = sideSecondsOf(l, r)
+	return feed, has, nil
 }
 
 // naraHasBottle reports whether a row records anything about a bottle.
@@ -745,29 +747,11 @@ func (p *importPlan) naraPump(row *importRow, start time.Time, opts importOption
 	// Pumping is logged for the family, so a pump row can have no profile.
 	family := row.get("_profileKey") == "" || row.get("Profile Name") == ""
 	pm := importPumping{Start: start, End: end, Family: family}
-	var sides float64
-	if left != nil {
-		sides += *left
-	}
-	if right != nil {
-		sides += *right
-	}
-	switch {
-	case total != nil && *total > 0:
-		// Nara's own total, when it wrote one (a session logged as a
-		// total only, or alongside the sides).
-		pm.Amount = total
-	case sides > 0:
-		// Each side passed naraVolume's limit on its own; their sum must too.
-		v := roundVolume(sides, opts.UnitSystem)
-		if v > volumeLimit(opts.UnitSystem) {
-			return importPumping{}, rowErr("out_of_range", "[Pump] Left Volume + [Pump] Right Volume", "the left and right volumes add up to an implausible amount")
-		}
-		pm.Amount = &v
-	case total != nil:
-		pm.Amount = total
-	case left != nil || right != nil:
-		pm.Amount = &sides // explicit zeros
+	// Nara's own total, when it wrote one (a session logged as a total only,
+	// or alongside the sides); otherwise what the sides add up to.
+	pm.Amount, pm.AmountLeft, pm.AmountRight, err = pumpAmounts(left, right, total, "[Pump] Left Volume + [Pump] Right Volume", opts)
+	if err != nil {
+		return importPumping{}, err
 	}
 	return pm, nil
 }

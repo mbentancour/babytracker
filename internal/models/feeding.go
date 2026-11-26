@@ -16,29 +16,35 @@ type Feeding struct {
 	Amount   *float64  `db:"amount" json:"amount"`
 	Duration *string   `db:"duration" json:"duration"`
 	// Seconds the source timer spent paused; duration excludes them.
-	PausedSeconds int       `db:"paused_seconds" json:"paused_seconds"`
-	Notes         string    `db:"notes" json:"notes"`
-	TimerID       *int      `db:"timer_id" json:"timer"`
-	Photo         string    `db:"photo" json:"photo"`
-	CreatedAt     time.Time `db:"created_at" json:"-"`
+	PausedSeconds int `db:"paused_seconds" json:"paused_seconds"`
+	// How long each side took in a feed on both breasts, when that was said.
+	// Kept for that method only.
+	LeftSeconds  *int      `db:"left_seconds" json:"left_seconds"`
+	RightSeconds *int      `db:"right_seconds" json:"right_seconds"`
+	Notes        string    `db:"notes" json:"notes"`
+	TimerID      *int      `db:"timer_id" json:"timer"`
+	Photo        string    `db:"photo" json:"photo"`
+	CreatedAt    time.Time `db:"created_at" json:"-"`
 }
 
 type FeedingInput struct {
-	Child  int      `json:"child"`
-	Start  string   `json:"start"`
-	End    string   `json:"end"`
-	Type   string   `json:"type"`
-	Method string   `json:"method"`
-	Amount *float64 `json:"amount"`
-	Notes  string   `json:"notes"`
-	Timer  *int     `json:"timer"`
+	Child        int      `json:"child"`
+	Start        string   `json:"start"`
+	End          string   `json:"end"`
+	Type         string   `json:"type"`
+	Method       string   `json:"method"`
+	Amount       *float64 `json:"amount"`
+	LeftSeconds  *int     `json:"left_seconds"`
+	RightSeconds *int     `json:"right_seconds"`
+	Notes        string   `json:"notes"`
+	Timer        *int     `json:"timer"`
 }
 
 func CreateFeeding(db *sqlx.DB, f *Feeding) error {
 	return db.QueryRowx(
-		`INSERT INTO feedings (child_id, start_time, end_time, paused_seconds, type, method, amount, notes, timer_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-		f.ChildID, f.Start, f.End, f.PausedSeconds, f.Type, f.Method, f.Amount, f.Notes, f.TimerID,
+		`INSERT INTO feedings (child_id, start_time, end_time, paused_seconds, type, method, amount, left_seconds, right_seconds, notes, timer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+		f.ChildID, f.Start, f.End, f.PausedSeconds, f.Type, f.Method, f.Amount, f.LeftSeconds, f.RightSeconds, f.Notes, f.TimerID,
 	).StructScan(f)
 }
 

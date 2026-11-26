@@ -53,6 +53,10 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !ensureCreatable(w, r, h.db, "feedings", input.Child) {
 		return
 	}
+	if !validSideSeconds(input.LeftSeconds) || !validSideSeconds(input.RightSeconds) {
+		pagination.WriteError(w, http.StatusBadRequest, "left_seconds and right_seconds must be nonnegative integers")
+		return
+	}
 
 	f := models.Feeding{
 		ChildID: input.Child,
@@ -76,6 +80,11 @@ func (h *FeedingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.Method == "" {
 		f.Method = "bottle"
+	}
+	// Only a feed on both breasts has two sides to tell apart.
+	if f.Method == bothBreasts {
+		f.LeftSeconds = input.LeftSeconds
+		f.RightSeconds = input.RightSeconds
 	}
 
 	if err := models.CreateFeeding(h.db, &f); err != nil {
@@ -106,6 +115,11 @@ func (h *FeedingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !sideSeconds(body, "left_seconds") || !sideSeconds(body, "right_seconds") {
+		pagination.WriteError(w, http.StatusBadRequest, "left_seconds and right_seconds must be nonnegative integers")
+		return
+	}
+
 	allowed := map[string]string{
 		"start":          "start_time",
 		"end":            "end_time",
@@ -115,8 +129,14 @@ func (h *FeedingsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"notes":          "notes",
 		"photo":          "photo",
 		"paused_seconds": "paused_seconds",
+		"left_seconds":   "left_seconds",
+		"right_seconds":  "right_seconds",
 	}
 	updates := filterAllowed(body, allowed)
+	if err := feedingSideUpdates(h.db, id, body, updates); err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to update feeding")
+		return
+	}
 
 	if len(updates) == 0 {
 		pagination.WriteError(w, http.StatusBadRequest, "no valid fields to update")

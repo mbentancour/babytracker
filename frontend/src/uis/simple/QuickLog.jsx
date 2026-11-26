@@ -5,9 +5,10 @@ import { useSession } from "../../core/session";
 import { colors } from "../../utils/colors";
 import { formatElapsed } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
-import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
+import { BREAST_METHODS, FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
+import { BOTH_BREASTS, halves, nursingStart, pumpingAmounts, pumpingStart, sumSides } from "../../utils/sides";
 import { useUnits } from "../../utils/units";
-import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "./time";
+import { toUTC, quickSpan, nursingSpan, clock, lastClock, isNapSleep } from "./time";
 
 const TITLES = {
   feeding: "feeding.log",
@@ -42,14 +43,28 @@ function lastAmount(entries, fallback) {
   return withAmount ? Number(withAmount.amount) : fallback;
 }
 
-function Stepper({ value, onChange, step, unit, min = 0 }) {
+// `label` names what is being counted, in small type above the figure: the
+// side, where there is a stepper for each.
+function Stepper({ value, onChange, step, unit, label, min = 0 }) {
   const { t } = useI18n();
   const shown = Number.isInteger(value) ? value : value.toFixed(1);
   return (
     <div className="simple-stepper">
       <button type="button" aria-label={t("simple.less")} onClick={() => onChange(Math.max(min, +(value - step).toFixed(2)))}>−</button>
-      <output aria-live="polite">{shown} {unit}</output>
+      <output aria-live="polite">{label && <small>{label}</small>}{shown} {unit}</output>
       <button type="button" aria-label={t("simple.more")} onClick={() => onChange(+(value + step).toFixed(2))}>+</button>
+    </div>
+  );
+}
+
+// One stepper for each side, each with its name above its figure: how much
+// each breast gave, or how long each took.
+function Sides({ label, left, right, onLeft, onRight, ...stepper }) {
+  const { t } = useI18n();
+  return (
+    <div className="simple-sides" role="group" aria-label={label}>
+      <div role="group" aria-label={t("sides.left")}><Stepper value={left} onChange={onLeft} label={t("sides.left")} {...stepper} /></div>
+      <div role="group" aria-label={t("sides.right")}><Stepper value={right} onChange={onRight} label={t("sides.right")} {...stepper} /></div>
     </div>
   );
 }
@@ -135,10 +150,19 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
     if (!allowed.some((m) => m.value === method)) setMethod(allowed[0].value);
   };
   const [amount, setAmount] = useState(() =>
-    kind === "pumping"
-      ? lastAmount(data.weeklyPumping, volume.pumping)
-      : lastAmount((data.weeklyFeedings || []).filter((f) => f.method === "bottle"), volume.feeding)
+    lastAmount((data.weeklyFeedings || []).filter((f) => f.method === "bottle"), volume.feeding)
   );
+  // A pumping session is a total, or what each breast gave: the sheet opens
+  // the way the last session was logged.
+  const [pump, setPump] = useState(() => pumpingStart(data.weeklyPumping, volume.pumping, volume.step));
+  const pumpAs = (split) => {
+    if (split === pump.split) return;
+    setPump(split
+      ? { ...pump, split, ...(sumSides(pump.left, pump.right) === pump.amount ? {} : halves(pump.amount, volume.step)) }
+      : { ...pump, split, amount: sumSides(pump.left, pump.right) });
+  };
+  // How long a breastfeed took, starting from how long the last one did.
+  const [nursing, setNursing] = useState(() => nursingStart(data.weeklyFeedings));
   const [minutes, setMinutes] = useState(5);
   const [when, setWhen] = useState(() => ({ key: "now", clock: clock(new Date()) }));
   const [asleep, setAsleep] = useState(() => clock(new Date(Date.now() - 60 * MINUTE)));
@@ -179,7 +203,7 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
       child: childId,
       type,
       method,
-      ...quickSpan(end),
+      ...(BREAST_METHODS.includes(method) ? nursingSpan(end, method, nursing) : quickSpan(end)),
     };
     if (method === "bottle" && amount > 0) body.amount = amount;
     return api.createFeeding(body);
@@ -207,9 +231,7 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
 
   const savePumping = () => save(() => {
     const end = pickedTime();
-    const body = { child: childId, ...quickSpan(end) };
-    if (amount > 0) body.amount = amount;
-    return api.createPumping(body);
+    return api.createPumping({ child: childId, ...quickSpan(end), ...pumpingAmounts(pump) });
   });
 
   const big = (label, onClick, extra) => (
@@ -275,6 +297,25 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
                   <Stepper value={amount} onChange={setAmount} step={volume.step} unit={units.volume} />
                 </>
               )}
+              {BREAST_METHODS.includes(method) && (
+                <>
+                  <div className="simple-label">{t("simple.howLong")}</div>
+                  {method === BOTH_BREASTS ? (
+                    <Sides
+                      label={t("simple.howLong")}
+                      left={nursing.left}
+                      right={nursing.right}
+                      onLeft={(left) => setNursing({ ...nursing, left })}
+                      onRight={(right) => setNursing({ ...nursing, right })}
+                      step={1}
+                      min={1}
+                      unit={t("simple.minUnit")}
+                    />
+                  ) : (
+                    <Stepper value={nursing.minutes} onChange={(minutes) => setNursing({ ...nursing, minutes })} step={1} min={1} unit={t("simple.minUnit")} />
+                  )}
+                </>
+              )}
               <When value={when} onChange={setWhen} />
               <div style={{ marginTop: 20 }}>{big(saving ? t("form.saving") : t("form.save"), saveFeeding)}</div>
             </>
@@ -329,7 +370,38 @@ export default function QuickLog({ kind, running, elapsed, onClose, onSaved, onS
           {kind === "pumping" && (
             <>
               <div className="simple-label">{t("feeding.amount")}</div>
-              <Stepper value={amount} onChange={setAmount} step={volume.step} unit={units.volume} />
+              <div className="simple-chips" data-count="2" role="group" aria-label={t("feeding.amount")}>
+                {[false, true].map((split) => (
+                  <button
+                    key={String(split)}
+                    type="button"
+                    className="simple-chip"
+                    aria-pressed={pump.split === split}
+                    style={pump.split === split ? { borderColor: color, borderWidth: 2, color } : undefined}
+                    onClick={() => pumpAs(split)}
+                  >
+                    {t(split ? "sides.each" : "sides.total")}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 10 }}>
+                {pump.split ? (
+                  <>
+                    <Sides
+                      label={t("sides.each")}
+                      left={pump.left}
+                      right={pump.right}
+                      onLeft={(left) => setPump({ ...pump, left })}
+                      onRight={(right) => setPump({ ...pump, right })}
+                      step={volume.step}
+                      unit={units.volume}
+                    />
+                    <p className="simple-total">{t("sides.total")} {sumSides(pump.left, pump.right)} {units.volume}</p>
+                  </>
+                ) : (
+                  <Stepper value={pump.amount} onChange={(next) => setPump({ ...pump, amount: next })} step={volume.step} unit={units.volume} />
+                )}
+              </div>
               <When value={when} onChange={setWhen} />
               <div style={{ marginTop: 20 }}>{big(saving ? t("form.saving") : t("form.save"), savePumping)}</div>
             </>

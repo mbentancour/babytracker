@@ -7,6 +7,7 @@ import { useUnits } from "../../utils/units";
 import { colors } from "../../utils/colors";
 import { useI18n } from "../../utils/i18n";
 import { toLocalDatetime, localInputToUTC } from "../../utils/datetime";
+import { pumpedSides, sumSides } from "../../utils/sides";
 
 export default function PumpingForm({ childId, entry, onDone, onClose, onDelete }) {
   const units = useUnits();
@@ -17,6 +18,12 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
   const [start, setStart] = useState(entry?.start ? toLocalDatetime(new Date(entry.start)) : toLocalDatetime(fifteenMinsAgo));
   const [end, setEnd] = useState(entry?.end ? toLocalDatetime(new Date(entry.end)) : toLocalDatetime(now));
   const [amount, setAmount] = useState(entry?.amount != null ? String(entry.amount) : "");
+  // What each breast gave. With either filled in, the amount is their sum
+  // and is no longer typed.
+  const hadSides = pumpedSides(entry);
+  const [left, setLeft] = useState(hadSides?.left != null ? String(hadSides.left) : "");
+  const [right, setRight] = useState(hadSides?.right != null ? String(hadSides.right) : "");
+  const split = left !== "" || right !== "";
   const [photoFile, setPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [tagIds, setTagIds] = useState([]);
@@ -37,13 +44,29 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
         start: localInputToUTC(start),
         end: localInputToUTC(end),
       };
+      const side = (value) => (value === "" ? null : parseFloat(value));
       let result;
       if (isEdit) {
-        // Always send amount so clearing the field clears the value.
-        data.amount = amount ? parseFloat(amount) : null;
+        if (split) {
+          // The server adds the two up.
+          data.amount_left = side(left);
+          data.amount_right = side(right);
+        } else {
+          // Always send amount so clearing the field clears the value.
+          data.amount = amount ? parseFloat(amount) : null;
+          if (hadSides) {
+            data.amount_left = null;
+            data.amount_right = null;
+          }
+        }
         result = await api.updatePumping(entry.id, data);
       } else {
-        if (amount) data.amount = parseFloat(amount);
+        if (split) {
+          data.amount_left = side(left);
+          data.amount_right = side(right);
+        } else if (amount) {
+          data.amount = parseFloat(amount);
+        }
         data.child = childId;
         result = await api.createPumping(data);
       }
@@ -71,8 +94,26 @@ export default function PumpingForm({ childId, entry, onDone, onClose, onDelete 
         <FormField label={t("general.end")}>
           <FormInput type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
         </FormField>
-        <FormField label={`${t("feeding.amount")} (${units.volume})`}>
-          <FormInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <FormField label={`${t("sides.left")} (${units.volume})`}>
+            <FormInput type="number" aria-label={t("sides.left")} value={left} onChange={(e) => setLeft(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
+          </FormField>
+          <FormField label={`${t("sides.right")} (${units.volume})`}>
+            <FormInput type="number" aria-label={t("sides.right")} value={right} onChange={(e) => setRight(e.target.value)} placeholder={t("form.optional")} min="0" step="any" />
+          </FormField>
+        </div>
+        <FormField label={`${t(split ? "sides.total" : "feeding.amount")} (${units.volume})`}>
+          <FormInput
+            type="number"
+            aria-label={t(split ? "sides.total" : "feeding.amount")}
+            value={split ? String(sumSides(left, right)) : amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={t("form.optional")}
+            min="0"
+            step="any"
+            readOnly={split}
+            style={split ? { opacity: 0.7 } : undefined}
+          />
         </FormField>
         <FormField label={t("tags.title")}>
           <TagPicker value={tagIds} onChange={setTagIds} />
