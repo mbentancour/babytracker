@@ -280,6 +280,7 @@ func TestNighpNursing(t *testing.T) {
 	type feed struct {
 		method string
 		length time.Duration
+		sides  string // how long each side took, for a feed timed on both
 		notes  string
 	}
 	var got []feed
@@ -287,15 +288,16 @@ func TestNighpNursing(t *testing.T) {
 		if f.Type != "breast milk" || f.Amount != nil {
 			t.Errorf("feeding %v", f)
 		}
-		got = append(got, feed{f.Method, f.End.Sub(f.Start), f.Notes})
+		got = append(got, feed{f.Method, f.End.Sub(f.Start), sidesText(f.LeftSeconds, f.RightSeconds), f.Notes})
 	}
 	want := []feed{
-		{"both breasts", 10 * time.Minute, ""},
-		{"right breast", 58 * time.Minute, "sleepy"},
-		{"left breast", 7 * time.Minute, ""},
-		{"right breast", 0, ""},
-		{"both breasts", 12 * time.Minute, "Side not recorded in Baby Tracker"},
-		{"both breasts", 0, "Side not recorded in Baby Tracker; just a note"},
+		{"both breasts", 10 * time.Minute, "300 300", ""},
+		{"right breast", 58 * time.Minute, "", "sleepy"},
+		{"left breast", 7 * time.Minute, "", ""},
+		{"right breast", 0, "", ""},
+		// Both breasts by default, with nothing known about either side.
+		{"both breasts", 12 * time.Minute, "", "Side not recorded in Baby Tracker"},
+		{"both breasts", 0, "", "Side not recorded in Baby Tracker; just a note"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("feedings\n got %v\nwant %v", got, want)
@@ -362,22 +364,27 @@ func TestNighpGrowth(t *testing.T) {
 func TestNighpPump(t *testing.T) {
 	p := nighpClean(t, "imperial", "pump.csv", nighpPumpCSV+
 		"7/9/26 8:00 AM,Right,5,7,,1,1.25,,\n"+ // sides only
+		"7/9/26 8:30 AM,Left,,,,1,1.25,3,\n"+ // a total its sides don't add up to
 		"7/9/26 9:00 AM,,,,,,,,only a note\n")
 	type pump struct {
 		start  time.Time
 		length time.Duration
 		amount string
+		sides  string // what each breast gave, when the two add up to the amount
 		note   string
 		family bool
 	}
 	var got []pump
 	for _, pm := range p.Pumping {
-		got = append(got, pump{pm.Start, pm.End.Sub(pm.Start), amountText(pm.Amount), pm.Note, pm.Family})
+		got = append(got, pump{pm.Start, pm.End.Sub(pm.Start), amountText(pm.Amount), amountText(pm.AmountLeft) + " " + amountText(pm.AmountRight), pm.Note, pm.Family})
 	}
+	none := amountText(nil) + " " + amountText(nil)
 	want := []pump{
-		{utc("2026-07-07 23:04"), 10 * time.Minute, "3.5", "", true},
-		{utc("2026-07-08 16:43"), 0, "2", "spilled some", true},
-		{utc("2026-07-09 08:00"), 12 * time.Minute, "2.25", "", true},
+		{utc("2026-07-07 23:04"), 10 * time.Minute, "3.5", "2 1.5", "", true},
+		{utc("2026-07-08 16:43"), 0, "2", none, "spilled some", true},
+		{utc("2026-07-09 08:00"), 12 * time.Minute, "2.25", "1 1.25", "", true},
+		// Baby Tracker's own total stands, without sides that contradict it.
+		{utc("2026-07-09 08:30"), 0, "3", none, "", true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("pumping\n got %v\nwant %v", got, want)
@@ -600,6 +607,18 @@ func TestNighpHandler(t *testing.T) {
 		}
 		if !start.Equal(utc("2026-07-19 22:16")) || amount != 2.5 {
 			t.Errorf("bottle at %s, %v oz", start, amount)
+		}
+		// Both sides of a session and of a feed are saved with it.
+		var left, right float64
+		if err := db.QueryRow(`SELECT amount_left, amount_right FROM pumping WHERE child_id = $1 AND amount_left IS NOT NULL`, id).Scan(&left, &right); err != nil {
+			t.Fatal(err)
+		}
+		var leftSeconds, rightSeconds int
+		if err := db.QueryRow(`SELECT left_seconds, right_seconds FROM feedings WHERE child_id = $1 AND method = 'both breasts'`, id).Scan(&leftSeconds, &rightSeconds); err != nil {
+			t.Fatal(err)
+		}
+		if left != 2 || right != 1.5 || leftSeconds != 300 || rightSeconds != 300 {
+			t.Errorf("sides: pumped %v + %v oz, nursed %ds + %ds", left, right, leftSeconds, rightSeconds)
 		}
 	})
 

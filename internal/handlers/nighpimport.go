@@ -736,6 +736,7 @@ func nighpAddRow(p *importPlan, f *nighpFile, row *importRow, order string, opts
 		switch {
 		case (l > 0 && r > 0) || (l == 0 && r == 0 && side == "both"):
 			feed.Method = "both breasts"
+			feed.LeftSeconds, feed.RightSeconds = sideSecondsOf(l, r)
 		case l > 0 || (r == 0 && side == "left"):
 			feed.Method = "left breast"
 		case r > 0 || side == "right":
@@ -877,26 +878,9 @@ func nighpAddPump(p *importPlan, f *nighpFile, row *importRow, start time.Time, 
 	// pump.csv has no Baby column: pumping is logged for the family. Marking
 	// it so lets a sibling's import leave out sessions already saved.
 	pm := importPumping{Start: start, End: start.Add(length), Family: row.get("baby") == ""}
-	var sides float64
-	if left != nil {
-		sides += *left
-	}
-	if right != nil {
-		sides += *right
-	}
-	switch {
-	case total != nil && *total > 0:
-		pm.Amount = total
-	case sides > 0:
-		v := roundVolume(sides, opts.UnitSystem)
-		if v > volumeLimit(opts.UnitSystem) {
-			return rowErr("out_of_range", f.label("left amount")+" + "+f.label("right amount"), "the left and right amounts add up to an implausible amount")
-		}
-		pm.Amount = &v
-	case total != nil:
-		pm.Amount = total
-	case left != nil || right != nil:
-		pm.Amount = &sides // explicit zeros
+	pm.Amount, pm.AmountLeft, pm.AmountRight, err = pumpAmounts(left, right, total, f.label("left amount")+" + "+f.label("right amount"), opts)
+	if err != nil {
+		return err
 	}
 	if pm.Amount == nil && pm.End.Equal(pm.Start) {
 		// Nothing measured: keep a note if there is one.

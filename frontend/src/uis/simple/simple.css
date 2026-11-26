@@ -185,6 +185,34 @@
   color: var(--text);
 }
 
+/* One stepper per side, each with its name above its figure. */
+.simple-sides {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.simple-stepper output small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.simple-sides output {
+  line-height: 1.15;
+}
+
+.simple-total {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .simple-times {
   display: flex;
   gap: 8px;

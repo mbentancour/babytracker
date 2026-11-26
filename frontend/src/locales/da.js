@@ -201,6 +201,10 @@ export default {
   "feeding.leftBreast": "Venstre Bryst",
   "feeding.rightBreast": "Højre Bryst",
   "feeding.bothBreasts": "Begge Bryster",
+  "sides.left": "Venstre",
+  "sides.right": "Højre",
+  "sides.total": "I alt",
+  "sides.each": "Hver side",
   "feeding.parentFed": "Forældremad",
   "feeding.selfFed": "Selv-spist",
 
@@ -446,6 +450,7 @@ export default {
   "simple.when": "Hvornår",
   "simple.what": "Hvad",
   "simple.how": "Hvordan",
+  "simple.howLong": "Hvor længe",
   "simple.oneTap": "Ét tryk gemmer",
   "simple.rightNow": "Lige nu",
   "simple.startSleep": "Start søvn nu",

@@ -345,6 +345,55 @@ describe("TimelineUI", () => {
     expect(story()).not.toContain("Fell asleep");
   });
 
+  it("holds a feed's clock from its row, with nothing to open first", async () => {
+    const timer = { id: 4, child: 7, name: "feeding", start: iso(12), pauses: [], is_paused: false };
+    const asleep = { id: 5, child: 7, name: "sleep", start: iso(40), pauses: [], is_paused: false };
+    session.value = makeSession({ timers: [timer, asleep], weeklySleep: [] });
+    api.pauseTimer.mockResolvedValue({ ...timer, is_paused: true, pauses: [{ start: NOW.toISOString(), end: null }] });
+    api.resumeTimer.mockResolvedValue({ ...timer, pauses: [{ start: NOW.toISOString(), end: NOW.toISOString() }] });
+    renderUi();
+    // A sleep is rarely paused: that stays behind a tap on its row.
+    expect(within(rowOf("Fell asleep")).queryByRole("button", { name: "Pause" })).toBeNull();
+
+    fireEvent.click(within(rowOf("Feeding")).getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(within(rowOf("Feeding")).getByText("Paused · 12:00")).toBeTruthy());
+    expect(api.pauseTimer).toHaveBeenCalledWith(4);
+    // The button below says so too, and stops drawing attention to itself.
+    expect(within(dock()).getByRole("button", { name: "12:00" }).className).not.toContain("is-live");
+
+    fireEvent.click(within(rowOf("Feeding")).getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(within(rowOf("Feeding")).getByRole("button", { name: "Pause" })).toBeTruthy());
+    expect(api.resumeTimer).toHaveBeenCalledWith(4);
+  });
+
+  it("holds a feed's clock from its tray, which stays open", async () => {
+    const timer = { id: 4, child: 7, name: "feeding", start: iso(12), pauses: [], is_paused: false };
+    session.value = makeSession({ timers: [timer] });
+    api.pauseTimer.mockResolvedValue({ ...timer, is_paused: true, pauses: [{ start: NOW.toISOString(), end: null }] });
+    renderUi();
+    press("12:00");
+    const tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    fireEvent.click(within(tray).getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(within(tray).getByText("Paused · Feeding for 12:00. How was it given?")).toBeTruthy());
+    expect(api.pauseTimer).toHaveBeenCalledWith(4);
+    expect(within(tray).getByRole("button", { name: "Resume" })).toBeTruthy();
+    // Still there to finish the feed from.
+    expect(within(tray).getByRole("button", { name: "Left Breast" })).toBeTruthy();
+  });
+
+  it("holds a tummy time's clock from its tray", async () => {
+    const timer = { id: 6, child: 7, name: "tummy", start: iso(3), pauses: [], is_paused: false };
+    session.value = makeSession({ timers: [timer] });
+    api.pauseTimer.mockResolvedValue({ ...timer, is_paused: true, pauses: [{ start: NOW.toISOString(), end: null }] });
+    renderUi();
+    press("More");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "More" })).getByRole("button", { name: "03:00" }));
+    const tray = screen.getByRole("dialog", { name: "Log Tummy Time" });
+    fireEvent.click(within(tray).getByRole("button", { name: "Pause" }));
+    await waitFor(() => expect(within(tray).getByText("Paused · In progress · 03:00")).toBeTruthy());
+    expect(api.pauseTimer).toHaveBeenCalledWith(6);
+  });
+
   it("keeps the tray open and says so when saving fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     api.createChange.mockRejectedValue(new Error("offline"));
@@ -378,6 +427,63 @@ describe("TimelineUI", () => {
     await waitFor(() => expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "formula", method: "bottle", amount: 130, start: utc(minsAgo(30)), end: utc(minsAgo(15)) }));
   });
 
+  it("says how long a breastfeed took, starting from how long the last one did", async () => {
+    api.createFeeding.mockResolvedValue({ id: 9, start: iso(12), end: NOW.toISOString(), type: "breast milk", method: "left breast" });
+    renderUi();
+    press("Feeding");
+    const tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    fireEvent.click(within(tray).getByRole("button", { name: "Something else" }));
+    // A bottle is measured, not timed.
+    expect(within(tray).queryByText("How long")).toBeNull();
+    fireEvent.click(within(tray).getByRole("button", { name: "Left Breast" }));
+    // The last feed at the breast took ten minutes.
+    expect(within(tray).getByText("10 min")).toBeTruthy();
+    fireEvent.click(within(tray).getByRole("button", { name: "More" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "More" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledWith({ child: 7, type: "breast milk", method: "left breast", start: utc(minsAgo(12)), end: utc(NOW) }));
+    await waitFor(() => expect(story().slice(-2)).toEqual(["Left Breast · 12m", "Now"]));
+  });
+
+  it("times each side of a feed on both breasts", async () => {
+    api.createFeeding.mockResolvedValue({ id: 9, start: iso(20), end: NOW.toISOString(), type: "breast milk", method: "both breasts", left_seconds: 720, right_seconds: 480 });
+    renderUi();
+    press("Feeding");
+    const tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    fireEvent.click(within(tray).getByRole("button", { name: "Something else" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Both Breasts" }));
+    const left = within(tray).getByRole("group", { name: "Left" });
+    const right = within(tray).getByRole("group", { name: "Right" });
+    expect(left.textContent).toContain("Left (min)");
+    fireEvent.click(within(left).getByRole("button", { name: "More" }));
+    fireEvent.click(within(left).getByRole("button", { name: "More" }));
+    fireEvent.click(within(right).getByRole("button", { name: "Less" }));
+    fireEvent.click(within(right).getByRole("button", { name: "Less" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createFeeding).toHaveBeenCalledWith({
+      child: 7, type: "breast milk", method: "both breasts", start: utc(minsAgo(20)), end: utc(NOW), left_seconds: 720, right_seconds: 480,
+    }));
+    await waitFor(() => expect(story().slice(-2)).toEqual(["Both Breasts · 20m", "Now"]));
+    expect(within(rowOf("Both Breasts · 20m")).getByText("Left 12m · Right 8m")).toBeTruthy();
+  });
+
+  it("gives the form for something else more room, and starts from the short list again next time", () => {
+    renderUi();
+    press("Feeding");
+    let tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    expect(tray.className).not.toContain("is-form");
+    fireEvent.click(within(tray).getByRole("button", { name: "Something else" }));
+    // Marked as a form: a wide screen sets its questions two abreast.
+    expect(tray.className).toContain("is-form");
+    expect(tray.querySelectorAll(".tl-fields > .tl-field")).toHaveLength(4);
+
+    fireEvent.click(within(tray).getByRole("button", { name: "Close" }));
+    press("Feeding");
+    tray = screen.getByRole("dialog", { name: "Log Feeding" });
+    expect(tray.className).not.toContain("is-form");
+    expect(within(tray).getByRole("button", { name: "Something else" })).toBeTruthy();
+  });
+
   it("opens the full form for the things More doesn't log itself", () => {
     renderUi();
     press("More");
@@ -404,6 +510,65 @@ describe("TimelineUI", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Log Pumping" })).getByRole("button", { name: "Save" }));
     await waitFor(() => expect(story().slice(-2)).toEqual(["Pumping · 90 mL", "Now"]));
     expect(api.createPumping).toHaveBeenCalledWith({ child: 7, start: utc(minsAgo(15)), end: utc(NOW), amount: 90 });
+  });
+
+  it("logs what each breast gave when pumping, and adds the two up", async () => {
+    api.createPumping.mockResolvedValue({ id: 14, start: iso(15), end: iso(0), amount: 90, amount_left: 40, amount_right: 50 });
+    renderUi();
+    press("More");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "More" })).getByRole("button", { name: "Pumping" }));
+    const tray = screen.getByRole("dialog", { name: "Log Pumping" });
+    // Nothing pumped yet: a total, which is what most sessions are.
+    expect(within(tray).getByRole("button", { name: "Total" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(tray).getByRole("button", { name: "Each side" }));
+    // The total already there is split in two.
+    const left = within(tray).getByRole("group", { name: "Left" });
+    const right = within(tray).getByRole("group", { name: "Right" });
+    expect(left.textContent).toContain("Left (mL)");
+    expect(within(left).getByText("50")).toBeTruthy();
+    expect(within(right).getByText("40")).toBeTruthy();
+    fireEvent.click(within(left).getByRole("button", { name: "Less" }));
+    fireEvent.click(within(right).getByRole("button", { name: "More" }));
+    fireEvent.click(within(right).getByRole("button", { name: "More" }));
+    expect(within(tray).getByText("Total 100 mL")).toBeTruthy();
+    fireEvent.click(within(right).getByRole("button", { name: "Less" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.createPumping).toHaveBeenCalledWith({ child: 7, start: utc(minsAgo(15)), end: utc(NOW), amount_left: 40, amount_right: 50 }));
+    await waitFor(() => expect(story().slice(-2)).toEqual(["Pumping · 90 mL", "Now"]));
+    const row = rowOf("Pumping · 90 mL");
+    expect(within(row).getByText("Left 40 mL · Right 50 mL")).toBeTruthy();
+    // Its total is what the sides add up to, so it has no "more / less" of
+    // its own: that would leave the sides saying something else.
+    expect(within(row).queryByRole("button", { name: "More (10 mL)" })).toBeNull();
+  });
+
+  it("opens the pumping tray the way the last session was logged", () => {
+    session.value = makeSession({ weeklyPumping: [{ id: 30, start: iso(200), end: iso(185), amount: 110, amount_left: 50, amount_right: 60 }] });
+    renderUi();
+    press("More");
+    fireEvent.click(within(screen.getByRole("dialog", { name: "More" })).getByRole("button", { name: "Pumping" }));
+    const tray = screen.getByRole("dialog", { name: "Log Pumping" });
+    expect(within(tray).getByRole("button", { name: "Each side" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(within(tray).getByRole("group", { name: "Left" })).getByText("50")).toBeTruthy();
+    expect(within(within(tray).getByRole("group", { name: "Right" })).getByText("60")).toBeTruthy();
+    // Back to one figure: what the two came to.
+    fireEvent.click(within(tray).getByRole("button", { name: "Total" }));
+    expect(within(tray).getByText("110 mL")).toBeTruthy();
+  });
+
+  it("changes a pumped total from its row, unless the session was logged side by side", () => {
+    session.value = makeSession({
+      weeklyPumping: [
+        { id: 30, start: iso(200), end: iso(185), amount: 110 },
+        { id: 31, start: iso(100), end: iso(85), amount: 90, amount_left: 40, amount_right: 50 },
+      ],
+    });
+    renderUi();
+    fireEvent.click(within(rowOf("Pumping · 110 mL")).getByRole("button", { name: /Pumping/ }));
+    expect(within(rowOf("Pumping · 110 mL")).getByRole("button", { name: "More (10 mL)" })).toBeTruthy();
+    fireEvent.click(within(rowOf("Pumping · 90 mL")).getByRole("button", { name: /Pumping/ }));
+    expect(within(rowOf("Pumping · 90 mL")).queryByRole("button", { name: "More (10 mL)" })).toBeNull();
+    expect(within(rowOf("Pumping · 90 mL")).getByRole("button", { name: "Edit" })).toBeTruthy();
   });
 
   it("is read-only for someone who may only look", () => {

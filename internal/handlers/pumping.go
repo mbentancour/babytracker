@@ -66,11 +66,23 @@ func (h *PumpingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validSideAmount(input.AmountLeft) || !validSideAmount(input.AmountRight) {
+		pagination.WriteError(w, http.StatusBadRequest, "amount_left and amount_right must be zero or more")
+		return
+	}
+
 	p := models.Pumping{
-		ChildID: input.Child,
-		Start:   start,
-		End:     end,
-		Amount:  input.Amount,
+		ChildID:     input.Child,
+		Start:       start,
+		End:         end,
+		Amount:      input.Amount,
+		AmountLeft:  input.AmountLeft,
+		AmountRight: input.AmountRight,
+	}
+	// Logged side by side, the total is theirs to give.
+	if p.AmountLeft != nil || p.AmountRight != nil {
+		total := sideSum(p.AmountLeft, p.AmountRight)
+		p.Amount = &total
 	}
 
 	if err := models.CreatePumping(h.db, &p); err != nil {
@@ -104,6 +116,15 @@ func (h *PumpingHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"photo":  "photo",
 	}
 	updates := filterAllowed(body, allowed)
+	refused, err := pumpingSideUpdates(h.db, id, body, updates)
+	if err != nil {
+		pagination.WriteError(w, http.StatusInternalServerError, "failed to update pumping")
+		return
+	}
+	if refused != "" {
+		pagination.WriteError(w, http.StatusBadRequest, refused)
+		return
+	}
 	if len(updates) == 0 {
 		pagination.WriteError(w, http.StatusBadRequest, "no valid fields to update")
 		return

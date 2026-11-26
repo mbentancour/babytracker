@@ -19,6 +19,21 @@ func (pm importPumping) String() string {
 	return fmt.Sprintf("{%s +%v amount=%s note=%q family=%v duplicate=%v}", pm.Start.Format(time.RFC3339), pm.End.Sub(pm.Start), amountText(pm.Amount), pm.Note, pm.Family, pm.Duplicate)
 }
 
+// sidesText is a feed's two sides in seconds, "300 300", or "" for a feed
+// that keeps none.
+func sidesText(left, right *int) string {
+	if left == nil && right == nil {
+		return ""
+	}
+	text := func(v *int) string {
+		if v == nil {
+			return "-"
+		}
+		return strconv.Itoa(*v)
+	}
+	return text(left) + " " + text(right)
+}
+
 func amountText(v *float64) string {
 	if v == nil {
 		return "none"

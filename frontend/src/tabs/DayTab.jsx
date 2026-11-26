@@ -9,6 +9,7 @@ import { useI18n } from "../utils/i18n";
 import { usePreferences } from "../utils/preferences";
 import { useDayData, toLocalDateKey } from "../hooks/useDayData";
 import { formatTime, formatDuration, parseDuration, formatHoursMinutes, feedingMethodLabel, getDisplayLocale } from "../utils/formatters";
+import { sidesText } from "../utils/sides";
 
 // One day, every activity type, in the order it happened. The Overview tab
 // answers "how is today going"; the Journal tab covers notes, milestones and
@@ -128,7 +129,8 @@ export default function DayTab({ childId, onEditEntry, canRead = () => true, can
         if (f.method) parts.push(feedingMethodLabel(f.method, t));
         const hours = parseDuration(f.duration);
         if (hours > 0 && f.method !== "bottle") parts.push(formatHoursMinutes(hours));
-        return parts.join(" · ") || t("action.feeding");
+        parts.push(sidesText(f, { t, volume: units.volume }));
+        return parts.filter(Boolean).join(" · ") || t("action.feeding");
       }),
       ...spanning(entries.sleepEntries, "sleep", (s) =>
         [formatDuration(s.duration), s.nap ? t("sleep.nap") : t("sleep.night")].filter(Boolean).join(" · "),
@@ -136,7 +138,8 @@ export default function DayTab({ childId, onEditEntry, canRead = () => true, can
       ...point(entries.changes, "diaper", "time", diaperLabel),
       ...spanning(entries.tummyTimes, "tummy", (tt) => formatDuration(tt.duration)),
       ...point(entries.pumping, "pumping", "start", (p) =>
-        p.amount ? `${p.amount} ${units.volume}` : formatDuration(p.duration),
+        [p.amount ? `${p.amount} ${units.volume}` : formatDuration(p.duration), sidesText(p, { t, volume: units.volume })]
+          .filter(Boolean).join(" · "),
       ),
       ...point(entries.milkWaste, "milkWaste", "time", (m) => `${m.amount} ${units.volume}`),
       ...point(entries.temperatures, "temp", "time", (e) => `${e.temperature} ${units.temp}`),

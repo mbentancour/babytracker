@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatElapsed, timeAgo } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
 import { agoAnchor } from "../../utils/overlayTime";
-import { FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
-import { toUTC, quickSpan, clock, lastClock, isNapSleep } from "../simple/time";
+import { BREAST_METHODS, FEEDING_TYPES, methodsForType, usePreferences } from "../../utils/preferences";
+import { BOTH_BREASTS, halves, nursingStart, pumpingAmounts, pumpingStart, sumSides } from "../../utils/sides";
+import { toUTC, quickSpan, nursingSpan, clock, lastClock, isNapSleep } from "../simple/time";
 import { Glyph } from "./icons";
 import { KINDS, toneOf, iconOf, feedingIcon } from "./kinds";
 import { usualFeeds } from "./insights";
@@ -49,16 +50,45 @@ function Stepper({ value, onChange, step, unit, min = 0 }) {
   return (
     <div className="tl-stepper">
       <button type="button" aria-label={t("simple.less")} onClick={() => onChange(Math.max(min, +(value - step).toFixed(2)))}><Glyph.Minus /></button>
-      <output aria-live="polite">{shown} {unit}</output>
+      <output aria-live="polite">{unit ? `${shown} ${unit}` : shown}</output>
       <button type="button" aria-label={t("simple.more")} onClick={() => onChange(+(value + step).toFixed(2))}><Glyph.Plus /></button>
     </div>
   );
 }
 
-function Choices({ label, options, value, onChange }) {
+// The two sides of one entry, left on the left and right on the right: how
+// much each breast gave, or how long each took. The unit is said once, in
+// each caption, which leaves the number room on a narrow phone.
+function Sides({ label, unit, left, right, onLeft, onRight, ...stepper }) {
+  const { t } = useI18n();
+  const side = (name, value, onChange) => (
+    <div className="tl-breast" role="group" aria-label={name}>
+      <span>{name} ({unit})</span>
+      <Stepper value={value} onChange={onChange} {...stepper} />
+    </div>
+  );
   return (
-    <>
+    <div className="tl-breasts" role="group" aria-label={label}>
+      {side(t("sides.left"), left, onLeft)}
+      {side(t("sides.right"), right, onRight)}
+    </div>
+  );
+}
+
+// One question of a form: its label and whatever answers it, kept together
+// so that a wide screen can set two questions side by side.
+function Field({ label, children }) {
+  return (
+    <div className="tl-field">
       <div className="tl-label">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function Choices({ label, options, value, onChange, children }) {
+  return (
+    <Field label={label}>
       <div className="tl-seg" data-count={options.length} role="group" aria-label={label}>
         {options.map((o) => (
           <button key={o.value} type="button" className="tl-seg-btn" aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
@@ -66,7 +96,8 @@ function Choices({ label, options, value, onChange }) {
           </button>
         ))}
       </div>
-    </>
+      {children}
+    </Field>
   );
 }
 
@@ -81,8 +112,7 @@ function When({ value, onChange }) {
     { value: "other", label: t("simple.otherTime") },
   ];
   return (
-    <>
-      <Choices label={t("simple.when")} options={options} value={value.key} onChange={(key) => onChange({ ...value, key })} />
+    <Choices label={t("simple.when")} options={options} value={value.key} onChange={(key) => onChange({ ...value, key })}>
       {value.key === "other" && (
         <input
           type="time"
@@ -92,7 +122,7 @@ function When({ value, onChange }) {
           onChange={(e) => onChange({ ...value, clock: e.target.value })}
         />
       )}
-    </>
+    </Choices>
   );
 }
 
@@ -113,6 +143,22 @@ function Discard({ onConfirm }) {
   );
 }
 
+// A timer that is running, at the top of its tray: what it is, and the way
+// to stop the clock for a while. A baby takes breaks; the feed is not over.
+function Running({ text, timer, busy, onPause }) {
+  const { t } = useI18n();
+  const paused = !!timer.is_paused;
+  return (
+    <div className="tl-running">
+      <p className="tl-lead">{paused ? `${t("general.paused")} · ${text}` : text}</p>
+      <button type="button" className="tl-chip" disabled={busy} onClick={() => onPause(timer)}>
+        {paused ? <Glyph.Play /> : <Glyph.Pause />}
+        {t(paused ? "timer.resume" : "timer.pause")}
+      </button>
+    </div>
+  );
+}
+
 function Option({ icon: Icon, tone, title, detail, badgeStyle, ...rest }) {
   return (
     <button type="button" className="tl-option" {...rest}>
@@ -125,11 +171,12 @@ function Option({ icon: Icon, tone, title, detail, badgeStyle, ...rest }) {
   );
 }
 
-function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, onForm }) {
+// `detail` is whether the tray shows the form for "something else"; the
+// composer holds it, since that form is given more room on a wide screen.
+function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, pause, onForm, detail, setDetail }) {
   const { t } = useI18n();
   const { getFormDefault } = usePreferences();
   const tone = toneOf("feeding");
-  const [detail, setDetail] = useState(false);
   const [bad, setBad] = useState(false);
 
   // The feeds this family actually gives, most often first.
@@ -143,6 +190,9 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
   const [method, setMethod] = useState(first.method);
   const [amount, setAmount] = useState(() => lastAmount(feedings.filter((f) => f.method === "bottle"), volume.feeding));
   const [when, setWhen] = useState(() => ({ key: "now", clock: clock(new Date()) }));
+  // How long a breastfeed took, starting from how long the last one did.
+  const [nursing, setNursing] = useState(() => nursingStart(feedings));
+  const nursed = BREAST_METHODS.includes(method);
   const methods = methodsForType(type);
   const pickType = (next) => {
     setType(next);
@@ -164,7 +214,7 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
     }
     return (
       <>
-        <p className="tl-lead">{t("timeline.finishAs", { value: formatElapsed(elapsed) })}</p>
+        <Running text={t("timeline.finishAs", { value: formatElapsed(elapsed) })} timer={running} busy={busy} onPause={pause} />
         <div className="tl-options">
           {ways.map((feed) => {
             const text = words(feed);
@@ -194,21 +244,40 @@ function FeedTray({ log, feedings, running, elapsed, units, volume, busy, run, o
       const at = whenToDate(when, new Date());
       if (!at) return setBad(true);
       setBad(false);
-      const feed = { type, method, ...quickSpan(at) };
+      const feed = { type, method, ...(nursed ? nursingSpan(at, method, nursing) : quickSpan(at)) };
       if (method === "bottle" && amount > 0) feed.amount = amount;
       return run(() => log.add("feeding", feed));
     };
     return (
       <>
-        <Choices label={t("simple.what")} options={FEEDING_TYPES.map((f) => ({ value: f.value, label: t(f.labelKey) }))} value={type} onChange={pickType} />
-        <Choices label={t("simple.how")} options={methods.map((m) => ({ value: m.value, label: t(m.labelKey) }))} value={method} onChange={setMethod} />
-        {method === "bottle" && (
-          <>
-            <div className="tl-label">{t("feeding.amount")}</div>
-            <Stepper value={amount} onChange={setAmount} step={volume.step} unit={volume.unit} />
-          </>
-        )}
-        <When value={when} onChange={setWhen} />
+        <div className="tl-fields">
+          <Choices label={t("simple.what")} options={FEEDING_TYPES.map((f) => ({ value: f.value, label: t(f.labelKey) }))} value={type} onChange={pickType} />
+          <Choices label={t("simple.how")} options={methods.map((m) => ({ value: m.value, label: t(m.labelKey) }))} value={method} onChange={setMethod} />
+          {method === "bottle" && (
+            <Field label={t("feeding.amount")}>
+              <Stepper value={amount} onChange={setAmount} step={volume.step} unit={volume.unit} />
+            </Field>
+          )}
+          {nursed && (
+            <Field label={t("simple.howLong")}>
+              {method === BOTH_BREASTS ? (
+                <Sides
+                  label={t("simple.howLong")}
+                  unit={t("simple.minUnit")}
+                  left={nursing.left}
+                  right={nursing.right}
+                  onLeft={(left) => setNursing({ ...nursing, left })}
+                  onRight={(right) => setNursing({ ...nursing, right })}
+                  step={1}
+                  min={1}
+                />
+              ) : (
+                <Stepper value={nursing.minutes} onChange={(minutes) => setNursing({ ...nursing, minutes })} step={1} min={1} unit={t("simple.minUnit")} />
+              )}
+            </Field>
+          )}
+          <When value={when} onChange={setWhen} />
+        </div>
         {bad && <p className="tl-error" role="alert">{t("simple.badTime")}</p>}
         <button type="button" className="tl-primary" style={{ background: tone }} disabled={busy} onClick={save}>
           {busy ? t("form.saving") : t("form.save")}
@@ -377,13 +446,13 @@ function DiaperTray({ log, busy, run, onForm }) {
   );
 }
 
-function TummyTray({ log, running, elapsed, busy, run, onForm }) {
+function TummyTray({ log, running, elapsed, busy, run, pause, onForm }) {
   const { t } = useI18n();
   const tone = toneOf("tummy");
   if (running) {
     return (
       <>
-        <p className="tl-lead">{t("simple.inProgress", { value: formatElapsed(elapsed) })}</p>
+        <Running text={t("simple.inProgress", { value: formatElapsed(elapsed) })} timer={running} busy={busy} onPause={pause} />
         <button type="button" className="tl-primary" style={{ background: tone }} disabled={busy} onClick={() => run(() => log.finishTimer(running))}>
           {t("simple.finish")}
         </button>
@@ -420,15 +489,45 @@ function TummyTray({ log, running, elapsed, busy, run, onForm }) {
 
 function PumpTray({ log, pumping, volume, busy, run, onForm }) {
   const { t } = useI18n();
-  const [amount, setAmount] = useState(() => lastAmount(pumping, volume.pumping));
-  const save = () => run(() => {
-    const span = quickSpan(new Date());
-    return log.add("pumping", amount > 0 ? { ...span, amount } : span);
-  });
+  // A session is a total, or what each breast gave: the tray opens the way
+  // the last session was logged.
+  const [pump, setPump] = useState(() => pumpingStart(pumping, volume.pumping, volume.step));
+  const total = sumSides(pump.left, pump.right);
+  // Changing over keeps what was already put in: a total is split in two,
+  // two sides are added up.
+  const pumpAs = (split) => {
+    if (split === pump.split) return;
+    setPump(split
+      ? { ...pump, split, ...(total === pump.amount ? {} : halves(pump.amount, volume.step)) }
+      : { ...pump, split, amount: total });
+  };
+  const save = () => run(() => log.add("pumping", { ...quickSpan(new Date()), ...pumpingAmounts(pump) }));
   return (
     <>
       <div className="tl-label">{t("feeding.amount")}</div>
-      <Stepper value={amount} onChange={setAmount} step={volume.step} unit={volume.unit} />
+      <div className="tl-seg" role="group" aria-label={t("feeding.amount")}>
+        {[false, true].map((split) => (
+          <button key={String(split)} type="button" className="tl-seg-btn" aria-pressed={pump.split === split} onClick={() => pumpAs(split)}>
+            {t(split ? "sides.each" : "sides.total")}
+          </button>
+        ))}
+      </div>
+      {pump.split ? (
+        <>
+          <Sides
+            label={t("sides.each")}
+            unit={volume.unit}
+            left={pump.left}
+            right={pump.right}
+            onLeft={(left) => setPump({ ...pump, left })}
+            onRight={(right) => setPump({ ...pump, right })}
+            step={volume.step}
+          />
+          <p className="tl-lead tl-lead-fact tl-sum">{t("sides.total")} {total} {volume.unit}</p>
+        </>
+      ) : (
+        <Stepper value={pump.amount} onChange={(amount) => setPump({ ...pump, amount })} step={volume.step} unit={volume.unit} />
+      )}
       <button type="button" className="tl-primary" style={{ background: toneOf("pumping") }} disabled={busy} onClick={save}>
         {busy ? t("form.saving") : t("form.save")}
       </button>
@@ -446,6 +545,9 @@ function PumpTray({ log, pumping, volume, busy, run, onForm }) {
 export default function Composer({ log, feedings, pumping, timers, can, now, units, volume, tray, setTray, onForm }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  // The feeding tray's form for "something else", back to the short list
+  // whenever the tray is closed or another one opens.
+  const [detail, setDetail] = useState(false);
   const trayRef = useRef(null);
   const opener = useRef(null);
 
@@ -462,24 +564,35 @@ export default function Composer({ log, feedings, pumping, timers, can, now, uni
     if (result) setTray(null);
   };
 
+  // Holding a timer, or letting it run again, leaves its tray open: the
+  // feed is still to be finished.
+  const pause = async (timer) => {
+    if (busy) return;
+    setBusy(true);
+    await log.setPaused(timer, !timer.is_paused);
+    setBusy(false);
+  };
+
   useEffect(() => {
     if (tray) trayRef.current?.focus({ preventScroll: true });
     else opener.current?.focus?.({ preventScroll: true });
+    if (tray !== "feeding") setDetail(false);
   }, [tray]);
 
   const buttons = [
     can("feeding") && {
       id: "feeding",
-      icon: Glyph.Bottle,
+      // A feed on hold says so where its clock is read.
+      icon: timers.feeding?.is_paused ? Glyph.Pause : Glyph.Bottle,
       tone: toneOf("feeding"),
       label: timers.feeding ? formatElapsed(elapsed(timers.feeding)) : t("action.feeding"),
-      live: !!timers.feeding,
+      live: !!timers.feeding && !timers.feeding.is_paused,
     },
     can("sleep") && (timers.sleep
       ? { id: "wake", icon: Glyph.Sunrise, tone: toneOf("sleep"), label: t("simple.wakeUp"), live: true }
       : { id: "sleep", icon: Glyph.Moon, tone: toneOf("sleep"), label: t("action.sleep") }),
     can("diaper") && { id: "diaper", icon: Glyph.Drop, tone: toneOf("diaper"), label: t("action.diaper") },
-    more.length > 0 && { id: "more", icon: Glyph.Plus, label: t("action.more"), live: !!timers.tummy },
+    more.length > 0 && { id: "more", icon: Glyph.Plus, label: t("action.more"), live: !!timers.tummy && !timers.tummy.is_paused },
   ].filter(Boolean);
 
   if (!buttons.length) return null;
@@ -490,15 +603,17 @@ export default function Composer({ log, feedings, pumping, timers, can, now, uni
     return setTray(tray === button.id ? null : button.id);
   };
 
-  const shared = { log, busy, run, onForm };
+  const shared = { log, busy, run, pause, onForm };
   const isMoreChild = tray === "tummy" || tray === "pumping";
+  // A form with four questions is set two abreast where there is the width.
+  const isForm = tray === "feeding" && detail && !timers.feeding;
 
   return (
     <div className="tl-composer">
       {tray && <div className="tl-scrim" onClick={() => setTray(null)} aria-hidden="true" />}
 
       {tray && (
-        <div ref={trayRef} className="tl-tray" role="dialog" aria-label={t(TITLES[tray])} tabIndex={-1}>
+        <div ref={trayRef} className={`tl-tray${isForm ? " is-form" : ""}`} role="dialog" aria-label={t(TITLES[tray])} tabIndex={-1}>
           <div className="tl-tray-head">
             {isMoreChild && (
               <button type="button" className="tl-tray-back" onClick={() => setTray("more")} aria-label={t("form.back")}>
@@ -512,7 +627,7 @@ export default function Composer({ log, feedings, pumping, timers, can, now, uni
           </div>
           <div className="tl-tray-body">
             {tray === "feeding" && (
-              <FeedTray {...shared} feedings={feedings} running={timers.feeding} elapsed={elapsed(timers.feeding)} units={units} volume={volume} />
+              <FeedTray {...shared} feedings={feedings} running={timers.feeding} elapsed={elapsed(timers.feeding)} units={units} volume={volume} detail={detail} setDetail={setDetail} />
             )}
             {tray === "sleep" && <SleepTray {...shared} />}
             {tray === "diaper" && <DiaperTray {...shared} />}
@@ -525,7 +640,7 @@ export default function Composer({ log, feedings, pumping, timers, can, now, uni
                   const own = kind === "tummy" || kind === "pumping";
                   return (
                     <button key={kind} type="button" className="tl-tile" onClick={() => (own ? setTray(kind) : onForm(kind))}>
-                      <span className={`tl-badge${kind === "tummy" && timers.tummy ? " is-live" : ""}`} style={{ background: KINDS[kind].tone }}><Icon /></span>
+                      <span className={`tl-badge${kind === "tummy" && timers.tummy && !timers.tummy.is_paused ? " is-live" : ""}`} style={{ background: KINDS[kind].tone }}><Icon /></span>
                       {kind === "tummy" && timers.tummy ? formatElapsed(elapsed(timers.tummy)) : t(LABELS[kind])}
                     </button>
                   );

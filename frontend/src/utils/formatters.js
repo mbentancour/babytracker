@@ -1,5 +1,6 @@
 import { FEEDING_TYPES, FEEDING_METHODS, BREAST_METHODS, BREAST_MILK_TYPES } from "./preferences";
 import { agoAnchor } from "./overlayTime";
+import { sidesText } from "./sides";
 import en from "../locales/en";
 
 // Several formatters below produce user-visible prose ("just now", "5m ago",
@@ -282,7 +283,8 @@ export function toFeedingTimeline(feedings, volumeUnit = "mL", t = englishT) {
     return {
       time: formatTime(f.end || f.start),
       label: sessionHours > 0 ? `${base} · ${formatHoursMinutes(sessionHours)}` : base,
-      detail: timeAgo(f.end || f.start, t),
+      // How long each side took, for a feed timed on both breasts.
+      detail: [timeAgo(f.end || f.start, t), sidesText(f, { t, volume: volumeUnit })].filter(Boolean).join(" · "),
       amount: f.amount || 0,
       type: f.type,
       method: f.method,
@@ -315,7 +317,8 @@ export function toPumpingTimeline(sessions, volumeUnit = "mL", t = englishT) {
   return sessions.map((p) => ({
     time: formatTime(p.end || p.start),
     label: p.amount ? `${p.amount} ${volumeUnit}` : formatDuration(p.duration),
-    detail: timeAgo(p.end || p.start, t),
+    // What each breast gave, for a session logged side by side.
+    detail: [timeAgo(p.end || p.start, t), sidesText(p, { t, volume: volumeUnit })].filter(Boolean).join(" · "),
     amount: p.amount || 0,
     entry: p,
   }));

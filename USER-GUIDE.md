@@ -71,10 +71,10 @@ BabyTracker has a second, simpler interface for people who only want to log the 
 |---|---|
 | ![Simple interface: one row per activity with when it last happened](docs/screenshots/Simple-Home.png) | ![Simple interface: the feeding sheet with what, how, amount and when](docs/screenshots/Simple-Feeding.png) |
 
-- **Feeding:** what (breast milk, formula, fortified breast milk or solid food), how, the amount for a bottle, and when. It opens on what was fed last time.
+- **Feeding:** what (breast milk, formula, fortified breast milk or solid food), how, the amount for a bottle or how long for a breastfeed, and when. It opens on what was fed last time. A feed on both breasts asks how long each side took.
 - **Diaper:** one tap on Wet, Solid or Wet + solid saves it.
 - **Sleep and tummy time:** start a timer and tap **Wake up** or **Finish** later, or log one that already happened.
-- **Pumping:** the amount and when.
+- **Pumping:** the amount and when. **Each side** asks what the left and the right breast gave and adds the two up; the sheet opens the way the last session was logged.
 - **When** is Now, 15 or 30 minutes ago, or a clock time. A clock time means the last time the clock showed it, so "23:40" entered just after midnight is yesterday evening.
 - After saving, **Undo** removes the entry again.
 - **More options** on every sheet opens the full form (notes, tags, photos, another date).
@@ -95,10 +95,10 @@ On a wide screen the list sits beside today so far and the week's sleep:
 ![Timeline interface on a wide screen](docs/screenshots/Timeline-Desktop.png)
 
 - **The top of the screen** is drawn as the sky at the current time of day, so it is dark at night. It says whether the baby is asleep or awake and for how long, and when the last feed and the last diaper were. When the past week holds enough to go by, it also says about when the next sleep and the next feed usually come. A narrow strip in it shows the last 24 hours, with sleep and feeds marked. With several children, their names stand at the top; tap one to switch.
-- **Feeding** says what was fed last and how long ago, and offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. A feed logged this way is recorded as 15 minutes long, ending at the time given, as in the simple interface. **Diaper** is one tap on Wet, Solid or Wet + solid.
+- **Feeding** says what was fed last and how long ago, and offers the feeds given most often, each with its last amount, so logging a usual feed is one tap on it; **Something else** is for any other. A feed logged with one tap is recorded as 15 minutes long, ending at the time given, as in the simple interface. Under **Something else**, a breastfeed also asks how long it took, starting from how long the last one did, and a feed on both breasts asks for each side. **Diaper** is one tap on Wet, Solid or Wet + solid.
 - **Sleep** starts now, or from 15 or 30 minutes ago or another time when the baby went down a while back. A sleep that is already over can be entered with both its times.
-- **Sleep, feeding and tummy time** can run as timers. A timed feed asks how it was given when it ends.
-- **More** has tummy time and pumping, and opens the full form for everything else (temperature, measurements, notes, medications, milestones).
+- **Sleep, feeding and tummy time** can run as timers. A timed feed asks how it was given when it ends. A feed or tummy time that is being timed has a pause button beside **Finish**, for when the baby takes a break; the time spent paused is not counted. A sleep is paused from the strip that opens when its entry is tapped.
+- **More** has tummy time and pumping, and opens the full form for everything else (temperature, measurements, notes, medications, milestones). Pumping takes one amount, or with **Each side** what the left and the right breast gave.
 - **A new entry** appears at once, with a strip to move it five minutes earlier or later, change its amount, or **Undo** it. Tapping any entry opens the same strip, with **Edit** for the full form and **Delete**, which asks for a second tap. The amount of a bottle can be put right there at any time, for when less was drunk than was poured.
 - **Under each day's name** are the day's feeds and how much they came to, the sleep and the diapers.
 - **Other days:** the list starts with today and yesterday. **Show earlier days** goes back through the week, and **Older days** opens any day before that. Tapping a day's date opens that day on its own, from where any other day is a step or a date away.
@@ -117,6 +117,7 @@ Record what your baby eats and how.
 - **Type:** Breast milk, formula, fortified breast milk, or solid food.
 - **Method:** Bottle, left breast, right breast, both breasts, parent fed, or self fed.
 - **Amount and duration:** Optionally record how much (in ml or oz) and how long the feeding lasted.
+- **Each side:** A feed on both breasts can also say how many minutes the left and the right side took. The two are shown under the entry.
 - **Timer support:** Start a timer when a feeding begins, then log the details when it is done.
 
 ### Sleep
@@ -177,6 +178,10 @@ A simple way to jot down general observations that do not fit neatly into other 
 Track pumping sessions with the amount collected and the duration. Today's
 sessions appear on the Overview alongside a weekly chart, and the Growth tab
 shows 30-day amount and session-count trends.
+
+A session can say what each breast gave instead of one amount: fill in **Left**
+and **Right**, and the total is added up for you. The charts and the milk stock
+use the total, so they are the same either way.
 
 ### Milk stock and uneaten milk
 

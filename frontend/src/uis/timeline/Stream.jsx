@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import TagChips from "../../components/TagChips";
 import { formatTime, formatElapsed, getDisplayLocale } from "../../utils/formatters";
 import { useI18n } from "../../utils/i18n";
+import { pumpedSides } from "../../utils/sides";
 import { Glyph } from "./icons";
 import { KINDS, toneOf, iconOf } from "./kinds";
 import { gapBefore, nudged } from "./story";
@@ -101,6 +102,20 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
         ) : (
           <div className="tl-row-main">{body}</div>
         )}
+        {/* A feed or a tummy time has breaks in it, so the way to hold its
+            clock is on the row, beside the way to end it. A sleep is rarely
+            paused: that stays in the strip below, a tap away. */}
+        {row.live && editable && row.kind !== "sleep" && (
+          <button
+            type="button"
+            className="tl-hold"
+            aria-label={t(paused ? "timer.resume" : "timer.pause")}
+            title={t(paused ? "timer.resume" : "timer.pause")}
+            onClick={() => actions.pause(row.timer, !paused)}
+          >
+            {paused ? <Glyph.Play /> : <Glyph.Pause />}
+          </button>
+        )}
         {row.live && editable && (
           <button type="button" className="tl-go" onClick={() => actions.finish(row.timer)}>
             {t(row.kind === "sleep" ? "simple.wakeUp" : "simple.finish")}
@@ -134,7 +149,9 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
               +{NUDGE} {minutes}
             </button>
           </span>
-          {!row.live && amount > 0 && KINDS[row.kind].span && (
+          {/* Not for a session logged side by side: its total is what the two
+              sides add up to, so it is changed through them, in the form. */}
+          {!row.live && amount > 0 && KINDS[row.kind].span && !pumpedSides(entry) && (
             <span className="tl-pair">
               <button
                 type="button"
@@ -162,15 +179,17 @@ const Row = memo(function Row({ row, text, gap, first, open, fresh, editable, el
             </button>
           ) : row.live ? (
             <>
-              <button
-                type="button"
-                className="tl-chip tl-chip-compact"
-                aria-label={t(paused ? "timer.resume" : "timer.pause")}
-                onClick={() => actions.pause(row.timer, !paused)}
-              >
-                {paused ? <Glyph.Play /> : <Glyph.Pause />}
-                <span>{t(paused ? "timer.resume" : "timer.pause")}</span>
-              </button>
+              {row.kind === "sleep" && (
+                <button
+                  type="button"
+                  className="tl-chip tl-chip-compact"
+                  aria-label={t(paused ? "timer.resume" : "timer.pause")}
+                  onClick={() => actions.pause(row.timer, !paused)}
+                >
+                  {paused ? <Glyph.Play /> : <Glyph.Pause />}
+                  <span>{t(paused ? "timer.resume" : "timer.pause")}</span>
+                </button>
+              )}
               <ConfirmChip
                 label={t("timer.discard")}
                 confirm={t("timeline.confirm")}

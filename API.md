@@ -351,6 +351,8 @@ Body (create):
 Types: `breast milk`, `formula`, `fortified breast milk`, `solid food`
 Methods: `bottle`, `left breast`, `right breast`, `both breasts`, `parent fed`, `self fed`
 
+A feed on `both breasts` can also say how long each side took: `left_seconds` and `right_seconds`, whole numbers of zero or more, or `null`. Either can be given without the other. They are kept for that method only: on a feed given any other way they are saved as `null`, and changing a feed's method away from `both breasts` clears them. They are not checked against `start` and `end`; a feed can have had breaks in it.
+
 With timer: send `{"child": 1, "type": "...", "method": "...", "timer": 5}` — the timer's start time is used, current time is the end, and the timer is deleted. The timer has to be the same child's; another child's is answered like one that does not exist (400). The same holds for sleep and tummy time.
 
 ### Sleep
@@ -451,7 +453,15 @@ PATCH  /api/pumping/{id}/      Update
 DELETE /api/pumping/{id}/      Delete
 ```
 
-Body: `{child, start, end, amount}`
+Body: `{child, start, end, amount, amount_left, amount_right}`
+
+`amount` is the session's total. A session can instead say what each breast gave, in `amount_left` and `amount_right` (zero or more, or `null`; either can be given alone). The total is then their sum, worked out by the server:
+
+- **Create:** with a side in the body, `amount` is the sum of the sides and any `amount` sent is ignored.
+- **Update with a side:** the sides are as the body leaves them (one that is not mentioned keeps its value, `null` clears one) and `amount` becomes their sum. With both sides cleared, `amount` is what the body says, or stays as it was.
+- **Update with `amount` alone:** if the session has sides and the new amount is not their sum, the sides are cleared, since they would no longer add up to it.
+
+Everything that reads a session (the charts, the milk stock) reads `amount`, so nothing else changes for a session logged this way.
 
 ### Uneaten milk
 
@@ -620,6 +630,8 @@ GET /api/export/csv?child=1&type=all
 Types: `all`, `feedings`, `sleep`, `changes`, `tummy_times`, `weight`, `height`, `head_circumference`, `temperature`, `pumping`, `milk_waste`, `medications`, `milestones`
 
 Returns a CSV file download.
+
+The feedings table ends with `Left Duration` and `Right Duration` (`HH:MM:SS`), and the pumping table with `Left Amount` and `Right Amount`; they are empty for an entry that doesn't record its two sides. They come after the columns that were already there, which keep their positions.
 
 ---
 
@@ -1038,12 +1050,12 @@ What is imported:
 
 | Nara row type | Imported as |
 |---|---|
-| Breastfeed | Feeding (left, right, or both breasts) lasting the recorded left + right seconds; untimed feeds take the side from Begin/End Side |
+| Breastfeed | Feeding (left, right, or both breasts) lasting the recorded left + right seconds; a feed timed on both keeps how long each side took. Untimed feeds take the side from Begin/End Side |
 | Bottle Feed | Bottle feeding. A mixed bottle with both shares becomes two feedings (breast milk and formula); with one share and a total at least 1 mL larger, the other share is the difference |
 | Combo Feed | A breastfeed plus a bottle feeding (one or two, as above); a half with nothing recorded is left out |
 | Solid Feed | Solid food feeding, saved as "parent fed" (Nara doesn't record who fed), with the foods, their tags and the meal in the notes |
 | Diaper | Diaper change (wet/solid, color; texture, other colors, blowout and rash in the notes). A dry check becomes a note, since diapers here are wet and/or solid |
-| Pump | Pumping session (Nara's total, else left + right). Its note becomes a separate note, since pumping has none; a Pump row with nothing recorded but a note becomes just a note |
+| Pump | Pumping session (Nara's total, else left + right). What each side gave is kept when the two add up to the total, give or take the rounding of a unit conversion, and the total is then exactly their sum; sides that contradict Nara's total are left out. Its note becomes a separate note, since pumping has none; a Pump row with nothing recorded but a note becomes just a note |
 | Sleep | Sleep. Nara doesn't mark naps, so sleeps starting 07:00–19:00 local time and shorter than 4 hours are saved as naps |
 | Growth | Weight, height and head circumference, dated in the row's time zone, rounded to 0.01 (weight) and 0.1 (lengths) |
 | Medical | Medications (`Name, 2.5 (ML)` is split into name, dosage and unit; each line of the cell becomes one medication) and temperature (30–45 °C); a Medical row with only a note becomes a note |
@@ -1136,12 +1148,12 @@ What is imported:
 
 | File | Imported as |
 |---|---|
-| `<Baby>_nursing.csv` | Breast milk feeding lasting left + right minutes (else the total); the method is left, right or both breasts from the timed sides, else from Start side |
+| `<Baby>_nursing.csv` | Breast milk feeding lasting left + right minutes (else the total); the method is left, right or both breasts from the timed sides, else from Start side. A feed timed on both keeps how long each side took |
 | `<Baby>_expressed.csv`, `<Baby>_formula.csv` | Bottle feeding of breast milk or formula with its amount |
 | `<Baby>_sleep.csv` | Sleep. Naps aren't marked, so sleeps starting 07:00–19:00 local time and shorter than 4 hours are saved as naps |
 | `<Baby>_diaper.csv` | Diaper change: Wet, Dirty (solid) or Mixed (both). A Dry status becomes a note |
 | `<Baby>_growth.csv` | Weight, height and head circumference, dated in `timezone`, rounded to 0.01 (weight) and 0.1 (lengths) |
-| `pump.csv` | Pumping session lasting the total minutes (else left + right), with the total amount (else left + right). Its note becomes a separate note |
+| `pump.csv` | Pumping session lasting the total minutes (else left + right), with the total amount (else left + right). What each side gave is kept when the two add up to the total, as for Nara. Its note becomes a separate note |
 
 The formats were worked out from one sample export; the app publishes no specification. Only the files above are imported.
 

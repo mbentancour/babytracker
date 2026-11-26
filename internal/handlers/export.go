@@ -121,7 +121,9 @@ func (h *ExportHandler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) error {
-	w.Write([]string{"Type", "Start", "End", "Method", "Amount", "Duration", "Notes"})
+	// The two sides of a feed on both breasts come last, so the columns that
+	// were already there keep their places.
+	w.Write([]string{"Type", "Start", "End", "Method", "Amount", "Duration", "Notes", "Left Duration", "Right Duration"})
 	var rows []models.Feeding
 	if err := h.db.Select(&rows, `SELECT * FROM feedings WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
 		return fmt.Errorf("query feedings: %w", err)
@@ -135,7 +137,10 @@ func (h *ExportHandler) exportFeedings(w *csv.Writer, childID int) error {
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Type, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.Method, amount, dur, csvSafe(r.Notes)})
+		w.Write([]string{
+			r.Type, r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), r.Method, amount, dur, csvSafe(r.Notes),
+			csvSeconds(r.LeftSeconds), csvSeconds(r.RightSeconds),
+		})
 	}
 	return nil
 }
@@ -179,7 +184,7 @@ func (h *ExportHandler) exportTummyTimes(w *csv.Writer, childID int) error {
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, csvSafe(r.Milestone),csvSafe(r.Notes)})
+		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), dur, csvSafe(r.Milestone), csvSafe(r.Notes)})
 	}
 	return nil
 }
@@ -236,23 +241,40 @@ func (h *ExportHandler) exportHeadCircumference(w *csv.Writer, childID int) erro
 // because those three are what the milk-stock balance is computed from —
 // exporting one without the others leaves the figure unreconstructable.
 func (h *ExportHandler) exportPumping(w *csv.Writer, childID int) error {
-	w.Write([]string{"Start", "End", "Amount", "Duration"})
+	w.Write([]string{"Start", "End", "Amount", "Duration", "Left Amount", "Right Amount"})
 	var rows []models.Pumping
 	if err := h.db.Select(&rows, `SELECT * FROM pumping WHERE child_id = $1 ORDER BY start_time DESC`, childID); err != nil {
 		return fmt.Errorf("query pumping: %w", err)
 	}
 	for _, r := range rows {
-		amount := ""
-		if r.Amount != nil {
-			amount = fmt.Sprintf("%.1f", *r.Amount)
-		}
 		dur := ""
 		if r.Duration != nil {
 			dur = *r.Duration
 		}
-		w.Write([]string{r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), amount, dur})
+		w.Write([]string{
+			r.Start.Format(time.RFC3339), r.End.Format(time.RFC3339), csvAmount(r.Amount), dur,
+			csvAmount(r.AmountLeft), csvAmount(r.AmountRight),
+		})
 	}
 	return nil
+}
+
+// csvAmount writes an optional volume the way the Amount columns do, and
+// nothing at all for one that was not recorded.
+func csvAmount(v *float64) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.1f", *v)
+}
+
+// csvSeconds writes an optional length as HH:MM:SS, the way the Duration
+// column reads.
+func csvSeconds(v *int) string {
+	if v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%02d:%02d:%02d", *v/3600, *v%3600/60, *v%60)
 }
 
 func (h *ExportHandler) exportMilkWaste(w *csv.Writer, childID int) error {
