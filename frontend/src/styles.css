@@ -1,6 +1,16 @@
 :root {
   --mono: "JetBrains Mono", monospace;
   --font: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Room to leave at each edge of the screen for the phone's status bar, notch
+     and home bar. A page shown inside another page (Home Assistant's panel)
+     is told the same figures by an iPhone although it does not reach those
+     edges, so what is taken off is how far in from each edge it is drawn:
+     --frame-*, set by watchFrameOffsets in utils/frameOffset.js and absent
+     when the page is not framed. Use these, never env() directly. */
+  --safe-top: max(0px, env(safe-area-inset-top, 0px) - var(--frame-top, 0px));
+  --safe-right: max(0px, env(safe-area-inset-right, 0px) - var(--frame-right, 0px));
+  --safe-bottom: max(0px, env(safe-area-inset-bottom, 0px) - var(--frame-bottom, 0px));
+  --safe-left: max(0px, env(safe-area-inset-left, 0px) - var(--frame-left, 0px));
 }
 
 /* Dark theme (default) */
@@ -53,10 +63,10 @@ body {
   max-width: 960px;
   margin: 0 auto;
   padding: 20px 16px 100px;
-  padding-left: max(16px, env(safe-area-inset-left));
-  padding-right: max(16px, env(safe-area-inset-right));
-  padding-top: max(20px, env(safe-area-inset-top));
-  padding-bottom: max(100px, calc(100px + env(safe-area-inset-bottom)));
+  padding-left: max(16px, var(--safe-left));
+  padding-right: max(16px, var(--safe-right));
+  padding-top: max(20px, var(--safe-top));
+  padding-bottom: max(100px, calc(100px + var(--safe-bottom)));
   min-height: 100vh;
 }
 
@@ -359,8 +369,8 @@ body {
 /* FAB */
 .fab-container {
   position: fixed;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, var(--safe-bottom));
+  right: max(24px, var(--safe-right));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -638,10 +648,10 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
-  padding-top: max(20px, env(safe-area-inset-top));
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  padding-left: max(20px, var(--safe-left));
+  padding-right: max(20px, var(--safe-right));
+  padding-top: max(20px, var(--safe-top));
+  padding-bottom: max(20px, var(--safe-bottom));
   background: var(--bg);
 }
 
